@@ -37,6 +37,6 @@ export const debugMsgs = [
   // FnId 7
   {
     fnName: "chi",
-    msgId: ["$w0"]
+    msgId: ["$row", "$row+1", "$row+2", "$col"]
   },
 ]

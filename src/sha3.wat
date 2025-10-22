@@ -511,7 +511,7 @@
     (local $col        i32)
     (local $result_ptr i32)
 
-    (call $log.fnEnter (i32.const 7))
+    ;; (call $log.fnEnter (i32.const 7))
 
     (local.set $result_ptr (global.get $CHI_RESULT_PTR))
 
@@ -526,8 +526,12 @@
       (local.set $row+2 (i32.add (local.get $row) (i32.const 2)))
       (local.set $row+2 (select (i32.sub (local.get $row+2) (i32.const 5)) (local.get $row+2) (i32.ge_u (local.get $row+2) (i32.const 5))))
 
+      ;; (call $log.singleI32 (i32.const 7) (i32.const 0) (local.get $row))
+      ;; (call $log.singleI32 (i32.const 7) (i32.const 1) (local.get $row+1))
+      ;; (call $log.singleI32 (i32.const 7) (i32.const 2) (local.get $row+2))
 
       (loop $col_loop
+        ;; (call $log.singleI32 (i32.const 7) (i32.const 3) (local.get $col))
         (local.set $w0_offset (i32.shl (i32.add (i32.mul (local.get $row)   (i32.const 5)) (local.get $col)) (i32.const 3)))
         (local.set $w1_offset (i32.shl (i32.add (i32.mul (local.get $row+1) (i32.const 5)) (local.get $col)) (i32.const 3)))
         (local.set $w2_offset (i32.shl (i32.add (i32.mul (local.get $row+2) (i32.const 5)) (local.get $col)) (i32.const 3)))
@@ -544,14 +548,14 @@
 
         (local.set $result_ptr (i32.add (local.get $result_ptr) (i32.const 8)))
         (local.tee $col        (i32.add (local.get $col)        (i32.const 1)))
-        (br_if $col_loop (i32.ge_u (i32.const 5)))
+        (br_if $col_loop (i32.lt_u (i32.const 5)))
       )
 
       (local.tee $row (i32.add (local.get $row) (i32.const 1)))
-      (br_if $row_loop (i32.ge_u (i32.const 5)))
+      (br_if $row_loop (i32.lt_u (i32.const 5)))
     )
 
-    (call $log.fnExit (i32.const 7))
+    ;; (call $log.fnExit (i32.const 7))
   )
 
   ;; $w0 XOR (NOT($w1) AND $w2)
