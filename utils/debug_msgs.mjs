@@ -39,4 +39,9 @@ export const debugMsgs = [
     fnName: "chi",
     msgId: ["$row", "$row+1", "$row+2", "$col"]
   },
+  // FnId 8
+  {
+    fnName: "iota",
+    msgId: []
+  },
 ]

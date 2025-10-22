@@ -98,7 +98,8 @@ const startWasm =
     // runTest(sha3Module, "theta")
     // runTest(sha3Module, "rho")
     // runTest(sha3Module, "pi")
-    runTest(sha3Module, "chi")
+    // runTest(sha3Module, "chi")
+    runTest(sha3Module, "iota")
   }
 
 await startWasm()

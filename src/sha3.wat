@@ -76,6 +76,7 @@
   (global $RHO_RESULT_PTR   (export "RHO_RESULT_PTR")   i32 (i32.const 0x000002E0))  ;; Length 200
   (global $PI_RESULT_PTR    (export "PI_RESULT_PTR")    i32 (i32.const 0x000003A8))  ;; Length 200
   (global $CHI_RESULT_PTR   (export "CHI_RESULT_PTR")   i32 (i32.const 0x00000470))  ;; Length 200
+  (global $IOTA_RESULT_PTR  (export "IOTA_RESULT_PTR")  i32 (i32.const 0x00000538))  ;; Length 200
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Memory Map: Page 2
@@ -148,6 +149,11 @@
 
   ;;   (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR))
   ;; )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func (export "test_iota")
+    (call $iota (i64.load (global.get $ROUND_CONSTANTS_PTR)))
+  )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Theta function
@@ -446,9 +452,10 @@
   ;;   }
   ;; }
   ;;
-  ;; This algorithm however simply performs a static mapping, so the transformation can be hardcoded rather than calculated
+  ;; This algorithm performs a static reordering of the 25, i64 words in the input matrix, so the final transformation
+  ;; can simply be hardcoded rather than calculated
   (func $pi (export "pi")
-    (call $log.fnEnter (i32.const 6))
+    ;; (call $log.fnEnter (i32.const 6))
 
     (i64.store (memory $main) offset=0   (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=0   (global.get $RHO_RESULT_PTR)))
     (i64.store (memory $main) offset=64  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=8   (global.get $RHO_RESULT_PTR)))
@@ -476,11 +483,11 @@
     (i64.store (memory $main) offset=136 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=184 (global.get $RHO_RESULT_PTR)))
     (i64.store (memory $main) offset=160 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=192 (global.get $RHO_RESULT_PTR)))
 
-    (call $log.fnExit (i32.const 6))
+    ;; (call $log.fnExit (i32.const 6))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; The 25 i64s at $PI_RESULT_PTR are treated as 5x5 matrix, then transformed according to the following rules
+  ;; The 25 i64s at $PI_RESULT_PTR are treated as 5x5 matrix, then transformed by the following function
   ;;
   ;; fn chi(pi_out: [i64; 25]) {
   ;;   let chi_idx = 0
@@ -575,5 +582,32 @@
         (i32.const 3)
       )
     )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; XOR the first i64 word at $CHI_RESULT_PTR with the supplied constant for this round of the Keccak function
+  (func $iota (export "iota")
+    (param $rnd_const i64)
+
+    ;; (call $log.fnEnter (i32.const 8))
+
+    (memory.copy
+      (memory $main)                 ;; Destination memory
+      (memory $main)                 ;; Source memory
+      (global.get $IOTA_RESULT_PTR)  ;; Destination address
+      (global.get $CHI_RESULT_PTR)   ;; Source address
+      (i32.const 200)                ;; Length
+    )
+
+    (i64.store
+      (memory $main)
+      (global.get $IOTA_RESULT_PTR)
+      (i64.xor
+        (local.get $rnd_const)
+        (i64.load (memory $main) (global.get $CHI_RESULT_PTR))
+      )
+    )
+
+    ;; (call $log.fnExit (i32.const 8))
   )
 )
