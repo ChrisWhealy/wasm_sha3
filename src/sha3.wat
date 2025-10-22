@@ -499,16 +499,10 @@
   ;;
   ;; This algorithm however simply performs a static mapping, so the transformation can be hardcoded rather than calculated
   (func $chi (export "chi")
-    (local $w0         i64)
-    (local $w1         i64)
-    (local $w2         i64)
-    (local $w0_offset  i32)
-    (local $w1_offset  i32)
-    (local $w2_offset  i32)
+    (local $col        i32)
     (local $row        i32)
     (local $row+1      i32)
     (local $row+2      i32)
-    (local $col        i32)
     (local $result_ptr i32)
 
     ;; (call $log.fnEnter (i32.const 7))
@@ -532,18 +526,14 @@
 
       (loop $col_loop
         ;; (call $log.singleI32 (i32.const 7) (i32.const 3) (local.get $col))
-        (local.set $w0_offset (i32.shl (i32.add (i32.mul (local.get $row)   (i32.const 5)) (local.get $col)) (i32.const 3)))
-        (local.set $w1_offset (i32.shl (i32.add (i32.mul (local.get $row+1) (i32.const 5)) (local.get $col)) (i32.const 3)))
-        (local.set $w2_offset (i32.shl (i32.add (i32.mul (local.get $row+2) (i32.const 5)) (local.get $col)) (i32.const 3)))
-
-        (local.set $w0 (i64.load (memory $main) (i32.add (global.get $PI_RESULT_PTR) (local.get $w0_offset))))
-        (local.set $w1 (i64.load (memory $main) (i32.add (global.get $PI_RESULT_PTR) (local.get $w1_offset))))
-        (local.set $w2 (i64.load (memory $main) (i32.add (global.get $PI_RESULT_PTR) (local.get $w2_offset))))
-
         (i64.store
           (memory $main)
           (local.get $result_ptr)
-          (call $chi_inner (local.get $w0) (local.get $w1) (local.get $w2))
+          (call $chi_inner
+            (i64.load (memory $main) (call $chi_word_offset (local.get $row)   (local.get $col))) ;; w0
+            (i64.load (memory $main) (call $chi_word_offset (local.get $row+1) (local.get $col))) ;; w1
+            (i64.load (memory $main) (call $chi_word_offset (local.get $row+2) (local.get $col))) ;; w2
+          )
         )
 
         (local.set $result_ptr (i32.add (local.get $result_ptr) (i32.const 8)))
@@ -569,6 +559,20 @@
       (i64.and
         (i64.xor (local.get $w1) (i64.const -1))  ;; NOT($w1)
         (local.get $w2)
+      )
+    )
+  )
+
+  ;; Offset = (($row * 5) + $col) * 8
+  (func $chi_word_offset
+        (param $row i32)
+        (param $col i32)
+        (result i32)
+    (i32.add
+      (global.get $PI_RESULT_PTR)
+      (i32.shl  ;; Multiply index by 8 to get offset
+        (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $col))  ;; Calculate index
+        (i32.const 3)
       )
     )
   )
