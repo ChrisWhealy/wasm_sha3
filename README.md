@@ -2,6 +2,6 @@
 
 Some consider this to be an act of madness, but anyhow.
 
-Here is an implementation of the SHA3 hash algorithm implemented entirely in WebAssembly.
+Here is an implementation of the SHA3 hash algorithm implemented entirely in WebAssembly Text.
 
 This is a work in progress...

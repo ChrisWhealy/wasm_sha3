@@ -434,6 +434,7 @@
   ;;
   ;; fn pi(rho_out: [i64; 25]) {
   ;;   let rho_idx = 0
+  ;;
   ;;   for x in 0..4 {
   ;;     for y in 0..4 {
   ;;       let row = y
@@ -445,7 +446,7 @@
   ;;   }
   ;; }
   ;;
-  ;; This algorithm however simply performs a static mapping, so the transformation can be hardcoded
+  ;; This algorithm however simply performs a static mapping, so the transformation can be hardcoded rather than calculated
   (func $pi (export "pi")
     (call $log.fnEnter (i32.const 6))
 
@@ -476,5 +477,95 @@
     (i64.store (memory $main) offset=160 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=192 (global.get $RHO_RESULT_PTR)))
 
     (call $log.fnExit (i32.const 6))
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; The 25 i64s at $PI_RESULT_PTR are treated as 5x5 matrix, then transformed according to the following rules
+  ;;
+  ;; fn chi(pi_out: [i64; 25]) {
+  ;;   let chi_idx = 0
+  ;;
+  ;;   for row in 0..4 {
+  ;;     for col in 0..4 {
+  ;;       let w0 = pi_out[row][col]
+  ;;       let w1 = pi_out[(row + 1) % 5][col]
+  ;;       let w2 = pi_out[(row + 2) % 5][col]
+  ;;
+  ;;       chi_out[chi_idx] = w0 XOR (NOT(w1) AND w2)
+  ;;       chi_idx += 1
+  ;;     }
+  ;;   }
+  ;; }
+  ;;
+  ;; This algorithm however simply performs a static mapping, so the transformation can be hardcoded rather than calculated
+  (func $chi (export "chi")
+    (local $w0         i64)
+    (local $w1         i64)
+    (local $w2         i64)
+    (local $w0_offset  i32)
+    (local $w1_offset  i32)
+    (local $w2_offset  i32)
+    (local $row        i32)
+    (local $row+1      i32)
+    (local $row+2      i32)
+    (local $col        i32)
+    (local $result_ptr i32)
+
+    (call $log.fnEnter (i32.const 7))
+
+    (local.set $result_ptr (global.get $CHI_RESULT_PTR))
+
+    (loop $row_loop
+      ;; Reset $col counter
+      (local.set $col (i32.const 0))
+
+      ;; Calculate the current and next two row indicies
+      (local.set $row+1 (i32.add (local.get $row) (i32.const 1)))
+      (local.set $row+1 (select (i32.const 0) (local.get $row+1) (i32.ge_u (local.get $row+1) (i32.const 5))))
+
+      (local.set $row+2 (i32.add (local.get $row) (i32.const 2)))
+      (local.set $row+2 (select (i32.sub (local.get $row+2) (i32.const 5)) (local.get $row+2) (i32.ge_u (local.get $row+2) (i32.const 5))))
+
+
+      (loop $col_loop
+        (local.set $w0_offset (i32.shl (i32.add (i32.mul (local.get $row)   (i32.const 5)) (local.get $col)) (i32.const 3)))
+        (local.set $w1_offset (i32.shl (i32.add (i32.mul (local.get $row+1) (i32.const 5)) (local.get $col)) (i32.const 3)))
+        (local.set $w2_offset (i32.shl (i32.add (i32.mul (local.get $row+2) (i32.const 5)) (local.get $col)) (i32.const 3)))
+
+        (local.set $w0 (i64.load (memory $main) (i32.add (global.get $PI_RESULT_PTR) (local.get $w0_offset))))
+        (local.set $w1 (i64.load (memory $main) (i32.add (global.get $PI_RESULT_PTR) (local.get $w1_offset))))
+        (local.set $w2 (i64.load (memory $main) (i32.add (global.get $PI_RESULT_PTR) (local.get $w2_offset))))
+
+        (i64.store
+          (memory $main)
+          (local.get $result_ptr)
+          (call $chi_inner (local.get $w0) (local.get $w1) (local.get $w2))
+        )
+
+        (local.set $result_ptr (i32.add (local.get $result_ptr) (i32.const 8)))
+        (local.tee $col        (i32.add (local.get $col)        (i32.const 1)))
+        (br_if $col_loop (i32.ge_u (i32.const 5)))
+      )
+
+      (local.tee $row (i32.add (local.get $row) (i32.const 1)))
+      (br_if $row_loop (i32.ge_u (i32.const 5)))
+    )
+
+    (call $log.fnExit (i32.const 7))
+  )
+
+  ;; $w0 XOR (NOT($w1) AND $w2)
+  (func $chi_inner
+        (param $w0 i64)
+        (param $w1 i64)
+        (param $w2 i64)
+        (result i64)
+    (i64.xor
+      (local.get $w0)
+      (i64.and
+        (i64.xor (local.get $w1) (i64.const -1))  ;; NOT($w1)
+        (local.get $w2)
+      )
+    )
   )
 )
