@@ -42,6 +42,6 @@ export const debugMsgs = [
   // FnId 8
   {
     fnName: "iota",
-    msgId: []
+    msgId: ["round constant", "word 0", "XOR Result"]
   },
 ]
