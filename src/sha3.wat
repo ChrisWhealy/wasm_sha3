@@ -4,8 +4,8 @@
   (type $type_log_i64       (func (param i32 i32 i64)))
   (type $type_log_i32       (func (param i32 i32 i32)))
 
-  (import "env" "debug"   (memory $debug.memory 16))
-  (import "env" "hexdump" (func $debug.hexdump (type $type_debug_hexdump)))
+  ;; (import "env" "debug"   (memory $debug.memory 16))
+  ;; (import "env" "hexdump" (func $debug.hexdump (type $type_debug_hexdump)))
 
   (import "log" "fnEnter"   (func $log.fnEnter   (type $type_fn_boundary)))
   (import "log" "fnExit"    (func $log.fnExit    (type $type_fn_boundary)))
@@ -153,6 +153,22 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_iota")
     (call $iota (i64.load (global.get $ROUND_CONSTANTS_PTR)))
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func (export "test_keccak_0")
+    (call $keccak (global.get $ROUND_CONSTANTS_PTR))
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func $keccak (export "keccak")
+    (param $round i32)
+
+    (call $theta)
+    (call $rho)
+    (call $pi)
+    (call $chi)
+    (call $iota (i64.load (i32.add (global.get $ROUND_CONSTANTS_PTR) (i32.shl (local.get $round) (i32.const 3)))))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
