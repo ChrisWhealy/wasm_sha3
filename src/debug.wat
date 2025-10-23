@@ -24,17 +24,17 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; For debugging purposes only.
-  ;; Write a 64-byte message block in hexdump -C format
+  ;; Write a memory block in hexdump -C format to stdout
   ;; Returns: None
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "hexdump")
         (param $fd      i32) ;; Write to this file descriptor
         (param $blk_ptr i32) ;; Pointer to 64 byte block in exported memory
+        (param $length  i32) ;; Length of data - must be a multiple of 16
 
     (local $buf_ptr    i32)
     (local $buf_len    i32)
     (local $byte_count i32)
-    (local $line_count i32)
     (local $this_byte  i32)
 
     (local.set $buf_ptr (global.get $IOVEC_WRITE_BUF))
@@ -122,11 +122,11 @@
 
       ;; Write "|\n"
       (i32.store16 (local.get $buf_ptr) (i32.const 0x0A7C)) ;; pipe + LF (little endian)
-      (local.set $buf_ptr    (i32.add (local.get $buf_ptr)    (i32.const 2)))
-      (local.set $buf_len    (i32.add (local.get $buf_len)    (i32.const 2)))
-      (local.set $line_count (i32.add (local.get $line_count) (i32.const 1)))
+      (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
+      (local.set $buf_len (i32.add (local.get $buf_len) (i32.const 2)))
+      (local.tee $length  (i32.sub (local.get $length)  (i32.const 16)))
 
-      (br_if $lines (i32.lt_u (local.get $line_count) (i32.const 4)))
+      (br_if $lines (i32.gt_s (i32.const 0)))
     )
 
     (call $write (local.get $fd) (global.get $IOVEC_WRITE_BUF) (local.get $buf_len))

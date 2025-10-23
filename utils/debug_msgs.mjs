@@ -44,4 +44,9 @@ export const debugMsgs = [
     fnName: "iota",
     msgId: ["round constant", "word 0", "XOR Result"]
   },
+  // FnId 9
+  {
+    fnName: "keccak",
+    msgId: []
+  },
 ]

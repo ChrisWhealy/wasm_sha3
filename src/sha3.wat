@@ -1,11 +1,11 @@
 (module
   (type $type_fn_boundary   (func (param i32)))
-  (type $type_debug_hexdump (func (param i32 i32)))
+  (type $type_debug_hexdump (func (param i32 i32 i32)))
   (type $type_log_i64       (func (param i32 i32 i64)))
   (type $type_log_i32       (func (param i32 i32 i32)))
 
-  (import "env" "debug"   (memory $debug 16))
-  (import "env" "hexdump" (func $debug.hexdump (type $type_debug_hexdump)))
+  (import "env" "debug"     (memory $debug 16))
+  (import "env" "hexdump"   (func $debug.hexdump (type $type_debug_hexdump)))
 
   (import "log" "fnEnter"   (func $log.fnEnter   (type $type_fn_boundary)))
   (import "log" "fnExit"    (func $log.fnExit    (type $type_fn_boundary)))
@@ -36,66 +36,33 @@
   ;; 0x0000030C     200   i64x25  Rho function output
   ;; 0x000003D4     200   i64x25  Pi function output
   ;; 0x0000049C     200   i64x25  Chi function output
-  ;; 0x00000564     200   i64x25  Iota function output
   ;;
   (global $KECCAK_ROUND_CONSTANTS_PTR i32 (i32.const 0x00000000))
   ;; IMPORTANT
   ;; The round constant values have been deliberately added in big endian format!
-  ;; This is an optimization that avoids the need to swizzle the word being XOR'ed by the iota function
+  ;; This is an optimization that avoids the need for two swizzle operations in the iota function
   (data $keccak_round_constants (i32.const 0x00000000)
-    "\00\00\00\00\00\00\00\01"  ;; Round  0
-    "\00\00\00\00\00\00\80\82"  ;; Round  1
-    "\80\00\00\00\00\00\80\8a"  ;; Round  2
-    "\80\00\00\00\80\00\80\00"  ;; Round  3
-    "\00\00\00\00\00\00\80\8b"  ;; Round  4
-    "\00\00\00\00\80\00\00\01"  ;; Round  5
-    "\80\00\00\00\80\00\80\81"  ;; Round  6
-    "\80\00\00\00\00\00\80\09"  ;; Round  7
-    "\00\00\00\00\00\00\00\8a"  ;; Round  8
-    "\00\00\00\00\00\00\00\88"  ;; Round  9
-    "\00\00\00\00\80\00\80\09"  ;; Round 10
-    "\00\00\00\00\80\00\00\0a"  ;; Round 11
-    "\00\00\00\00\80\00\80\8b"  ;; Round 12
-    "\80\00\00\00\00\00\00\8b"  ;; Round 13
-    "\80\00\00\00\00\00\80\89"  ;; Round 14
-    "\80\00\00\00\00\00\80\03"  ;; Round 15
-    "\80\00\00\00\00\00\80\02"  ;; Round 16
-    "\80\00\00\00\00\00\00\80"  ;; Round 17
-    "\00\00\00\00\00\00\80\0a"  ;; Round 18
-    "\80\00\00\00\80\00\00\0a"  ;; Round 19
-    "\80\00\00\00\80\00\80\81"  ;; Round 20
-    "\80\00\00\00\00\00\80\80"  ;; Round 21
-    "\00\00\00\00\80\00\00\01"  ;; Round 22
-    "\80\00\00\00\80\00\80\08"  ;; Round 23
-)
+    "\00\00\00\00\00\00\00\01" (; Round  0;) "\00\00\00\00\00\00\80\82" (; Round  1;)
+    "\80\00\00\00\00\00\80\8a" (; Round  2;) "\80\00\00\00\80\00\80\00" (; Round  3;)
+    "\00\00\00\00\00\00\80\8b" (; Round  4;) "\00\00\00\00\80\00\00\01" (; Round  5;)
+    "\80\00\00\00\80\00\80\81" (; Round  6;) "\80\00\00\00\00\00\80\09" (; Round  7;)
+    "\00\00\00\00\00\00\00\8a" (; Round  8;) "\00\00\00\00\00\00\00\88" (; Round  9;)
+    "\00\00\00\00\80\00\80\09" (; Round 10;) "\00\00\00\00\80\00\00\0a" (; Round 11;)
+    "\00\00\00\00\80\00\80\8b" (; Round 12;) "\80\00\00\00\00\00\00\8b" (; Round 13;)
+    "\80\00\00\00\00\00\80\89" (; Round 14;) "\80\00\00\00\00\00\80\03" (; Round 15;)
+    "\80\00\00\00\00\00\80\02" (; Round 16;) "\80\00\00\00\00\00\00\80" (; Round 17;)
+    "\00\00\00\00\00\00\80\0a" (; Round 18;) "\80\00\00\00\80\00\00\0a" (; Round 19;)
+    "\80\00\00\00\80\00\80\81" (; Round 20;) "\80\00\00\00\00\00\80\80" (; Round 21;)
+    "\00\00\00\00\80\00\00\01" (; Round 22;) "\80\00\00\00\80\00\80\08" (; Round 23;)
+  )
 
   (global $RHO_ROTATION_TABLE i32 (i32.const 0x000000C8))
   (data $rotation_table (i32.const 0x000000C8)
-    "\00\00\00\00"  ;;  0
-    "\24\00\00\00"  ;; 36
-    "\03\00\00\00"  ;;  3
-    "\29\00\00\00"  ;; 41
-    "\12\00\00\00"  ;; 18
-    "\01\00\00\00"  ;;  1
-    "\0A\00\00\00"  ;; 10
-    "\2C\00\00\00"  ;; 44
-    "\2D\00\00\00"  ;; 45
-    "\02\00\00\00"  ;;  2
-    "\3E\00\00\00"  ;; 62
-    "\06\00\00\00"  ;;  6
-    "\2B\00\00\00"  ;; 43
-    "\0F\00\00\00"  ;; 15
-    "\3D\00\00\00"  ;; 61
-    "\1C\00\00\00"  ;; 28
-    "\37\00\00\00"  ;; 55
-    "\19\00\00\00"  ;; 25
-    "\15\00\00\00"  ;; 21
-    "\38\00\00\00"  ;; 56
-    "\1B\00\00\00"  ;; 27
-    "\14\00\00\00"  ;; 20
-    "\27\00\00\00"  ;; 39
-    "\08\00\00\00"  ;;  8
-    "\0E\00\00\00"  ;; 14
+    "\00\00\00\00"  (;  0;) "\24\00\00\00"  (; 36;) "\03\00\00\00"  (;  3;) "\29\00\00\00"  (; 41;) "\12\00\00\00"  (; 18;)
+    "\01\00\00\00"  (;  1;) "\0A\00\00\00"  (; 10;) "\2C\00\00\00"  (; 44;) "\2D\00\00\00"  (; 45;) "\02\00\00\00"  (;  2;)
+    "\3E\00\00\00"  (; 62;) "\06\00\00\00"  (;  6;) "\2B\00\00\00"  (; 43;) "\0F\00\00\00"  (; 15;) "\3D\00\00\00"  (; 61;)
+    "\1C\00\00\00"  (; 28;) "\37\00\00\00"  (; 55;) "\19\00\00\00"  (; 25;) "\15\00\00\00"  (; 21;) "\38\00\00\00"  (; 56;)
+    "\1B\00\00\00"  (; 27;) "\14\00\00\00"  (; 20;) "\27\00\00\00"  (; 39;) "\08\00\00\00"  (;  8;) "\0E\00\00\00"  (; 14;)
   )
 
   ;; Memory areas used by the Theta function
@@ -106,79 +73,15 @@
   (global $RHO_RESULT_PTR   (export "RHO_RESULT_PTR")   i32 (i32.const 0x0000030C))  ;; Length 200
   (global $PI_RESULT_PTR    (export "PI_RESULT_PTR")    i32 (i32.const 0x000003D4))  ;; Length 200
   (global $CHI_RESULT_PTR   (export "CHI_RESULT_PTR")   i32 (i32.const 0x0000049C))  ;; Length 200
-  (global $IOTA_RESULT_PTR  (export "IOTA_RESULT_PTR")  i32 (i32.const 0x00000564))  ;; Length 200
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Memory Map: Page 2
   ;;     Offset  Length   Type    Description
   ;; 0x00010000      64   i64x8   Rate buffer
   ;; 0x00010088     136   i64x17  Capacity buffer
-  (global $RATE_PTR     i32 (i32.const 0x00010000))
-  (global $CAPACITY_PTR i32 (i32.const 0x00010088))
-
-  ;; ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; (func (export "test_theta_c")
-  ;;   (call $theta_c)
-
-  ;;   ;; Transfer result to the $debug module's exported memory
-  ;;   (memory.copy
-  ;;     (memory $debug.memory)          ;; Copy to memory
-  ;;     (memory $main)                  ;; Copy from memory
-  ;;     (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-  ;;     (global.get $THETA_C_OUT_PTR)   ;; Copy from address
-  ;;     (i32.const 40)                  ;; Length
-  ;;   )
-
-  ;;   (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR))
-  ;; )
-
-  ;; ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; (func (export "test_theta_d")
-  ;;   (call $theta_d)
-
-  ;;   ;; Transfer result to the $debug module's exported memory
-  ;;   (memory.copy
-  ;;     (memory $debug.memory)          ;; Copy to memory
-  ;;     (memory $main)                  ;; Copy from memory
-  ;;     (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-  ;;     (global.get $THETA_D_OUT_PTR)   ;; Copy from address
-  ;;     (i32.const 240)                 ;; Length
-  ;;   )
-
-  ;;   (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR))
-  ;; )
-
-  ;; ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; (func (export "test_theta_xor_loop")
-  ;;   (call $theta_xor_loop)
-
-  ;;   ;; Transfer result to the $debug module's exported memory
-  ;;   (memory.copy
-  ;;     (memory $debug.memory)          ;; Copy to memory
-  ;;     (memory $main)                  ;; Copy from memory
-  ;;     (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-  ;;     (global.get $THETA_RESULT_PTR)  ;; Copy from address
-  ;;     (i32.const 200)                 ;; Length
-  ;;   )
-
-  ;;   (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR))
-  ;; )
-
-  ;; ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; (func (export "test_theta")
-  ;;   (call $theta)
-
-  ;;   ;; Transfer result to the $debug module's exported memory
-  ;;   (memory.copy
-  ;;     (memory $debug.memory)          ;; Copy to memory
-  ;;     (memory $main)                  ;; Copy from memory
-  ;;     (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-  ;;     (global.get $THETA_RESULT_PTR)  ;; Copy from address
-  ;;     (i32.const 200)                 ;; Length
-  ;;   )
-
-  ;;   (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR))
-  ;; )
+  (global $CAPACITY_PTR (export "CAPACITY_PTR") i32 (i32.const 0x00010000))
+  (global $RATE_PTR     (export "RATE_PTR")     i32 (i32.const 0x00010088))
+  (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x000100C8))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_iota")
@@ -186,18 +89,48 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "test_keccak_0")
+  (func (export "test_keccak_round_0")
+    (local $idx i32)
+
+    ;; XOR the 64 bytes at $RATE_PTR with the 64 bytes at $DATA_PTR
+    (loop $xor_loop
+      (i64.store
+        (memory $main)
+        (i32.add (global.get $RATE_PTR) (local.get $idx))
+        (i64.xor
+          (i64.load (memory $main) (i32.add (global.get $RATE_PTR) (local.get $idx)))
+          (i64.load (memory $main) (i32.add (global.get $DATA_PTR) (local.get $idx)))
+        )
+      )
+
+      (local.tee $idx (i32.add (local.get $idx) (i32.const 8)))
+      (br_if $xor_loop (i32.lt_u (i32.const 64)))
+    )
+
+    ;; $CAPACITY_PTR (136 bytes) and $RATE_PTR (64 bytes) are contiguous
+    ;; Copy the 200 bytes at $CAPACITY_PTR to $THETA_A_BLK_PTR
+    (memory.copy
+      (memory $main)
+      (memory $main)
+      (global.get $THETA_A_BLK_PTR)
+      (global.get $CAPACITY_PTR)
+      (i32.const 200)
+    )
+
     (call $keccak (i32.const 0))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $keccak (export "keccak")
-    (param $round i32)
+  (func $keccak
+        (param $round i32)
+
+    ;; (call $log.fnEnter (i32.const 9))
 
     (call $theta)
     (call $rho)
     (call $pi)
     (call $chi)
+    ;; The Keccak function output lives at $CHI_RESULT_PTR because the iota function performs an in-place modification
     (call $iota
       (i64.load
         (i32.add
@@ -206,10 +139,26 @@
         )
       )
     )
+
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $CHI_RESULT_PTR)    ;; Copy from address
+    ;;   (i32.const 200)                 ;; Length
+    ;; )
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+
+    ;; (call $log.fnExit (i32.const 9))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Theta function
+  ;; Expects data to be present at the following locatinos:
+  ;; $CAPACITY_PTR   136 bytes (initially, all zeroes)
+  ;; $RATE_PTR        64 bytes (initially, all zeroes)
+  ;; $DATA_PTR        64 bytes (Data being hashed)
+  ;;
   ;; Writes a 200-byte value at $THETA_RESULT_PTR
   (func $theta (export "theta")
     (call $theta_c)
@@ -637,23 +586,14 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; XOR the first i64 word at $CHI_RESULT_PTR with the supplied constant for this round of the Keccak function
+  ;; XOR in place the first i64 at $CHI_RESULT_PTR with the supplied constant for this round of the Keccak function
   (func $iota (export "iota")
         (param $rnd_const i64)
-
     ;; (call $log.fnEnter (i32.const 8))
-
-    (memory.copy
-      (memory $main)                 ;; Destination memory
-      (memory $main)                 ;; Source memory
-      (global.get $IOTA_RESULT_PTR)  ;; Destination address
-      (global.get $CHI_RESULT_PTR)   ;; Source address
-      (i32.const 200)                ;; Length
-    )
 
     (i64.store
       (memory $main)
-      (global.get $IOTA_RESULT_PTR)
+      (global.get $CHI_RESULT_PTR)
       ;; The endianess of the first word at $CHI_RESULT_PTR can be left in network byte order as long as the round
       ;; constant is also given in network (big endian) byte order.
       ;; Then, when both values are loaded onto the stack, WASM will flip the byte order; but this doesn't matter
@@ -667,16 +607,6 @@
       )
     )
 
-    ;; Transfer result to the $debug module's exported memory
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $IOTA_RESULT_PTR)   ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR))
     ;; (call $log.fnExit (i32.const 8))
   )
 )

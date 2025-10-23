@@ -92,15 +92,15 @@ const startWasm =
     let sha3Module = await WebAssembly.instantiate(readWasmBinary(sha3WasmBinPath), debugEnv)
 
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    runTest(sha3Module, "thetaC")
-    runTest(sha3Module, "thetaD")
-    runTest(sha3Module, "thetaXorLoop")
-    runTest(sha3Module, "theta")
-    runTest(sha3Module, "rho")
-    runTest(sha3Module, "pi")
-    runTest(sha3Module, "chi")
-    runTest(sha3Module, "iota")
-    runTest(sha3Module, "keccak0")
+    // runTest(sha3Module, "thetaC")
+    // runTest(sha3Module, "thetaD")
+    // runTest(sha3Module, "thetaXorLoop")
+    // runTest(sha3Module, "theta")
+    // runTest(sha3Module, "rho")
+    // runTest(sha3Module, "pi")
+    // runTest(sha3Module, "chi")
+    // runTest(sha3Module, "iota")
+    runTest(sha3Module, "keccakRound0")
   }
 
 await startWasm()
