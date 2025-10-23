@@ -31,7 +31,11 @@ const runTest = (wasmMod, testName) => {
   }
 
   // Call test function
-  wasmMod.instance.exports[thisTest.wasmTestFnName]()
+  if (thisTest.wasmTestFnArgs && thisTest.wasmTestFnArgs.length > 0) {
+    wasmMod.instance.exports[thisTest.wasmTestFnName](...thisTest.wasmTestFnArgs)
+  } else {
+    wasmMod.instance.exports[thisTest.wasmTestFnName]()
+  }
 
   // Compare expected results with the data found at outputPtr
   let outputPtr = wasmMod.instance.exports[thisTest.wasmGlobalExportPtrOut].value
@@ -80,6 +84,8 @@ const startWasm =
       log: {
         fnEnter: fnId => console.log(`===> ${debugMsgs[fnId].fnName}`),
         fnExit: fnId => console.log(`<=== ${debugMsgs[fnId].fnName}`),
+        fnEnterNth: (fnId, n) => console.log(`===> ${debugMsgs[fnId].fnName} ${n}`),
+        fnExitNth: (fnId, n) => console.log(`<=== ${debugMsgs[fnId].fnName} ${n}`),
         singleI64: (fnId, msgId, i64) => {
           console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${u64AsHexStr(i64)}`)
         },
@@ -95,12 +101,14 @@ const startWasm =
     // runTest(sha3Module, "thetaC")
     // runTest(sha3Module, "thetaD")
     // runTest(sha3Module, "thetaXorLoop")
-    // runTest(sha3Module, "theta")
-    // runTest(sha3Module, "rho")
-    // runTest(sha3Module, "pi")
-    // runTest(sha3Module, "chi")
+    runTest(sha3Module, "testTheta")
+    runTest(sha3Module, "rho")
+    runTest(sha3Module, "pi")
+    runTest(sha3Module, "chi")
     // runTest(sha3Module, "iota")
-    runTest(sha3Module, "keccakRound0")
+    // runTest(sha3Module, "testKeccak1")
+    // runTest(sha3Module, "testKeccak2")
+    // runTest(sha3Module, "testKeccak24")
   }
 
 await startWasm()

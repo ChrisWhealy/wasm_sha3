@@ -1,16 +1,19 @@
 (module
-  (type $type_fn_boundary   (func (param i32)))
-  (type $type_debug_hexdump (func (param i32 i32 i32)))
-  (type $type_log_i64       (func (param i32 i32 i64)))
-  (type $type_log_i32       (func (param i32 i32 i32)))
+  (type $type_fn_boundary     (func (param i32)))
+  (type $type_fn_nth_boundary (func (param i32 i32)))
+  (type $type_debug_hexdump   (func (param i32 i32 i32)))
+  (type $type_log_i64         (func (param i32 i32 i64)))
+  (type $type_log_i32         (func (param i32 i32 i32)))
 
   (import "env" "debug"     (memory $debug 16))
   (import "env" "hexdump"   (func $debug.hexdump (type $type_debug_hexdump)))
 
-  (import "log" "fnEnter"   (func $log.fnEnter   (type $type_fn_boundary)))
-  (import "log" "fnExit"    (func $log.fnExit    (type $type_fn_boundary)))
-  (import "log" "singleI64" (func $log.singleI64 (type $type_log_i64)))
-  (import "log" "singleI32" (func $log.singleI32 (type $type_log_i32)))
+  (import "log" "fnEnter"    (func $log.fnEnter    (type $type_fn_boundary)))
+  (import "log" "fnExit"     (func $log.fnExit     (type $type_fn_boundary)))
+  (import "log" "fnEnterNth" (func $log.fnEnterNth (type $type_fn_nth_boundary)))
+  (import "log" "fnExitNth"  (func $log.fnExitNth  (type $type_fn_nth_boundary)))
+  (import "log" "singleI64"  (func $log.singleI64  (type $type_log_i64)))
+  (import "log" "singleI32"  (func $log.singleI32  (type $type_log_i32)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; WASI requires the WASM module to export memory using the name "memory"
@@ -84,15 +87,10 @@
   (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x000100C8))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "test_iota")
-    (call $iota (i64.load (global.get $KECCAK_ROUND_CONSTANTS_PTR)))
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "test_keccak_round_0")
+  ;; In-place XOR the 64 bytes at $RATE_PTR (which start at all zeroes) with the 64 bytes at $DATA_PTR
+  (func $xor_rate_block
     (local $idx i32)
 
-    ;; XOR the 64 bytes at $RATE_PTR with the 64 bytes at $DATA_PTR
     (loop $xor_loop
       (i64.store
         (memory $main)
@@ -106,9 +104,14 @@
       (local.tee $idx (i32.add (local.get $idx) (i32.const 8)))
       (br_if $xor_loop (i32.lt_u (i32.const 64)))
     )
+  )
 
-    ;; $CAPACITY_PTR (136 bytes) and $RATE_PTR (64 bytes) are contiguous
-    ;; Copy the 200 bytes at $CAPACITY_PTR to $THETA_A_BLK_PTR
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func (export "test_theta")
+    (call $xor_rate_block)
+
+    ;; Copy the 200 bytes starting at $CAPACITY_PTR to $THETA_A_BLK_PTR
+    ;; Since $CAPACITY_PTR and $RATE_PTR are contiguous, only memory.copy is needed
     (memory.copy
       (memory $main)
       (memory $main)
@@ -117,49 +120,90 @@
       (i32.const 200)
     )
 
-    (call $keccak (i32.const 0))
+    (call $theta)
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $keccak
-        (param $round i32)
+  (func (export "test_iota")
+    (call $iota (i64.load (global.get $KECCAK_ROUND_CONSTANTS_PTR)))
+  )
 
-    ;; (call $log.fnEnter (i32.const 9))
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Perform $n rounds of the Keccak function against the 64-byte block of data at $DATA_PTR
+  (func (export "test_keccak")
+        (param $n i32)
+    (local $round i32)
+
+    (call $xor_rate_block)
+
+    ;; Copy the 200 bytes starting at $CAPACITY_PTR to $THETA_A_BLK_PTR
+    ;; Since $CAPACITY_PTR and $RATE_PTR are contiguous, only memory.copy is needed
+    (memory.copy
+      (memory $main)
+      (memory $main)
+      (global.get $THETA_A_BLK_PTR)
+      (global.get $CAPACITY_PTR)
+      (i32.const 200)
+    )
+
+    (loop $next_round
+      (call $keccak (local.get $round))
+
+      ;; Copy the output of this round at $CHI_RESULT_PTR back to $THETA_A_BLK_PTR ready to start the next round
+      (memory.copy
+        (memory $main)
+        (memory $main)
+        (global.get $THETA_A_BLK_PTR)
+        (global.get $CHI_RESULT_PTR)
+        (i32.const 200)
+      )
+
+      (local.set $round (i32.add (local.get $round) (i32.const 1)))
+      (local.tee $n     (i32.sub (local.get $n)     (i32.const 1)))
+      (br_if $next_round)
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Perform a single round of the Keccak function
+  ;; The output lives at $CHI_RESULT_PTR because the iota function performs an in-place modification
+  (func $keccak (export "keccak")
+        (param $round i32)
+    (local $rnd_const i64)
+
+    (call $log.fnEnterNth (i32.const 9) (local.get $round))
+    (local.set $rnd_const
+      (i64.load
+        (i32.add
+          (global.get $KECCAK_ROUND_CONSTANTS_PTR)
+          (i32.shl (local.get $round) (i32.const 3)) ;; Convert the round number to an i64 offset
+        )
+      )
+    )
+
+    (memory.copy
+      (memory $debug)                 ;; Copy to memory
+      (memory $main)                  ;; Copy from memory
+      (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+      (global.get $THETA_A_BLK_PTR)   ;; Copy from address
+      (i32.const 200)                 ;; Length
+    )
+    (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
 
     (call $theta)
     (call $rho)
     (call $pi)
     (call $chi)
-    ;; The Keccak function output lives at $CHI_RESULT_PTR because the iota function performs an in-place modification
-    (call $iota
-      (i64.load
-        (i32.add
-          (global.get $KECCAK_ROUND_CONSTANTS_PTR)
-          (i32.shl (local.get $round) (i32.const 3))
-        )
-      )
-    )
+    (call $iota (local.get $rnd_const))
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $CHI_RESULT_PTR)    ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-
-    ;; (call $log.fnExit (i32.const 9))
+    (call $log.fnExitNth (i32.const 9) (local.get $round))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Theta function
-  ;; Expects data to be present at the following locatinos:
-  ;; $CAPACITY_PTR   136 bytes (initially, all zeroes)
-  ;; $RATE_PTR        64 bytes (initially, all zeroes)
-  ;; $DATA_PTR        64 bytes (Data being hashed)
   ;;
-  ;; Writes a 200-byte value at $THETA_RESULT_PTR
+  ;; Reads 200 bytes starting at $THETA_A_BLK_PTR
+  ;; Writes 200 bytes to $THETA_RESULT_PTR
   (func $theta (export "theta")
     (call $theta_c)
     (call $theta_d)
@@ -587,26 +631,33 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; XOR in place the first i64 at $CHI_RESULT_PTR with the supplied constant for this round of the Keccak function
+  ;; The endianess of the first word at $CHI_RESULT_PTR can be left in network byte order as long as the round constant
+  ;; is also given in network (big endian) byte order.
+  ;; This then avoids the need to perform two swizzle operations:
+  ;;   1) Swizzle network byte order -> little endian
+  ;;   2) XOR the data value with the round constant
+  ;;   3) Swizzle back into network byte order
   (func $iota (export "iota")
         (param $rnd_const i64)
-    ;; (call $log.fnEnter (i32.const 8))
+    (local $w0         i64)
+    (local $xor_result i64)
+
+    (call $log.fnEnter (i32.const 8))
+    (call $log.singleI64 (i32.const 8) (i32.const 0) (local.get $rnd_const))
+
+    (local.set $w0 (i64.load (memory $main) (global.get $CHI_RESULT_PTR)))
+    (call $log.singleI64 (i32.const 8) (i32.const 1) (local.get $w0))
+
+    (local.set $xor_result (i64.xor (local.get $rnd_const) (local.get $w0)))
+
+    (call $log.singleI64 (i32.const 8) (i32.const 2) (local.get $xor_result))
 
     (i64.store
       (memory $main)
       (global.get $CHI_RESULT_PTR)
-      ;; The endianess of the first word at $CHI_RESULT_PTR can be left in network byte order as long as the round
-      ;; constant is also given in network (big endian) byte order.
-      ;; Then, when both values are loaded onto the stack, WASM will flip the byte order; but this doesn't matter
-      ;; because XOR is a bitwise operation.  This then saves the need to perform two swizzle operations:
-      ;; 1) Swizzle network byte order -> little endian
-      ;; 2) XOR the data value with the round constant
-      ;; 3) Swizzle back into network byte order
-      (i64.xor
-        (local.get $rnd_const)
-        (i64.load (memory $main) (global.get $CHI_RESULT_PTR))
-      )
+      (local.get $xor_result)
     )
 
-    ;; (call $log.fnExit (i32.const 8))
+    (call $log.fnExit (i32.const 8))
   )
 )
