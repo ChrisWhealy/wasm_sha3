@@ -10,7 +10,7 @@ process.on(
 import { readFileSync } from "fs"
 import { u64AsHexStr, u32AsHexStr, u8AsHexStr } from "./utils/binary_utils.mjs"
 import { testData } from "./utils/test_data.mjs"
-import { debugMsgs } from "./utils/debug_msgs.mjs"
+import { debugLabels, debugMsgs } from "./utils/debug_msgs.mjs"
 import { WASI } from "wasi"
 
 // Use non-optimized binaries during testing
@@ -91,24 +91,34 @@ const startWasm =
         },
         singleI32: (fnId, msgId, i32) => {
           console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${u32AsHexStr(i32)}`)
-        }
+        },
+        singleDec: (fnId, msgId, i32) => {
+          console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i32}`)
+        },
+        label: lblId => {
+          console.log(debugLabels[lblId])
+        },
       }
     }
 
     let sha3Module = await WebAssembly.instantiate(readWasmBinary(sha3WasmBinPath), debugEnv)
 
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    // runTest(sha3Module, "thetaC")
-    // runTest(sha3Module, "thetaD")
-    // runTest(sha3Module, "thetaXorLoop")
+    runTest(sha3Module, "thetaC")
+    runTest(sha3Module, "thetaD")
+    runTest(sha3Module, "thetaXorLoop")
     runTest(sha3Module, "testTheta")
-    runTest(sha3Module, "rho")
-    runTest(sha3Module, "pi")
-    runTest(sha3Module, "chi")
-    // runTest(sha3Module, "iota")
-    // runTest(sha3Module, "testKeccak1")
-    // runTest(sha3Module, "testKeccak2")
-    // runTest(sha3Module, "testKeccak24")
+    runTest(sha3Module, "testRho")
+    runTest(sha3Module, "testPi")
+    runTest(sha3Module, "testChi")
+    runTest(sha3Module, "testIota")
+    runTest(sha3Module, "testThetaRho")
+    runTest(sha3Module, "testThetaRhoPi")
+    runTest(sha3Module, "testThetaRhoPiChi")
+    runTest(sha3Module, "testThetaRhoPiChiIota")
+    runTest(sha3Module, "testKeccak1")
+    runTest(sha3Module, "testKeccak2")
+    runTest(sha3Module, "testKeccak24")
   }
 
 await startWasm()

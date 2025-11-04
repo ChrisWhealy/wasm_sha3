@@ -1,19 +1,20 @@
 (module
-  (type $type_fn_boundary     (func (param i32)))
-  (type $type_fn_nth_boundary (func (param i32 i32)))
-  (type $type_debug_hexdump   (func (param i32 i32 i32)))
-  (type $type_log_i64         (func (param i32 i32 i64)))
-  (type $type_log_i32         (func (param i32 i32 i32)))
+  (type $type_i32         (func (param i32)))
+  (type $type_i32_i32     (func (param i32 i32)))
+  (type $type_i32_i32_i32 (func (param i32 i32 i32)))
+  (type $type_i32_i32_i64 (func (param i32 i32 i64)))
 
-  (import "env" "debug"     (memory $debug 16))
-  (import "env" "hexdump"   (func $debug.hexdump (type $type_debug_hexdump)))
+  (import "env" "debug"   (memory $debug 16))
+  (import "env" "hexdump" (func $debug.hexdump (type $type_i32_i32_i32)))
 
-  (import "log" "fnEnter"    (func $log.fnEnter    (type $type_fn_boundary)))
-  (import "log" "fnExit"     (func $log.fnExit     (type $type_fn_boundary)))
-  (import "log" "fnEnterNth" (func $log.fnEnterNth (type $type_fn_nth_boundary)))
-  (import "log" "fnExitNth"  (func $log.fnExitNth  (type $type_fn_nth_boundary)))
-  (import "log" "singleI64"  (func $log.singleI64  (type $type_log_i64)))
-  (import "log" "singleI32"  (func $log.singleI32  (type $type_log_i32)))
+  (import "log" "fnEnter"    (func $log.fnEnter    (type $type_i32)))
+  (import "log" "fnExit"     (func $log.fnExit     (type $type_i32)))
+  (import "log" "fnEnterNth" (func $log.fnEnterNth (type $type_i32_i32)))
+  (import "log" "fnExitNth"  (func $log.fnExitNth  (type $type_i32_i32)))
+  (import "log" "singleI64"  (func $log.singleI64  (type $type_i32_i32_i64)))
+  (import "log" "singleI32"  (func $log.singleI32  (type $type_i32_i32_i32)))
+  (import "log" "singleDec"  (func $log.singleDec  (type $type_i32_i32_i32)))
+  (import "log" "label"      (func $log.label      (type $type_i32)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; WASI requires the WASM module to export memory using the name "memory"
@@ -82,13 +83,13 @@
   ;;     Offset  Length   Type    Description
   ;; 0x00010000      64   i64x8   Rate buffer
   ;; 0x00010088     136   i64x17  Capacity buffer
-  (global $CAPACITY_PTR (export "CAPACITY_PTR") i32 (i32.const 0x00010000))
-  (global $RATE_PTR     (export "RATE_PTR")     i32 (i32.const 0x00010088))
-  (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x000100C8))
+  (global $CAPACITY_PTR (export "CAPACITY_PTR") i32 (i32.const 0x00010000))  ;; Length 136
+  (global $RATE_PTR     (export "RATE_PTR")     i32 (i32.const 0x00010088))  ;; Length 64
+  (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x000100C8))  ;; Length 64
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; In-place XOR the 64 bytes at $RATE_PTR (which start at all zeroes) with the 64 bytes at $DATA_PTR
-  (func $xor_rate_block
+  (func $xor_rate_and_data_blocks
     (local $idx i32)
 
     (loop $xor_loop
@@ -107,8 +108,10 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "test_theta")
-    (call $xor_rate_block)
+  (func $prepare_memory
+    ;; Ensure that the capacity and rate buffers are zeroed
+    (memory.fill (memory $main) (global.get $CAPACITY_PTR) (i32.const 0) (i32.const 200))
+    (call $xor_rate_and_data_blocks)
 
     ;; Copy the 200 bytes starting at $CAPACITY_PTR to $THETA_A_BLK_PTR
     ;; Since $CAPACITY_PTR and $RATE_PTR are contiguous, only memory.copy is needed
@@ -119,7 +122,11 @@
       (global.get $CAPACITY_PTR)
       (i32.const 200)
     )
+  )
 
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func (export "test_theta")
+    (call $prepare_memory)
     (call $theta)
   )
 
@@ -129,38 +136,68 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Test a succession of the inner Keccak functions
+  (func (export "test_theta_rho")
+    (call $prepare_memory)
+    (call $theta)
+    (call $rho)
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Test a succession of the inner Keccak functions
+  (func (export "test_theta_rho_pi")
+    (call $prepare_memory)
+    (call $theta)
+    (call $rho)
+    (call $pi)
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Test a succession of the inner Keccak functions
+  (func (export "test_theta_rho_pi_chi")
+    (call $prepare_memory)
+    (call $theta)
+    (call $rho)
+    (call $pi)
+    (call $chi)
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Test a succession of the inner Keccak functions
+  (func (export "test_theta_rho_pi_chi_iota")
+    (call $prepare_memory)
+    (call $theta)
+    (call $rho)
+    (call $pi)
+    (call $chi)
+    (call $iota (i64.load (global.get $KECCAK_ROUND_CONSTANTS_PTR)))
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Perform $n rounds of the Keccak function against the 64-byte block of data at $DATA_PTR
   (func (export "test_keccak")
         (param $n i32)
     (local $round i32)
 
-    (call $xor_rate_block)
-
-    ;; Copy the 200 bytes starting at $CAPACITY_PTR to $THETA_A_BLK_PTR
-    ;; Since $CAPACITY_PTR and $RATE_PTR are contiguous, only memory.copy is needed
-    (memory.copy
-      (memory $main)
-      (memory $main)
-      (global.get $THETA_A_BLK_PTR)
-      (global.get $CAPACITY_PTR)
-      (i32.const 200)
-    )
+    (call $prepare_memory)
 
     (loop $next_round
       (call $keccak (local.get $round))
-
-      ;; Copy the output of this round at $CHI_RESULT_PTR back to $THETA_A_BLK_PTR ready to start the next round
-      (memory.copy
-        (memory $main)
-        (memory $main)
-        (global.get $THETA_A_BLK_PTR)
-        (global.get $CHI_RESULT_PTR)
-        (i32.const 200)
-      )
-
       (local.set $round (i32.add (local.get $round) (i32.const 1)))
-      (local.tee $n     (i32.sub (local.get $n)     (i32.const 1)))
-      (br_if $next_round)
+
+      (if (local.tee $n (i32.sub (local.get $n) (i32.const 1)))
+        (then
+          ;; Copy the output of this round at $CHI_RESULT_PTR back to $THETA_A_BLK_PTR ready to start the next round
+          (memory.copy
+            (memory $main)
+            (memory $main)
+            (global.get $THETA_A_BLK_PTR)
+            (global.get $CHI_RESULT_PTR)
+            (i32.const 200)
+          )
+          (br $next_round)
+        )
+      )
     )
   )
 
@@ -171,7 +208,7 @@
         (param $round i32)
     (local $rnd_const i64)
 
-    (call $log.fnEnterNth (i32.const 9) (local.get $round))
+    ;; (call $log.fnEnterNth (i32.const 9) (local.get $round))
     (local.set $rnd_const
       (i64.load
         (i32.add
@@ -181,14 +218,14 @@
       )
     )
 
-    (memory.copy
-      (memory $debug)                 ;; Copy to memory
-      (memory $main)                  ;; Copy from memory
-      (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-      (global.get $THETA_A_BLK_PTR)   ;; Copy from address
-      (i32.const 200)                 ;; Length
-    )
-    (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $THETA_A_BLK_PTR)   ;; Copy from address
+    ;;   (i32.const 200)                 ;; Length
+    ;; )
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
 
     (call $theta)
     (call $rho)
@@ -196,7 +233,7 @@
     (call $chi)
     (call $iota (local.get $rnd_const))
 
-    (call $log.fnExitNth (i32.const 9) (local.get $round))
+    ;; (call $log.fnExitNth (i32.const 9) (local.get $round))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -212,12 +249,12 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Theta C function
-  ;; Perform 5 rounds of $theta_c_inner against the 5 * 40 = 200 bytes starting at $THETA_A_BLK_PTR
-  ;; The 8-byte output of each $theta_c_inner call is concatenated into a 40-byte result at $THETA_C_OUT_PTR
+  ;; Perform 5 rounds of $theta_c_inner against the 25 i64s (treated as a 5x5 matrix) starting at $THETA_A_BLK_PTR
+  ;; The output of each $theta_c_inner call is written as a successive i64 starting at $THETA_C_OUT_PTR
   ;;
-  ;; fn theta_c(data_ptr: i32) {
+  ;; fn theta_c() {
   ;;   for idx in 0..4 {
-  ;;     $theta_c_inner(data_ptr + (idx * 40));
+  ;;     THETA_C_OUT_PTR[idx] = $theta_c_inner(THETA_A_BLK_PTR + (idx * 40));
   ;;   }
   ;; }
   (func $theta_c (export "theta_c")
@@ -248,39 +285,41 @@
   )
 
   ;; Inner functionality of Theta C function
-  ;; XOR's together the 5, 8-byte words starting at $data_ptr
+  ;; XOR's together the 5 i64s starting at $data_ptr
   ;; (((($word0 XOR $word1) XOR $word2) XOR $word3) XOR $word4)
   (func $theta_c_inner
     (param $data_ptr i32)
     (result i64)
 
-    (local $w0 i64)
-    (local $w1 i64)
-    (local $w2 i64)
-    (local $w3 i64)
-    (local $w4 i64)
-
-    (local.set $w0 (i64.load (memory $main) offset=0  (local.get $data_ptr)))
-    (local.set $w1 (i64.load (memory $main) offset=8  (local.get $data_ptr)))
-    (local.set $w2 (i64.load (memory $main) offset=16 (local.get $data_ptr)))
-    (local.set $w3 (i64.load (memory $main) offset=24 (local.get $data_ptr)))
-    (local.set $w4 (i64.load (memory $main) offset=32 (local.get $data_ptr)))
-
-    (i64.xor (i64.xor (i64.xor (i64.xor (local.get $w0) (local.get $w1)) (local.get $w2)) (local.get $w3)) (local.get $w4))
+    (i64.xor
+      (i64.xor
+        (i64.xor
+          (i64.xor
+            (i64.load (memory $main) offset=0 (local.get $data_ptr)) ;; w0
+            (i64.load (memory $main) offset=8 (local.get $data_ptr)) ;; w1
+          )
+          (i64.load (memory $main) offset=16 (local.get $data_ptr))  ;; w2
+        )
+        (i64.load (memory $main) offset=24 (local.get $data_ptr))    ;; w3
+      )
+      (i64.load (memory $main) offset=32 (local.get $data_ptr))      ;; w4
+    )
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Theta D function - 5 rounds of $theta_d_inner concatenated together
-  ;; Updates the 40-byte value at $THETA_D_OUT_PTR
+  ;; Theta D function - 5 rounds of $theta_d_inner performed against the 5 i64s at THETA_C_OUT_PTR
+  ;; The output of each $theta_d_inner call is written as a successive i64 starting at $THETA_D_OUT_PTR
   ;;
   ;; fn theta_d(data_ptr: i32) {
   ;;   for idx in 0..4 {
-  ;;     $theta_d_inner(
-  ;;       $THETA_D_OUT_PTR + (((idx - 1) % 5) * 8),
-  ;;       $THETA_D_OUT_PTR + (((idx + 1) % 5) * 8),
+  ;;     THETA_D_OUT_PTR[idx] = $theta_d_inner(
+  ;;       $THETA_C_OUT_PTR + (((idx - 1) % 5) * 8),
+  ;;       $THETA_C_OUT_PTR + (((idx + 1) % 5) * 8),
   ;;     )
   ;;   }
   ;; }
+  ;;
+  ;; Since the above algorithm uses fixed offsets, there is no need for a loop or modulo operations
   (func $theta_d (export "theta_d")
     (local $w0 i32)
     (local $w1 i32)
@@ -296,27 +335,16 @@
     (local.set $w3 (i32.add (global.get $THETA_C_OUT_PTR) (i32.const 24)))
     (local.set $w4 (i32.add (global.get $THETA_C_OUT_PTR) (i32.const 32)))
 
-    (i64.store (memory $main) offset=0 (global.get $THETA_D_OUT_PTR)
-      (call $theta_d_inner (local.get $w4) (local.get $w1)) ;; Words 4 and 1
-    )
-    (i64.store (memory $main) offset=8 (global.get $THETA_D_OUT_PTR)
-      (call $theta_d_inner (local.get $w0) (local.get $w2)) ;; Words 0 and 2
-    )
-    (i64.store (memory $main) offset=16 (global.get $THETA_D_OUT_PTR)
-      (call $theta_d_inner (local.get $w1) (local.get $w3)) ;; Words 1 and 3
-    )
-    (i64.store (memory $main) offset=24 (global.get $THETA_D_OUT_PTR)
-      (call $theta_d_inner (local.get $w2) (local.get $w4)) ;; Words 2 and 4
-    )
-    (i64.store (memory $main) offset=32 (global.get $THETA_D_OUT_PTR)
-      (call $theta_d_inner (local.get $w3) (local.get $w0)) ;; Words 3 and 0
-    )
+    (i64.store (memory $main) offset=0  (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w4) (local.get $w1)))
+    (i64.store (memory $main) offset=8  (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w0) (local.get $w2)))
+    (i64.store (memory $main) offset=16 (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w1) (local.get $w3)))
+    (i64.store (memory $main) offset=24 (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w2) (local.get $w4)))
+    (i64.store (memory $main) offset=32 (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w3) (local.get $w0)))
 
     ;; (call $log.fnExit (i32.const 2))
   )
 
-  ;; Inner functionality of Theta D function
-  ;; The byte order of $w1 must first be swapped to big endian before the rotate right operation can be performed
+  ;; Inner functionality of Theta D function -> $w0 XOR ($w1 ROTR 1)
   (func $theta_d_inner
         (param $w0_ptr i32)
         (param $w1_ptr i32)
@@ -328,6 +356,7 @@
 
     ;; (call $log.fnEnter (i32.const 3))
 
+    ;; The byte order of $w1 must first be swapped to big endian before the rotate right operation can be performed
     ;; Copy the i64 argument values across both lanes of a v128 in big endian format
     (local.set $w0
       (i8x16.swizzle  ;; Swap byte order
@@ -387,7 +416,7 @@
           (memory $main)
           (i32.add
             (global.get $THETA_D_OUT_PTR)
-            ;; Convert the A block index to an i64 offset by multiplying by 8
+            ;; Convert the (A block index DIV 5) to an i64 offset by multiplying by 8
             (i32.shl (i32.div_u (local.get $a_blk_idx) (i32.const 5)) (i32.const 3))
           )
         )
@@ -556,6 +585,10 @@
     (local $row+1      i32)
     (local $row+2      i32)
     (local $result_ptr i32)
+    (local $w0         i64)
+    (local $w1         i64)
+    (local $w2         i64)
+    (local $chi_result i64)
 
     ;; (call $log.fnEnter (i32.const 7))
 
@@ -578,15 +611,25 @@
 
       (loop $col_loop
         ;; (call $log.singleI32 (i32.const 7) (i32.const 3) (local.get $col))
-        (i64.store
-          (memory $main)
-          (local.get $result_ptr)
-          (call $chi_inner
-            (i64.load (memory $main) (call $chi_word_offset (local.get $row)   (local.get $col))) ;; w0
-            (i64.load (memory $main) (call $chi_word_offset (local.get $row+1) (local.get $col))) ;; w1
-            (i64.load (memory $main) (call $chi_word_offset (local.get $row+2) (local.get $col))) ;; w2
-          )
-        )
+        ;; (call $log.singleDec (i32.const 7) (i32.const 8)
+        ;;   (i32.add
+        ;;     (i32.mul (local.get $row) (i32.const 5))
+        ;;     (local.get $col)
+        ;;   )
+        ;; )
+
+        (local.set $w0 (i64.load (memory $main) (call $chi_word_offset (local.get $row)   (local.get $col))))
+        (local.set $w1 (i64.load (memory $main) (call $chi_word_offset (local.get $row+1) (local.get $col))))
+        (local.set $w2 (i64.load (memory $main) (call $chi_word_offset (local.get $row+2) (local.get $col))))
+
+        ;; (call $log.singleI64 (i32.const 7) (i32.const 4) (local.get $w0))
+        ;; (call $log.singleI64 (i32.const 7) (i32.const 5) (local.get $w1))
+        ;; (call $log.singleI64 (i32.const 7) (i32.const 6) (local.get $w2))
+
+        (local.set $chi_result (call $chi_inner (local.get $w0) (local.get $w1) (local.get $w2)))
+        ;; (call $log.singleI64 (i32.const 7) (i32.const 7) (local.get $chi_result))
+
+        (i64.store (memory $main) (local.get $result_ptr) (local.get $chi_result))
 
         (local.set $result_ptr (i32.add (local.get $result_ptr) (i32.const 8)))
         (local.tee $col        (i32.add (local.get $col)        (i32.const 1)))
@@ -606,13 +649,7 @@
         (param $w1 i64)
         (param $w2 i64)
         (result i64)
-    (i64.xor
-      (local.get $w0)
-      (i64.and
-        (i64.xor (local.get $w1) (i64.const -1))  ;; NOT($w1)
-        (local.get $w2)
-      )
-    )
+    (i64.xor (local.get $w0) (i64.and (i64.xor (local.get $w1) (i64.const -1)) (local.get $w2)))
   )
 
   ;; Offset = (($row * 5) + $col) * 8
@@ -623,7 +660,7 @@
     (i32.add
       (global.get $PI_RESULT_PTR)
       (i32.shl  ;; Multiply index by 8 to get offset
-        (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $col))  ;; Calculate index
+        (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $col))  ;; Calculate index from row and column
         (i32.const 3)
       )
     )
@@ -642,15 +679,14 @@
     (local $w0         i64)
     (local $xor_result i64)
 
-    (call $log.fnEnter (i32.const 8))
-    (call $log.singleI64 (i32.const 8) (i32.const 0) (local.get $rnd_const))
+    ;; (call $log.fnEnter (i32.const 8))
+    ;; (call $log.singleI64 (i32.const 8) (i32.const 0) (local.get $rnd_const))
 
     (local.set $w0 (i64.load (memory $main) (global.get $CHI_RESULT_PTR)))
-    (call $log.singleI64 (i32.const 8) (i32.const 1) (local.get $w0))
+    ;; (call $log.singleI64 (i32.const 8) (i32.const 1) (local.get $w0))
 
     (local.set $xor_result (i64.xor (local.get $rnd_const) (local.get $w0)))
-
-    (call $log.singleI64 (i32.const 8) (i32.const 2) (local.get $xor_result))
+    ;; (call $log.singleI64 (i32.const 8) (i32.const 2) (local.get $xor_result))
 
     (i64.store
       (memory $main)
@@ -658,6 +694,6 @@
       (local.get $xor_result)
     )
 
-    (call $log.fnExit (i32.const 8))
+    ;; (call $log.fnExit (i32.const 8))
   )
 )

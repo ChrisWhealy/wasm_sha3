@@ -37,7 +37,7 @@ export const debugMsgs = [
   // FnId 7
   {
     fnName: "chi",
-    msgId: ["$row", "$row+1", "$row+2", "$col"]
+    msgId: ["$row", "$row+1", "$row+2", "$col", "$w0", "$w1", "$w2", "result", "round"]
   },
   // FnId 8
   {
@@ -49,4 +49,11 @@ export const debugMsgs = [
     fnName: "keccak",
     msgId: []
   },
+]
+
+export const debugLabels = [
+  /* 0 */ "Data block 1",
+  /* 1 */ "Capacity",
+  /* 2 */ "Rate (Before XORing with data block)",
+  /* 3 */ "Rate (After XORing with data block)",
 ]

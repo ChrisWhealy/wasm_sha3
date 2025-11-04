@@ -4,7 +4,7 @@ const unsignedBinToHexStr = len => val => {
   const v = (typeof val === 'bigint' ? val : BigInt(val)) & U64_MASK
   const hex = v.toString(16).padStart(len >>> 2, "0")
 
-  return (bytes => !bytes ? '' : bytes.join(' '))(hex.match(/.{2}/g))
+  return (bytes => !bytes ? '' : bytes.reverse().join(' '))(hex.match(/.{2}/g))
 }
 
 const swapI32Endianness = i32 =>
