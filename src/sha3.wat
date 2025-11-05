@@ -88,7 +88,7 @@
   (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x000100C8))  ;; Length 64
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; In-place XOR the 64 bytes at $RATE_PTR (which start at all zeroes) with the 64 bytes at $DATA_PTR
+  ;; In-place XOR the 64 bytes at $RATE_PTR with the 64 bytes at $DATA_PTR
   (func $xor_rate_and_data_blocks
     (local $idx i32)
 
@@ -132,7 +132,7 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_iota")
-    (call $iota (i64.load (global.get $KECCAK_ROUND_CONSTANTS_PTR)))
+    (call $iota (i32.const 0))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -170,7 +170,7 @@
     (call $rho)
     (call $pi)
     (call $chi)
-    (call $iota (i64.load (global.get $KECCAK_ROUND_CONSTANTS_PTR)))
+    (call $iota (i32.const 0))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -185,6 +185,7 @@
       (call $keccak (local.get $round))
       (local.set $round (i32.add (local.get $round) (i32.const 1)))
 
+      ;; If we still have more rounds to perform
       (if (local.tee $n (i32.sub (local.get $n) (i32.const 1)))
         (then
           ;; Copy the output of this round at $CHI_RESULT_PTR back to $THETA_A_BLK_PTR ready to start the next round
@@ -206,17 +207,7 @@
   ;; The output lives at $CHI_RESULT_PTR because the iota function performs an in-place modification
   (func $keccak (export "keccak")
         (param $round i32)
-    (local $rnd_const i64)
-
-    ;; (call $log.fnEnterNth (i32.const 9) (local.get $round))
-    (local.set $rnd_const
-      (i64.load
-        (i32.add
-          (global.get $KECCAK_ROUND_CONSTANTS_PTR)
-          (i32.shl (local.get $round) (i32.const 3)) ;; Convert the round number to an i64 offset
-        )
-      )
-    )
+    (call $log.fnEnterNth (i32.const 9) (local.get $round))
 
     ;; (memory.copy
     ;;   (memory $debug)                 ;; Copy to memory
@@ -231,9 +222,9 @@
     (call $rho)
     (call $pi)
     (call $chi)
-    (call $iota (local.get $rnd_const))
+    (call $iota (local.get $round))
 
-    ;; (call $log.fnExitNth (i32.const 9) (local.get $round))
+    (call $log.fnExitNth (i32.const 9) (local.get $round))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -667,19 +658,30 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; XOR in place the first i64 at $CHI_RESULT_PTR with the supplied constant for this round of the Keccak function
+  ;; XOR in place the i64 at $CHI_RESULT_PTR with the supplied constant for this round of the Keccak function.
+  ;;
   ;; The endianess of the first word at $CHI_RESULT_PTR can be left in network byte order as long as the round constant
-  ;; is also given in network (big endian) byte order.
-  ;; This then avoids the need to perform two swizzle operations:
+  ;; is also given in network (big endian) byte order.  This avoids having to perform two swizzle operations:
   ;;   1) Swizzle network byte order -> little endian
   ;;   2) XOR the data value with the round constant
   ;;   3) Swizzle back into network byte order
   (func $iota (export "iota")
-        (param $rnd_const i64)
+        (param $round i32)
+
     (local $w0         i64)
+    (local $rnd_const  i64)
     (local $xor_result i64)
 
     ;; (call $log.fnEnter (i32.const 8))
+
+    (local.set $rnd_const
+      (i64.load
+        (i32.add
+          (global.get $KECCAK_ROUND_CONSTANTS_PTR)
+          (i32.shl (local.get $round) (i32.const 3)) ;; Convert the round number to an i64 offset
+        )
+      )
+    )
     ;; (call $log.singleI64 (i32.const 8) (i32.const 0) (local.get $rnd_const))
 
     (local.set $w0 (i64.load (memory $main) (global.get $CHI_RESULT_PTR)))
