@@ -7,14 +7,15 @@
   (import "env" "debug"   (memory $debug 16))
   (import "env" "hexdump" (func $debug.hexdump (type $type_i32_i32_i32)))
 
-  (import "log" "fnEnter"    (func $log.fnEnter    (type $type_i32)))
-  (import "log" "fnExit"     (func $log.fnExit     (type $type_i32)))
-  (import "log" "fnEnterNth" (func $log.fnEnterNth (type $type_i32_i32)))
-  (import "log" "fnExitNth"  (func $log.fnExitNth  (type $type_i32_i32)))
-  (import "log" "singleI64"  (func $log.singleI64  (type $type_i32_i32_i64)))
-  (import "log" "singleI32"  (func $log.singleI32  (type $type_i32_i32_i32)))
-  (import "log" "singleDec"  (func $log.singleDec  (type $type_i32_i32_i32)))
-  (import "log" "label"      (func $log.label      (type $type_i32)))
+  (import "log" "fnEnter"      (func $log.fnEnter      (type $type_i32)))
+  (import "log" "fnExit"       (func $log.fnExit       (type $type_i32)))
+  (import "log" "fnEnterNth"   (func $log.fnEnterNth   (type $type_i32_i32)))
+  (import "log" "fnExitNth"    (func $log.fnExitNth    (type $type_i32_i32)))
+  (import "log" "singleI64"    (func $log.singleI64    (type $type_i32_i32_i64)))
+  (import "log" "singleI32"    (func $log.singleI32    (type $type_i32_i32_i32)))
+  (import "log" "singleDec"    (func $log.singleDec    (type $type_i32_i32_i32)))
+  (import "log" "singleBigInt" (func $log.singleBigInt (type $type_i32_i32_i64)))
+  (import "log" "label"        (func $log.label        (type $type_i32)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; WASI requires the WASM module to export memory using the name "memory"
@@ -45,7 +46,7 @@
   ;; IMPORTANT
   ;; The round constant values have been deliberately added in big endian format!
   ;; This is an optimization that avoids the need for two swizzle operations in the iota function
-  (data $keccak_round_constants (i32.const 0x00000000)
+  (data $keccak_round_constants (memory $main) (i32.const 0x00000000)
     "\00\00\00\00\00\00\00\01" (; Round  0;) "\00\00\00\00\00\00\80\82" (; Round  1;)
     "\80\00\00\00\00\00\80\8a" (; Round  2;) "\80\00\00\00\80\00\80\00" (; Round  3;)
     "\00\00\00\00\00\00\80\8b" (; Round  4;) "\00\00\00\00\80\00\00\01" (; Round  5;)
@@ -61,7 +62,7 @@
   )
 
   (global $RHO_ROTATION_TABLE i32 (i32.const 0x000000C8))
-  (data $rotation_table (i32.const 0x000000C8)
+  (data $rotation_table (memory $main) (i32.const 0x000000C8)
     "\00\00\00\00"  (;  0;) "\24\00\00\00"  (; 36;) "\03\00\00\00"  (;  3;) "\29\00\00\00"  (; 41;) "\12\00\00\00"  (; 18;)
     "\01\00\00\00"  (;  1;) "\0A\00\00\00"  (; 10;) "\2C\00\00\00"  (; 44;) "\2D\00\00\00"  (; 45;) "\02\00\00\00"  (;  2;)
     "\3E\00\00\00"  (; 62;) "\06\00\00\00"  (;  6;) "\2B\00\00\00"  (; 43;) "\0F\00\00\00"  (; 15;) "\3D\00\00\00"  (; 61;)
@@ -200,23 +201,43 @@
         )
       )
     )
+
+    ;; The output of the last Keccack round becomes the new Capacity and Rate
+    (memory.copy
+      (memory $main)               ;; Copy to memory
+      (memory $main)               ;; Copy from memory
+      (global.get $CAPACITY_PTR)   ;; Copy to address
+      (global.get $CHI_RESULT_PTR) ;; Copy from address
+      (i32.const 200)              ;; Length
+    )
+
+    (memory.copy
+      (memory $debug)                 ;; Copy to memory
+      (memory $main)                  ;; Copy from memory
+      (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+      (global.get $CAPACITY_PTR)      ;; Copy from address
+      (i32.const 200)                 ;; Length
+    )
+    (call $log.label (i32.const 5))
+    (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Perform a single round of the Keccak function
   ;; The output lives at $CHI_RESULT_PTR because the iota function performs an in-place modification
-  (func $keccak (export "keccak")
+  (func $keccak
         (param $round i32)
     (call $log.fnEnterNth (i32.const 9) (local.get $round))
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $THETA_A_BLK_PTR)   ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    (memory.copy
+      (memory $debug)                 ;; Copy to memory
+      (memory $main)                  ;; Copy from memory
+      (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+      (global.get $THETA_A_BLK_PTR)   ;; Copy from address
+      (i32.const 200)                 ;; Length
+    )
+    (call $log.label (i32.const 4))
+    (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
 
     (call $theta)
     (call $rho)
@@ -236,6 +257,16 @@
     (call $theta_c)
     (call $theta_d)
     (call $theta_xor_loop)
+
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $THETA_RESULT_PTR)  ;; Copy from address
+    ;;   (i32.const 200)                 ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 6))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -449,6 +480,7 @@
     (local $theta_ptr  i32)
     (local $theta_idx  i32)
     (local $rot_ptr    i32)
+    (local $rot_amt    i64)
     (local $w0         i64)
 
     ;; (call $log.fnEnter (i32.const 5))
@@ -458,6 +490,9 @@
     (local.set $theta_ptr  (global.get $THETA_RESULT_PTR))
 
     (loop $rho_loop
+      (local.set $rot_amt (i64.extend_i32_u (i32.load (memory $main) (local.get $rot_ptr))))
+      ;; (call $log.singleBigInt (i32.const 5) (i32.const 2) (local.get $rot_amt))
+
       ;; The value must be in network byte order otherwise the rotate operation will not work correctly!
       (local.set $w0
         (i64.rotr
@@ -468,7 +503,7 @@
               (global.get $SWAP_I64_ENDIANESS)
             )
           )
-          (i64.extend_i32_u (i32.load (local.get $rot_ptr)))
+          (local.get $rot_amt)
         )
       )
       ;; (call $log.singleI64 (i32.const 5) (i32.const 1) (local.get $w0))
@@ -494,6 +529,16 @@
       ;; Quit once all 25 words in the theta result block have been rotated
       (br_if $rho_loop (i32.lt_u (i32.const 25)))
     )
+
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $RHO_RESULT_PTR)    ;; Copy from address
+    ;;   (i32.const 200)                 ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 7))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
 
     ;; (call $log.fnExit (i32.const 5))
   )
@@ -548,6 +593,15 @@
     (i64.store (memory $main) offset=136 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=184 (global.get $RHO_RESULT_PTR)))
     (i64.store (memory $main) offset=160 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=192 (global.get $RHO_RESULT_PTR)))
 
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $PI_RESULT_PTR)     ;; Copy from address
+    ;;   (i32.const 200)                 ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 8))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
     ;; (call $log.fnExit (i32.const 6))
   )
 
@@ -631,6 +685,15 @@
       (br_if $row_loop (i32.lt_u (i32.const 5)))
     )
 
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $CHI_RESULT_PTR)    ;; Copy from address
+    ;;   (i32.const 200)                 ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 9))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
     ;; (call $log.fnExit (i32.const 7))
   )
 
@@ -673,22 +736,34 @@
     (local $xor_result i64)
 
     ;; (call $log.fnEnter (i32.const 8))
+    ;; (call $log.singleDec (i32.const 8) (i32.const 0) (local.get $round))
+
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $KECCAK_ROUND_CONSTANTS_PTR) ;; Copy from address
+    ;;   (i32.const 192)                 ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 11))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 192))
 
     (local.set $rnd_const
       (i64.load
+        (memory $main)
         (i32.add
           (global.get $KECCAK_ROUND_CONSTANTS_PTR)
           (i32.shl (local.get $round) (i32.const 3)) ;; Convert the round number to an i64 offset
         )
       )
     )
-    ;; (call $log.singleI64 (i32.const 8) (i32.const 0) (local.get $rnd_const))
+    ;; (call $log.singleI64 (i32.const 8) (i32.const 1) (local.get $rnd_const))
 
     (local.set $w0 (i64.load (memory $main) (global.get $CHI_RESULT_PTR)))
-    ;; (call $log.singleI64 (i32.const 8) (i32.const 1) (local.get $w0))
+    ;; (call $log.singleI64 (i32.const 8) (i32.const 2) (local.get $w0))
 
     (local.set $xor_result (i64.xor (local.get $rnd_const) (local.get $w0)))
-    ;; (call $log.singleI64 (i32.const 8) (i32.const 2) (local.get $xor_result))
+    ;; (call $log.singleI64 (i32.const 8) (i32.const 3) (local.get $xor_result))
 
     (i64.store
       (memory $main)
@@ -696,6 +771,15 @@
       (local.get $xor_result)
     )
 
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $CHI_RESULT_PTR)    ;; Copy from address
+    ;;   (i32.const 200)                 ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 10))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
     ;; (call $log.fnExit (i32.const 8))
   )
 )

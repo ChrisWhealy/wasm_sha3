@@ -47,7 +47,7 @@ const runTest = (wasmMod, testName) => {
 
     if (resultByte != expectedByte) {
       success = false
-      // console.log(`${testName} error at byte ${idx}: expected ${u8AsHexStr(expectedByte)}, got ${u8AsHexStr(resultByte)}`)
+      console.log(`${testName} error at byte ${idx}: expected ${u8AsHexStr(expectedByte)}, got ${u8AsHexStr(resultByte)}`)
     }
   }
 
@@ -95,6 +95,9 @@ const startWasm =
         singleDec: (fnId, msgId, i32) => {
           console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i32}`)
         },
+        singleBigInt: (fnId, msgId, i64) => {
+          console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i64}`)
+        },
         label: lblId => console.log(debugLabels[lblId]),
       }
     }
@@ -115,8 +118,8 @@ const startWasm =
     // runTest(sha3Module, "testThetaRhoPiChi")
     // runTest(sha3Module, "testThetaRhoPiChiIota")
     // runTest(sha3Module, "testKeccak1")
-    runTest(sha3Module, "testKeccak2")
-    // runTest(sha3Module, "testKeccak24")
+    // runTest(sha3Module, "testKeccak2")
+    runTest(sha3Module, "testKeccak24")
   }
 
 await startWasm()

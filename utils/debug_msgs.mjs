@@ -27,7 +27,7 @@ export const debugMsgs = [
   // FnId 5
   {
     fnName: "rho",
-    msgId: ["$w0", "$w0 rotated"]
+    msgId: ["$w0", "$w0 rotated", "$rot_amt"]
   },
   // FnId 6
   {
@@ -42,7 +42,7 @@ export const debugMsgs = [
   // FnId 8
   {
     fnName: "iota",
-    msgId: ["round constant", "word 0", "XOR Result"]
+    msgId: ["round", "round constant", "word 0", "XOR Result"]
   },
   // FnId 9
   {
@@ -52,8 +52,16 @@ export const debugMsgs = [
 ]
 
 export const debugLabels = [
-  /* 0 */ "Data block 1",
-  /* 1 */ "Capacity",
-  /* 2 */ "Rate (Before XORing with data block)",
-  /* 3 */ "Rate (After XORing with data block)",
+  /* 0 */  "Data block 1",
+  /* 1 */  "Capacity",
+  /* 2 */  "Rate (Before XORing with data block)",
+  /* 3 */  "Rate (After XORing with data block)",
+  /* 4 */  "Start value of Theta A block data",
+  /* 5 */  "New Capacity & Rate",
+  /* 6 */  "Theta Result",
+  /* 7 */  "Rho Result",
+  /* 8 */  "Pi Result",
+  /* 9 */  "Chi Result",
+  /* 10 */ "Iota Result",
+  /* 11 */ "Keccak Round Constants",
 ]
