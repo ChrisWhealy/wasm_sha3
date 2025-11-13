@@ -64,4 +64,5 @@ export const debugLabels = [
   /* 9 */  "Chi Result",
   /* 10 */ "Iota Result",
   /* 11 */ "Keccak Round Constants",
+  /* 12 */ "Theta D Result",
 ]

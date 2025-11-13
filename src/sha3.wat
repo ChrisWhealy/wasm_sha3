@@ -1,3 +1,28 @@
+;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+;; An implementation of the Keccak-f[1600] algorithm based on the specification published in NIST FIPS publication 202
+;; https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
+;;
+;; This module follows the state array indexing convention described in section 3.1.4 of the above document
+;;                     ___ ___ ___ ___ ___
+;;                   /___/___/___/___/___/|
+;;                 /___/___/___/___/___/| |
+;;               /___/___/___/___/___/| |/|
+;;             /___/___/___/___/___/| |/| |
+;;           /___/___/___/___/___/| |/| |/|
+;;  ⋀   2   |   |   |   |   |   | |/| |/| |
+;;  |       |___|___|___|___|___|/| |/| |/|
+;;  |   1   |   |   |   |   |   | |/| |/| |
+;;          |___|___|___|___|___|/| |/| |/|
+;;  Y   0   |   |   |   |   |   | |/| |/| |
+;;          |___|___|___|___|___|/| |/| |/   w-1   /
+;;  |   4   |   |   |   |   |   | |/| |/   ...   /
+;;  |       |___|___|___|___|___|/| |/   2     Z
+;;  |   3   |   |   |   |   |   | |/   1     /
+;;  ∨       |___|___|___|___|___|/   0     /
+;;            3   4   0   1   2
+;;           <------- X ------->
+;;
+;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 (module
   (type $type_i32         (func (param i32)))
   (type $type_i32_i32     (func (param i32 i32)))
@@ -20,7 +45,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; WASI requires the WASM module to export memory using the name "memory"
   ;; Memory page   1     Internal stuff
-  ;; Memory pages  2     Capacity and rate buffers
+  ;; Memory pages  2     Rate and Capacity buffers
   (memory $main (export "memory") 2)
 
   (global $DEBUG_ACTIVE       i32 (i32.const 0))
@@ -45,7 +70,7 @@
   (global $KECCAK_ROUND_CONSTANTS_PTR i32 (i32.const 0x00000000))
   ;; IMPORTANT
   ;; The round constant values have been deliberately added in big endian format!
-  ;; This is an optimization that avoids the need for two swizzle operations in the iota function
+  ;; This optimization avoids the need for two swizzle operations in the iota function
   (data $keccak_round_constants (memory $main) (i32.const 0x00000000)
     "\00\00\00\00\00\00\00\01" (; Round  0;) "\00\00\00\00\00\00\80\82" (; Round  1;)
     "\80\00\00\00\00\00\80\8a" (; Round  2;) "\80\00\00\00\80\00\80\00" (; Round  3;)
@@ -61,8 +86,8 @@
     "\00\00\00\00\80\00\00\01" (; Round 22;) "\80\00\00\00\80\00\80\08" (; Round 23;)
   )
 
-  (global $RHO_ROTATION_TABLE i32 (i32.const 0x000000C8))
-  (data $rotation_table (memory $main) (i32.const 0x000000C8)
+  (global $RHOTATION_TABLE i32 (i32.const 0x000000C8))
+  (data (memory $main) (i32.const 0x000000C8)
     "\00\00\00\00"  (;  0;) "\24\00\00\00"  (; 36;) "\03\00\00\00"  (;  3;) "\29\00\00\00"  (; 41;) "\12\00\00\00"  (; 18;)
     "\01\00\00\00"  (;  1;) "\0A\00\00\00"  (; 10;) "\2C\00\00\00"  (; 44;) "\2D\00\00\00"  (; 45;) "\02\00\00\00"  (;  2;)
     "\3E\00\00\00"  (; 62;) "\06\00\00\00"  (;  6;) "\2B\00\00\00"  (; 43;) "\0F\00\00\00"  (; 15;) "\3D\00\00\00"  (; 61;)
@@ -70,7 +95,8 @@
     "\1B\00\00\00"  (; 27;) "\14\00\00\00"  (; 20;) "\27\00\00\00"  (; 39;) "\08\00\00\00"  (;  8;) "\0E\00\00\00"  (; 14;)
   )
 
-  ;; Memory areas used by the Theta function
+  ;; Memory areas used by the inner Keccak functions
+  ;; These pointers point to locations in page 1 of memory $main
   (global $THETA_A_BLK_PTR  (export "THETA_A_BLK_PTR")  i32 (i32.const 0x0000012C))  ;; Length 200
   (global $THETA_C_OUT_PTR  (export "THETA_C_OUT_PTR")  i32 (i32.const 0x000001F4))  ;; Length 40
   (global $THETA_D_OUT_PTR  (export "THETA_D_OUT_PTR")  i32 (i32.const 0x0000021C))  ;; Length 40
@@ -82,15 +108,37 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Memory Map: Page 2
   ;;     Offset  Length   Type    Description
+  ;; 0x00010000     200  i64x25   Internal state buffer - fixed at 200 bytes or 1600 bits
   ;; 0x00010000      64   i64x8   Rate buffer
   ;; 0x00010088     136   i64x17  Capacity buffer
-  (global $CAPACITY_PTR (export "CAPACITY_PTR") i32 (i32.const 0x00010000))  ;; Length 136
-  (global $RATE_PTR     (export "RATE_PTR")     i32 (i32.const 0x00010088))  ;; Length 64
+  (global $STATE_PTR    (export "STATE_PTR")    i32 (i32.const 0x00010000))  ;; Length 200
+  (global $RATE_PTR     (export "RATE_PTR")     i32 (i32.const 0x00010000))  ;; Length 64
+  (global $CAPACITY_PTR (export "CAPACITY_PTR") i32 (i32.const 0x00010040))  ;; Length 136
   (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x000100C8))  ;; Length 64
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; In-place XOR the 64 bytes at $RATE_PTR with the 64 bytes at $DATA_PTR
-  (func $xor_rate_and_data_blocks
+  (func $prepare_memory
+    ;; Initialise the internal state
+    (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200))
+
+    ;; XOR first input block with the rate
+    (call $xor_data_with_rate (i32.const 64))
+
+    ;; Copy the internal state to $THETA_A_BLK_PTR
+    (memory.copy
+      (memory $main)
+      (memory $main)
+      (global.get $THETA_A_BLK_PTR)
+      (global.get $STATE_PTR)
+      (i32.const 200)
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; In place XOR the 64 bytes at $RATE_PTR with the 64 bytes at $DATA_PTR
+  (func $xor_data_with_rate
+        (param $rate_size i32)
+
     (local $idx i32)
 
     (loop $xor_loop
@@ -103,26 +151,24 @@
         )
       )
 
-      (local.tee $idx (i32.add (local.get $idx) (i32.const 8)))
-      (br_if $xor_loop (i32.lt_u (i32.const 64)))
+      (local.set $idx       (i32.add (local.get $idx)       (i32.const 8)))
+      (local.tee $rate_size (i32.sub (local.get $rate_size) (i32.const 1)))
+      (br_if $xor_loop)
     )
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $prepare_memory
-    ;; Ensure that the capacity and rate buffers are zeroed
-    (memory.fill (memory $main) (global.get $CAPACITY_PTR) (i32.const 0) (i32.const 200))
-    (call $xor_rate_and_data_blocks)
+  (func (export "test_theta_c")
+        (param $rounds i32)
+    (call $prepare_memory)
+    (call $theta_c (local.get $rounds))
+  )
 
-    ;; Copy the 200 bytes starting at $CAPACITY_PTR to $THETA_A_BLK_PTR
-    ;; Since $CAPACITY_PTR and $RATE_PTR are contiguous, only memory.copy is needed
-    (memory.copy
-      (memory $main)
-      (memory $main)
-      (global.get $THETA_A_BLK_PTR)
-      (global.get $CAPACITY_PTR)
-      (i32.const 200)
-    )
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func (export "test_theta_d")
+    (call $prepare_memory)
+    (call $theta_c (i32.const 5))
+    (call $theta_d)
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -253,8 +299,10 @@
   ;;
   ;; Reads 200 bytes starting at $THETA_A_BLK_PTR
   ;; Writes 200 bytes to $THETA_RESULT_PTR
+  ;;
+  ;; C[x,z]=A[x, 0,z] ⊕ A[x, 1,z] ⊕ A[x, 2,z] ⊕ A[x, 3,z] ⊕ A[x, 4,z]
   (func $theta (export "theta")
-    (call $theta_c)
+    (call $theta_c (i32.const 5))
     (call $theta_d)
     (call $theta_xor_loop)
 
@@ -271,44 +319,52 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Theta C function
-  ;; Perform 5 rounds of $theta_c_inner against the 25 i64s (treated as a 5x5 matrix) starting at $THETA_A_BLK_PTR
+  ;; Perform n rounds of $theta_c_inner
   ;; The output of each $theta_c_inner call is written as a successive i64 starting at $THETA_C_OUT_PTR
   ;;
+  ;; The parameter $n is only needed to test a single round of $theta_c_inner.
+  ;; In normal operation, this parameter is hard-coded to 5
+  ;;
   ;; fn theta_c() {
-  ;;   for idx in 0..4 {
-  ;;     THETA_C_OUT_PTR[idx] = $theta_c_inner(THETA_A_BLK_PTR + (idx * 40));
+  ;;   for x in 0..4 {
+  ;;     THETA_C_PTR[x] = THETA_A_PTR[x,0] XOR
+  ;;                      THETA_A_PTR[x,1] XOR
+  ;;                      THETA_A_PTR[x,2] XOR
+  ;;                      THETA_A_PTR[x,3] XOR
+  ;;                      THETA_A_PTR[x,4]
   ;;   }
   ;; }
-  (func $theta_c (export "theta_c")
+  (func $theta_c
+        (param $n i32)
     (local $to_ptr       i32)
     (local $idx          i32)
     (local $inner_result i64)
 
-    ;; (call $log.fnEnter (i32.const 0))
+    (call $log.fnEnter (i32.const 0))
 
     (local.set $to_ptr (global.get $THETA_C_OUT_PTR))
 
-    (loop $xor_round
+    (loop $theta_c_round
       (local.set
         $inner_result
         (call $theta_c_inner (i32.add (global.get $THETA_A_BLK_PTR) (i32.mul (local.get $idx) (i32.const 40))))
       )
-      ;; (call $log.singleI64 (i32.const 0) (i32.const 0) (local.get $inner_result))
+      (call $log.singleI64 (i32.const 0) (i32.const 0) (local.get $inner_result))
 
       (i64.store (memory $main) (local.get $to_ptr) (local.get $inner_result))
 
       (local.set $to_ptr (i32.add (local.get $to_ptr) (i32.const 8)))
       (local.set $idx    (i32.add (local.get $idx)    (i32.const 1)))
+      (local.tee $n      (i32.sub (local.get $n)      (i32.const 1)))
 
-      (br_if $xor_round (i32.lt_u (local.get $idx) (i32.const 5)))
+      (br_if $theta_c_round)
     )
 
-    ;; (call $log.fnExit (i32.const 0))
+    (call $log.fnExit (i32.const 0))
   )
 
   ;; Inner functionality of Theta C function
   ;; XOR's together the 5 i64s starting at $data_ptr
-  ;; (((($word0 XOR $word1) XOR $word2) XOR $word3) XOR $word4)
   (func $theta_c_inner
     (param $data_ptr i32)
     (result i64)
@@ -342,14 +398,14 @@
   ;; }
   ;;
   ;; Since the above algorithm uses fixed offsets, there is no need for a loop or modulo operations
-  (func $theta_d (export "theta_d")
+  (func $theta_d
     (local $w0 i32)
     (local $w1 i32)
     (local $w2 i32)
     (local $w3 i32)
     (local $w4 i32)
 
-    ;; (call $log.fnEnter (i32.const 2))
+    (call $log.fnEnter (i32.const 2))
 
     (local.set $w0          (global.get $THETA_C_OUT_PTR))
     (local.set $w1 (i32.add (global.get $THETA_C_OUT_PTR) (i32.const 8)))
@@ -363,7 +419,17 @@
     (i64.store (memory $main) offset=24 (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w2) (local.get $w4)))
     (i64.store (memory $main) offset=32 (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w3) (local.get $w0)))
 
-    ;; (call $log.fnExit (i32.const 2))
+    (memory.copy
+      (memory $debug)                 ;; Copy to memory
+      (memory $main)                  ;; Copy from memory
+      (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+      (global.get $THETA_D_OUT_PTR)   ;; Copy from address
+      (i32.const 40)                  ;; Length
+    )
+    (call $log.label (i32.const 12))
+    (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 40))
+
+    (call $log.fnExit (i32.const 2))
   )
 
   ;; Inner functionality of Theta D function -> $w0 XOR ($w1 ROTR 1)
@@ -420,7 +486,7 @@
   ;;   }
   ;; }
   ;;
-  (func $theta_xor_loop (export "theta_xor_loop")
+  (func $theta_xor_loop
     (local $a_blk_idx     i32)
     (local $a_blk_ptr     i32)
     (local $a_blk_word    i64)
@@ -467,11 +533,11 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; For each of the 25 i64 words at $THETA_RESULT_PTR, rotate each word by the successive values found in the
-  ;; $RHO_ROTATION_TABLE.  The output is written to $RHO_RESULT_PTR
+  ;; $RHOTATION_TABLE.  The output is written to $RHO_RESULT_PTR
   ;;
   ;; fn rho(theta_out: [i64; 25]) {
   ;;   for theta_idx in 0..24 {
-  ;;     rho_result[theta_idx] = ROTR(theta_out[theta_idx], $RHO_ROTATION_TABLE[$theta_idx % 5])
+  ;;     rho_result[theta_idx] = ROTR(theta_out[theta_idx], $RHOTATION_TABLE[$theta_idx % 5])
   ;;   }
   ;; }
   ;;
@@ -486,7 +552,7 @@
     ;; (call $log.fnEnter (i32.const 5))
 
     (local.set $result_ptr (global.get $RHO_RESULT_PTR))
-    (local.set $rot_ptr    (global.get $RHO_ROTATION_TABLE))
+    (local.set $rot_ptr    (global.get $RHOTATION_TABLE))
     (local.set $theta_ptr  (global.get $THETA_RESULT_PTR))
 
     (loop $rho_loop
@@ -544,17 +610,15 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Reorder the 25 i64s at $RHO_RESULT_PTR according to the following transformation
-  ;;
-  ;; The 200-byte output is treated as a 5x5 matrix of i64s
+  ;; Treat the 200 bytes at $RHO_RESULT_PTR as a 5x4 matrix of i64s.
+  ;; Reorder these i64s according to the following transformation
   ;;
   ;; fn pi(rho_out: [i64; 25]) {
   ;;   let rho_idx = 0
   ;;
   ;;   for x in 0..4 {
-  ;;     for y in 0..4 {
-  ;;       let row = y
-  ;;       let col = ((2 * x) + (3 * y)) % 5
+  ;;     for row in 0..4 {
+  ;;       let col = ((2 * x) + (3 * row)) % 5
   ;;
   ;;       pi_out[row][col] = rho_out[rho_idx]
   ;;       rho_idx += 1
@@ -562,8 +626,8 @@
   ;;   }
   ;; }
   ;;
-  ;; This algorithm performs a static reordering of the 25, i64 words in the input matrix, so the final transformation
-  ;; can simply be hardcoded rather than calculated
+  ;; Since this algorithm results in a static reordering of the i64s, the final transformation can simply be hardcoded
+  ;; rather than calculated
   (func $pi (export "pi")
     ;; (call $log.fnEnter (i32.const 6))
 
@@ -706,6 +770,7 @@
     (i64.xor (local.get $w0) (i64.and (i64.xor (local.get $w1) (i64.const -1)) (local.get $w2)))
   )
 
+  ;; Transform $row and $col into a memory offset
   ;; Offset = (($row * 5) + $col) * 8
   (func $chi_word_offset
         (param $row i32)
