@@ -22,6 +22,27 @@
 ;;            3   4   0   1   2
 ;;           <------- X ------->
 ;;
+;; The internal state is an array of length b bits and is subdivided into two parts known as the rate r and the capacity
+;; c such that b = r + c
+;;
+;; Given this is an implementation of Keccak-f[1600], the state size is fixed at 1600 bits (b = 1600).
+;;
+;; The values of r and c cannot be chosen arbitrarily, but are derived from the desired length d of the hash function
+;; digest. The permissible values for d are 224, 256, 384, or 512 and the capacity must be twice the size of the digest
+;; length; thus c = 2d making r = 1600 - c
+;;
+;; +--------+-------------+-------------+
+;; | Digest |             | 64-bit word |
+;; | length | Bit length  | length      |
+;; +--------+------+------+------+------+
+;; |      d |    r |    c |    r |    c |
+;; +--------+------+------+------+------+
+;; |    224 | 1152 |  448 |   18 |    7 |
+;; |    256 | 1088 |  512 |   17 |    8 |
+;; |    384 |  768 |  832 |   12 |   13 |
+;; |    512 |  576 | 1024 |    9 |   16 |
+;; +--------+------+------+------+------+
+;;
 ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 (module
   (type $type_i32         (func (param i32)))
