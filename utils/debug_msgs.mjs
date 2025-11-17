@@ -49,6 +49,11 @@ export const debugMsgs = [
     fnName: "keccak",
     msgId: []
   },
+  // FnId 10
+  {
+    fnName: "prepare_memory",
+    msgId: ["CAPACITY_PTR"]
+  },
 ]
 
 export const debugLabels = [
