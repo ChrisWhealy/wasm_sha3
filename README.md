@@ -137,10 +137,3 @@ For the same input followed by the same number of squeeze rounds, the same outpu
 This module follows the state array indexing convention described in section 3.1.4 of the above document
 
 ![Indexing convention of internal state matrix](./docs/indexing_convention.png)
-
- INNER WORKINGS OF THE KECCAK FUNCTION
-
- Inside the Keccak, a sequence of 5 internal functions is performed.  These internal function are identified by the
- Greek letters Theta, Rho, Pi, Chi and Iota.
-
- This sequence of 5 functions is performed 12 + 2*l times
