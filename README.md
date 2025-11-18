@@ -46,7 +46,7 @@ The internal state is subdivided into two regions known as the `rate` (of size `
 The `rate` is the region into which the input data is written and from which the output digest will be taken.
 It has this name because its size determines the rate at which the input data can be consumed.
 
-The `capacity` however is never made public.  Its purpose is to acta as a hidden "entropy pool" into which the data bits in the `rate` are thoroughly mixed.
+The `capacity` however is never made public.  Its purpose is to act as a hidden entropy pool into which the data bits in the `rate` are thoroughly mixed.
 
 Further to this, the size `c` of the capacity must be twice the size of the output digest length `d`, thus `c = 2d` making `r = 1600 - 2d`.
 
@@ -65,16 +65,16 @@ Given the constraints on the output digest size `d`, the sizes of `r` and `c` ma
 SHA3 manipulates the input data using a function that has been given the made up name of "Keccak".
 
 The Keccak function belongs to a category of functions known as "sponge" functions.
-This name has been chosen because like a physical sponge, this function can first "absorb" any amount of data into its internal state, then "squeeze" out a result.
+This name has been chosen because like a physical sponge, this function first "absorbs" any amount of data into its internal state, then "squeezes" out a result.
 
-What makes the SHA3 function fundamentally different from the earlier SHA functions, is that the "squeeze" operation can be performed an unlimited number of times; hence, when SHA3 is used as an extendable output function (XOF), it can act as a psuedo-random number generator.
+What makes the SHA3 function fundamentally different from the earlier SHA functions, is that the "squeeze" operation can be performed an unlimited number of times; hence, when used as an extendable output function (XOF), the Keccak can act as a psuedo-random number generator.
 
 ## Input Block Padding
 
-The input data is divided into some number of blocks `t` of size `r`, and where `t` is given by:
+The input data is divided into some number of blocks `t` of the same size as the rate where `t` is given by:
 
 ```javascript
-let t = Math.floor(file_size_in_bits / r) + (file_size_in_bits mod r < 4 ? 1 : 0)
+let t = Math.floor(file_size_in_bits / rate) + (file_size_in_bits mod rate < 4 ? 1 : 0)
 ```
 
 The last block must be padded so that the data being processed fills an integer number of blocks.
