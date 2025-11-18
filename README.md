@@ -38,7 +38,7 @@ Choosing values of `l < 3` give state sizes that are only of use when analyzing 
 
 However, given we are implementing SHA3 as a SHA2 replacement, `l` is fixed at `6` meaning that the internal state will always be `1600` bytes.
 
-### Partitioning of the Internal State
+### Partitioning the Internal State
 
 The internal state is subdivided into two regions known as the `rate` (of size `r`) and the `capacity` (of size `c`) such that `r + c = b`.  Therefore in our case, `r + c = 1600`.
 
