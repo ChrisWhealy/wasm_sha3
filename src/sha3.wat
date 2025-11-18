@@ -473,7 +473,7 @@
     (local $w3 i32)
     (local $w4 i32)
 
-    (call $log.fnEnter (i32.const 2))
+    ;; (call $log.fnEnter (i32.const 2))
 
     (local.set $w0          (global.get $THETA_C_OUT_PTR))
     (local.set $w1 (i32.add (global.get $THETA_C_OUT_PTR) (i32.const 8)))
@@ -487,19 +487,20 @@
     (i64.store (memory $main) offset=24 (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w2) (local.get $w4)))
     (i64.store (memory $main) offset=32 (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w3) (local.get $w0)))
 
-    (memory.copy
-      (memory $debug)                 ;; Copy to memory
-      (memory $main)                  ;; Copy from memory
-      (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-      (global.get $THETA_D_OUT_PTR)   ;; Copy from address
-      (i32.const 40)                  ;; Length
-    )
-    (call $log.label (i32.const 13))
-    (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 40))
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $THETA_D_OUT_PTR)   ;; Copy from address
+    ;;   (i32.const 40)                  ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 13))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 40))
 
-    (call $log.fnExit (i32.const 2))
+    ;; (call $log.fnExit (i32.const 2))
   )
 
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Inner functionality of Theta D function -> $w0 XOR ($w1 ROTR 1)
   (func $theta_d_inner
         (param $w0_ptr i32)
@@ -513,16 +514,15 @@
     ;; (call $log.fnEnter (i32.const 3))
 
     ;; The byte order of $w1 must first be swapped to big endian before the rotate right operation can be performed
-    ;; Copy the i64 argument values across both lanes of a v128 in big endian format
     (local.set $w0
       (i8x16.swizzle  ;; Swap byte order
-        (i64x2.splat (i64.load (memory $main) (local.get $w0_ptr)))  ;; Copy $w0 into both 64-bit lanes
+        (i64x2.splat (i64.load (memory $main) (local.get $w0_ptr)))  ;; Copy $w0 into both 64-bit lanes of the v128
         (global.get $SWAP_I64_ENDIANESS)
       )
     )
     (local.set $w1
       (i8x16.swizzle  ;; Swap byte order
-        (i64x2.splat (i64.load (memory $main) (local.get $w1_ptr)))  ;; Copy $w1 into both 64-bit lanes
+        (i64x2.splat (i64.load (memory $main) (local.get $w1_ptr)))  ;; Copy $w1 into both 64-bit lanes of the v128
         (global.get $SWAP_I64_ENDIANESS)
       )
     )
@@ -532,10 +532,10 @@
         (local.get $w0)
         ;; Rotate $w1 right by 1 bit in each 64-bit lane
         ;; Since there is no SIMD operation to rotate two 64-bit lanes in a V128, we need to shift right and then
-        ;; reinstate the senior bit in each lane: hence ($w1 >>> 1) | ($w1 << 63)
+        ;; manually reinstate the junior bit at the senior position: hence ($w1 >>> 1) | ($w1 << 63)
         (v128.or
-          (i64x2.shr_u (local.get $w1) (i32.const 1))
-          (i64x2.shl   (local.get $w1) (i32.const 63))
+          (i64x2.shr_u (local.get $w1) (i32.const 1))  ;; The junior bit is now lost
+          (i64x2.shl   (local.get $w1) (i32.const 63)) ;; Reinstate the junior bit in the senior position
         )
       )
     )
