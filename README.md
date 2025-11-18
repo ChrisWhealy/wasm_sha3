@@ -18,13 +18,13 @@ Therefore, `d` may only be one of `224`, `256`, `384`, or `512` bits.
 
 ## SHA3 Internal State
 
-The SHA3 algorithm is fed input data that is used to manipulate an internal state.
+The SHA3 algorithm is fed input data that is used to manipulate an internal state, referred to in some literature as an "entropy pool".
 
 This internal state is treated as a 3-dimensional matrix having the dimensions `5 * 5 * 2^l`, where `l` is an integer in the range `0..6`.
 
 The size (`b`) of the internal state in bytes may therefore only be one of:
 
-| `l` | Formula | Internal<br>State Size `b`
+| `l` | Formula | Internal<br>State Size
 |---|---|--:
 | 0 | `5 * 5 * 2^0` | `25`
 | 1 | `5 * 5 * 2^1` | `50`
@@ -34,9 +34,10 @@ The size (`b`) of the internal state in bytes may therefore only be one of:
 | 5 | `5 * 5 * 2^5` | `800`
 | 6 | `5 * 5 * 2^6` | `1600`
 
-Choosing values of `l < 3` give state sizes that are only of use when analyzing the algorithm and should not be used in practice.
+Choosing a value `l < 3` give state sizes that are only of use when analyzing the algorithm's behaviour.
+Such values should not be used in practice.
 
-However, given we are implementing SHA3 as a SHA2 replacement, `l` is fixed at `6` meaning that the internal state will always be `1600` bytes.
+However, implementing SHA3 as a SHA2 replacement requires `l` to be fixed at `6`, meaning that the internal state will always be `1600` bits.
 
 ### Partitioning the Internal State
 
