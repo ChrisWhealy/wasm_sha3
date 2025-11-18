@@ -51,8 +51,8 @@ export const debugMsgs = [
   },
   // FnId 10
   {
-    fnName: "prepare_memory",
-    msgId: ["CAPACITY_PTR"]
+    fnName: "prepare_state",
+    msgId: ["RATE", "CAPACITY"]
   },
 ]
 
@@ -61,7 +61,7 @@ export const debugLabels = [
   /* 1 */  "Capacity",
   /* 2 */  "Rate (Before XORing with data block)",
   /* 3 */  "Rate (After XORing with data block)",
-  /* 4 */  "Start value of Theta A block data",
+  /* 4 */  "Theta A block",
   /* 5 */  "New Capacity & Rate",
   /* 6 */  "Theta Result",
   /* 7 */  "Rho Result",
@@ -69,5 +69,7 @@ export const debugLabels = [
   /* 9 */  "Chi Result",
   /* 10 */ "Iota Result",
   /* 11 */ "Keccak Round Constants",
-  /* 12 */ "Theta D Result",
+  /* 12 */ "Theta C Result",
+  /* 13 */ "Theta D Result",
+  /* 14 */ "Digest size defaulting to 256",
 ]

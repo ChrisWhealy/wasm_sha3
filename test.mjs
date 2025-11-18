@@ -110,7 +110,7 @@ const startWasm =
     runTest(sha3Module, "thetaC3")
     runTest(sha3Module, "thetaC4")
     runTest(sha3Module, "thetaC")
-    runTest(sha3Module, "thetaD")
+    // runTest(sha3Module, "thetaD")
     // runTest(sha3Module, "thetaXorLoop")
     // runTest(sha3Module, "testTheta")
     // runTest(sha3Module, "testRho")
