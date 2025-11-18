@@ -96,13 +96,14 @@
 
         (i32.store8
           (local.get $buf_ptr)
-          ;; Only print bytes in the 7-bit ASCII range (32 <= &this_byte < 128)
+          ;; Only print bytes in the 7-bit ASCII range (32 <= &this_byte < 127)
+          ;; ASCII 127 = DEL so exclude that character
           (select
             (i32.const 0x2E)       ;; Substitute a '.'
             (local.get $this_byte) ;; Character is printable
             (i32.or
               (i32.lt_u (local.get $this_byte) (i32.const 0x20))
-              (i32.ge_u (local.get $this_byte) (i32.const 0x80))
+              (i32.ge_u (local.get $this_byte) (i32.const 0x7F))
             )
           )
         )
