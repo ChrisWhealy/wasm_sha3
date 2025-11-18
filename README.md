@@ -22,7 +22,7 @@ The SHA3 algorithm is fed input data that is used to manipulate an internal stat
 
 This internal state is treated as a 3-dimensional matrix having the dimensions `5 * 5 * 2^l`, where `l` is an integer in the range `0..6`.
 
-The size (`b`) of the internal state in bytes may therefore only be one of:
+The size (`b`) of the internal state in bits may therefore only be one of:
 
 | `l` | Formula | Internal<br>State Size
 |---|---|--:
