@@ -108,13 +108,14 @@ Note that if the data is an exact integer multiple of the block size `r`, then a
 
 ## Keccak-f Input Processing
 
-Now that the input data has been organised into some integer number `t` of blocks of size `r` (the last of which has been appropriately padded), the "absorb" phase performs the following loop:
+Now that the input data `X` has been organised into some integer number `t` of blocks of size `r` (the last of which has been appropriately padded), the "absorb" phase performs the following loop:
 
 ```rust
   // Internal state starts as 200 initialised i64s
   let mut state[i64; 200] = [0; 200];
-  // Assuming a digest size of 256, the rate size in i64 words is 1088 / 64
-  let rate_size = 1088 >>> 6;
+  // The rate size in bits is given by 1600 - (digest_size * 2)
+  // Assuming a digest size of 256 bits the rate size = 1600 - (2 * 256) = 1088
+  let rate_size = 1088 >>> 6;  // As i64 words
 
   for idx in X.size {
     state = keccak_f([state[0..rate_size] XOR X[idx], ...state[rate_size..]])
