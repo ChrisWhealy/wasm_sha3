@@ -53,7 +53,7 @@ Further to this, the size `c` of the capacity must be twice the size of the outp
 Given the constraints on the output digest size `d`, the sizes of `r` and `c` may only be one of the following pairs (in bits):
 
 | `d` | Security<br>Level | Calculation | `r` | `c`
-|--:|---|---|--:|--:
+|--:|--:|---|--:|--:
 | `224` | `112` | `r = 1600 - (2 * 224)` | `1152` |  `448` |
 | `256` | `128` | `r = 1600 - (2 * 256)` | `1088` |  `512` |
 | `384` | `192` | `r = 1600 - (2 * 384)` |  `768` |  `832` |
