@@ -379,41 +379,52 @@
     ;; (call $log.label (i32.const 4))
     ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
 
-    (local.set $to_ptr (global.get $THETA_A_BLK_PTR))
+    ;; $to_ptr must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
+    (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 80)))
 
     (block $call_count
       ;; State[0, 0..4]
-      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      ;; (local.set $result (call $theta_c_inner (local.get $to_ptr)))
       ;; (call $log.singleI64 (i32.const 1) (i32.const 0) (local.get $result))
-      (i64.store (memory $main) (global.get $THETA_C_OUT_PTR) (local.get $result))
+      ;; (i64.store (memory $main) (global.get $THETA_C_OUT_PTR) (local.get $result))
+
+      (i64.store (memory $main) (global.get $THETA_C_OUT_PTR) (call $theta_c_inner (local.get $to_ptr)))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 1)))
+      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 120)))
 
       ;; State[1, 0..4]
-      (local.set $to_ptr (i32.add (local.get $to_ptr) (i32.const 40)))
-      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      ;; (local.set $result (call $theta_c_inner (local.get $to_ptr)))
       ;; (call $log.singleI64 (i32.const 1) (i32.const 1) (local.get $result))
-      (i64.store (memory $main) offset=8 (global.get $THETA_C_OUT_PTR) (local.get $result))
+      ;; (i64.store (memory $main) offset=8 (global.get $THETA_C_OUT_PTR) (local.get $result))
+
+      (i64.store (memory $main) offset=8 (global.get $THETA_C_OUT_PTR) (call $theta_c_inner (local.get $to_ptr)))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 2)))
+      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 160)))
 
       ;; State[2, 0..4]
-      (local.set $to_ptr (i32.add (local.get $to_ptr) (i32.const 40)))
-      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      ;; (local.set $result (call $theta_c_inner (local.get $to_ptr)))
       ;; (call $log.singleI64 (i32.const 1) (i32.const 2) (local.get $result))
-      (i64.store (memory $main) offset=16 (global.get $THETA_C_OUT_PTR) (local.get $result))
+      ;; (i64.store (memory $main) offset=16 (global.get $THETA_C_OUT_PTR) (local.get $result))
+
+      (i64.store (memory $main) offset=16 (global.get $THETA_C_OUT_PTR) (call $theta_c_inner (local.get $to_ptr)))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 3)))
+      (local.set $to_ptr (global.get $THETA_A_BLK_PTR))
 
       ;; State[3, 0..4]
-      (local.set $to_ptr (i32.add (local.get $to_ptr) (i32.const 40)))
-      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      ;; (local.set $result (call $theta_c_inner (local.get $to_ptr)))
       ;; (call $log.singleI64 (i32.const 1) (i32.const 3) (local.get $result))
-      (i64.store (memory $main) offset=24 (global.get $THETA_C_OUT_PTR) (local.get $result))
+      ;; (i64.store (memory $main) offset=24 (global.get $THETA_C_OUT_PTR) (local.get $result))
+
+      (i64.store (memory $main) offset=24 (global.get $THETA_C_OUT_PTR) (call $theta_c_inner (local.get $to_ptr)))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 4)))
+      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 40)))
 
       ;; State[4, 0..4]
-      (local.set $to_ptr (i32.add (local.get $to_ptr) (i32.const 40)))
-      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      ;; (local.set $result (call $theta_c_inner (local.get $to_ptr)))
       ;; (call $log.singleI64 (i32.const 1) (i32.const 4) (local.get $result))
-      (i64.store (memory $main) offset=32 (global.get $THETA_C_OUT_PTR) (local.get $result))
+      ;; (i64.store (memory $main) offset=32 (global.get $THETA_C_OUT_PTR) (local.get $result))
+
+      (i64.store (memory $main) offset=32 (global.get $THETA_C_OUT_PTR) (call $theta_c_inner (local.get $to_ptr)))
     )
 
     ;; (memory.copy
@@ -465,7 +476,8 @@
   ;;   }
   ;; }
   ;;
-  ;; Since the above algorithm uses fixed offsets, there is no need for a loop or modulo operations
+  ;; Since the above algorithm always yields fixed offsets, these b=value can be hard coded saving the need to perform a
+  ;; loop or modulo operations
   (func $theta_d
     (local $w0 i32)
     (local $w1 i32)
