@@ -24,15 +24,15 @@ This internal state is treated as a 3-dimensional matrix having the dimensions `
 
 The size (`b`) of the internal state in bits may therefore only be one of:
 
-| `l` | Formula | Internal<br>State Size
+| `l` | Calculation | Internal<br>State Size
 |---|---|--:
-| 0 | `5 * 5 * 2^0` | `25`
-| 1 | `5 * 5 * 2^1` | `50`
-| 2 | `5 * 5 * 2^2` | `100`
-| 3 | `5 * 5 * 2^3` | `200`
-| 4 | `5 * 5 * 2^4` | `400`
-| 5 | `5 * 5 * 2^5` | `800`
-| 6 | `5 * 5 * 2^6` | `1600`
+| `0` | `5 * 5 * 2^0` | `25`
+| `1` | `5 * 5 * 2^1` | `50`
+| `2` | `5 * 5 * 2^2` | `100`
+| `3` | `5 * 5 * 2^3` | `200`
+| `4` | `5 * 5 * 2^4` | `400`
+| `5` | `5 * 5 * 2^5` | `800`
+| `6` | `5 * 5 * 2^6` | `1600`
 
 Choosing values of `l < 3` gives state sizes that are only of use when analyzing the algorithm's behaviour.
 Such values should not be used in practice.
@@ -52,12 +52,12 @@ Further to this, the size `c` of the capacity must be twice the size of the outp
 
 Given the constraints on the output digest size `d`, the sizes of `r` and `c` may only be one of the following pairs (in bits):
 
-| `d` | `r` | `c` | Security<br>Level
-|--:|--:|--:|--:
-| 224 | 1152 |  448 | 112 |
-| 256 | 1088 |  512 | 128 |
-| 384 |  768 |  832 | 192 |
-| 512 |  576 | 1024 | 256 |
+| `d` | Calculation | `r` | `c` | Security<br>Level
+|--:|---|--:|--:|--:
+| `224` | `r = 1600 - (2 * 224)` | `1152` |  `448` | `112` |
+| `256` | `r = 1600 - (2 * 256)` | `1088` |  `512` | `128` |
+| `384` | `r = 1600 - (2 * 384)` |  `768` |  `832` | `192` |
+| `512` | `r = 1600 - (2 * 512)` |  `576` | `1024` | `256` |
 
 
 ## The "Keccak" Function
