@@ -67,7 +67,7 @@ SHA3 manipulates the input data using a function that has been given the made up
 The Keccak function belongs to a category of functions known as "sponge" functions.
 This name has been chosen because like a physical sponge, this function first "absorbs" any amount of data into its internal state, then "squeezes" out a result.
 
-What makes the SHA3 function fundamentally different from the earlier SHA functions, is that the "squeeze" operation can be performed an unlimited number of times; hence, when used as in XOF mode, the Keccak function can act as a psuedo-random number generator.
+What makes the SHA3 function fundamentally different from the earlier SHA functions, is that the "squeeze" operation can be performed an unlimited number of times; hence, when used in XOF mode, the Keccak function can act as a psuedo-random number generator.
 
 ## Input Block Padding
 
