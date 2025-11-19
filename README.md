@@ -34,7 +34,7 @@ The size (`b`) of the internal state in bits may therefore only be one of:
 | 5 | `5 * 5 * 2^5` | `800`
 | 6 | `5 * 5 * 2^6` | `1600`
 
-Choosing a value `l < 3` give state sizes that are only of use when analyzing the algorithm's behaviour.
+Choosing values of `l < 3` gives state sizes that are only of use when analyzing the algorithm's behaviour.
 Such values should not be used in practice.
 
 However, implementing SHA3 as a SHA2 replacement requires `l` to be fixed at `6`, meaning that the internal state will always be `1600` bits.
