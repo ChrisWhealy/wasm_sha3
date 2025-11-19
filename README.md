@@ -62,7 +62,7 @@ Given the constraints on the output digest size `d`, the sizes of `r` and `c` ma
 
 ## The "Keccak" Function
 
-SHA3 manipulates the input data using a function that has been given the made up name of "Keccak".
+SHA3 manipulates the input data using a function that has been given the made up name of "Keccak" (pronounced "ket chak").
 
 The Keccak function belongs to a category of functions known as "sponge" functions.
 This name has been chosen because like a physical sponge, this function first "absorbs" any amount of data into its internal state, then "squeezes" out a result.
