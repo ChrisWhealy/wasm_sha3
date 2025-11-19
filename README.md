@@ -20,7 +20,7 @@ Therefore, `d` may only be one of `224`, `256`, `384`, or `512` bits.
 
 The SHA3 algorithm is fed input data that is used to manipulate an internal state, referred to in some literature as an "entropy pool".
 
-This internal state is treated as a 3-dimensional matrix having the dimensions `5 * 5 * 2^l`, where `l` is an integer in the range `0..6`.
+This internal state is treated as a 3-dimensional matrix having the dimensions `5 * 5 * w`, where `w = 2^l` and `l` is an integer in the range `0..6`.
 
 The size (`b`) of the internal state in bits may therefore only be one of:
 
