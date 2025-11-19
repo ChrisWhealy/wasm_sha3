@@ -87,7 +87,7 @@ In our case, we are only concerned with SHA2-replacement mode, so the padding ru
 
 Thus, if the size of data `n` in the last block is 4 or more bits smaller than the rate `r`, the last block will be padded as follows:
 
-| Size of<br>last block | Padding<br>marker | Padding<br>bits | Padding<br>string
+| Size of data<br> in last block | Padding<br>marker | Padding<br>bits | Padding<br>string
 |---|---|---|---
 | `r-4` | `01` | `11` | `0111`
 | `r-5` | `01` | `101` | `01101`
@@ -97,7 +97,7 @@ Thus, if the size of data `n` in the last block is 4 or more bits smaller than t
 
 In the event that the block size is 3 or fewer bits smaller than the rate `r`, then the remaining bits are padded using the same scheme as above, but the padding string spills over into a new block:
 
-| Size of<br>last block | Padding bits<br>in last block | Padding string<br>in extra block
+| Size of data<br>in last block | Padding bits<br>in last block | Padding string<br>in extra block
 |---|---|---
 | `r-3` | `011` | `[r-1 * 0]1`
 | `r-2` | `01` | `1[r-2 * 0]1`
