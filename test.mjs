@@ -95,6 +95,9 @@ const startWasm =
         singleDec: (fnId, msgId, i32) => {
           console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i32}`)
         },
+        coordinatePair: (fnId, msgId, v1, v2) => {
+          console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = (${v1},${v2})`)
+        },
         singleBigInt: (fnId, msgId, i64) => {
           console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i64}`)
         },
@@ -113,8 +116,8 @@ const startWasm =
     // runTest(sha3Module, "thetaD")
     // runTest(sha3Module, "thetaXorLoop")
     // runTest(sha3Module, "testTheta")
-    runTest(sha3Module, "testRho")
-    // runTest(sha3Module, "testPi")
+    // runTest(sha3Module, "testRho")
+    runTest(sha3Module, "testPi")
     // runTest(sha3Module, "testChi")
     // runTest(sha3Module, "testIota")
     // runTest(sha3Module, "testThetaRho")

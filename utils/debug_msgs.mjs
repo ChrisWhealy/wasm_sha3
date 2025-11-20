@@ -32,7 +32,7 @@ export const debugMsgs = [
   // FnId 6
   {
     fnName: "pi",
-    msgId: []
+    msgId: ["Old (x,y)", "New (x,y)", "rho_offset", "pi_offset"]
   },
   // FnId 7
   {

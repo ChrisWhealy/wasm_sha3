@@ -25,24 +25,26 @@
 ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 (module
   ;; Function types for logging/tracing
-  (type $type_i32         (func (param i32)))
-  (type $type_i32_i32     (func (param i32 i32)))
-  (type $type_i32_i32_i32 (func (param i32 i32 i32)))
-  (type $type_i32_i32_i64 (func (param i32 i32 i64)))
+  (type $type_i32             (func (param i32)))
+  (type $type_i32_i32         (func (param i32 i32)))
+  (type $type_i32_i32_i32     (func (param i32 i32 i32)))
+  (type $type_i32_i32_i32_i32 (func (param i32 i32 i32 i32)))
+  (type $type_i32_i32_i64     (func (param i32 i32 i64)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (import "env" "debug"   (memory $debug 16))
   (import "env" "hexdump" (func $debug.hexdump (type $type_i32_i32_i32)))
 
-  (import "log" "fnEnter"      (func $log.fnEnter      (type $type_i32)))
-  (import "log" "fnExit"       (func $log.fnExit       (type $type_i32)))
-  (import "log" "fnEnterNth"   (func $log.fnEnterNth   (type $type_i32_i32)))
-  (import "log" "fnExitNth"    (func $log.fnExitNth    (type $type_i32_i32)))
-  (import "log" "singleI64"    (func $log.singleI64    (type $type_i32_i32_i64)))
-  (import "log" "singleI32"    (func $log.singleI32    (type $type_i32_i32_i32)))
-  (import "log" "singleDec"    (func $log.singleDec    (type $type_i32_i32_i32)))
-  (import "log" "singleBigInt" (func $log.singleBigInt (type $type_i32_i32_i64)))
-  (import "log" "label"        (func $log.label        (type $type_i32)))
+  (import "log" "fnEnter"        (func $log.fnEnter      (type $type_i32)))
+  (import "log" "fnExit"         (func $log.fnExit       (type $type_i32)))
+  (import "log" "fnEnterNth"     (func $log.fnEnterNth   (type $type_i32_i32)))
+  (import "log" "fnExitNth"      (func $log.fnExitNth    (type $type_i32_i32)))
+  (import "log" "singleI64"      (func $log.singleI64    (type $type_i32_i32_i64)))
+  (import "log" "singleI32"      (func $log.singleI32    (type $type_i32_i32_i32)))
+  (import "log" "singleDec"      (func $log.singleDec    (type $type_i32_i32_i32)))
+  (import "log" "singleBigInt"   (func $log.singleBigInt (type $type_i32_i32_i64)))
+  (import "log" "label"          (func $log.label        (type $type_i32)))
+  (import "log" "coordinatePair" (func $log.coords       (type $type_i32_i32_i32_i32)))
 
   ;; Memory page   1     Internal stuff
   ;; Memory pages  2     Rate and Capacity buffers
@@ -106,7 +108,8 @@
   (global $CHI_RESULT_PTR   (export "CHI_RESULT_PTR")   i32 (i32.const 0x0000049C))  ;; Length 200
 
   ;; Table of offsets to access A block data according to the documented indexing convention
-  ;; The loop show below is unrolled into the sequential order in this table
+  ;; The loop transforms the (X,Y) coordinates based on the origin being at the bottom left corner, to a 5x5 matrix
+  ;; offset with the origin in the centre
   ;;
   ;; for x 0..4 {
   ;;   for y 0..4 {
@@ -756,8 +759,10 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Treat the 200 bytes at $RHO_RESULT_PTR as a 5x4 matrix of i64s.
-  ;; Reorder these i64s according to the following transformation
+  ;; Reorder the i64s at $RHO_RESULT_PTR according to the following transformation also observing the indexing
+  ;; convention
+  ;;
+  ;; Matrix access must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
   ;;
   ;; fn pi(rho_out: [i64; 25]) {
   ;;   let rho_idx = 0
@@ -773,35 +778,124 @@
   ;; }
   ;;
   ;; Since this algorithm results in a static reordering of the i64s, the final transformation can simply be hardcoded
-  ;; rather than calculated
+  ;; rather than calculated.
+  ;;
+
   (func $pi (export "pi")
+    ;; (local $col        i32)
+    ;; (local $new_col    i32)
+    ;; (local $row        i32)
+    ;; (local $rho_offset i32)
+    ;; (local $rho_ptr    i32)
+    ;; (local $pi_offset  i32)
+    ;; (local $pi_ptr     i32)
+
     ;; (call $log.fnEnter (i32.const 6))
 
-    (i64.store (memory $main) offset=0   (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=0   (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=64  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=8   (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=88  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=16  (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=152 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=24  (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=176 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=32  (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=16  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=40  (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=40  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=48  (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=104 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=56  (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=128 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=64  (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=192 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=72  (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=32  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=80  (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=56  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=88  (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=80  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=96  (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=144 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=104 (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=168 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=112 (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=8   (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=120 (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=72  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=128 (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=96  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=136 (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=120 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=144 (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=184 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=152 (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=24  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=160 (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=48  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=168 (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=112 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=176 (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=136 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=184 (global.get $RHO_RESULT_PTR)))
-    (i64.store (memory $main) offset=160 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=192 (global.get $RHO_RESULT_PTR)))
+    ;; (loop $row_loop
+    ;;   (local.set $col (i32.const 0))
+
+    ;;   (loop $col_loop
+    ;;     ;; Following the indexing convention, transform the current row/col coordinates into a Rho block offset
+    ;;     (local.set $rho_offset
+    ;;       (i32.load
+    ;;         (memory $main)
+    ;;         (i32.add
+    ;;           (global.get $A_BLK_IDX_TAB)
+    ;;           ;; Multiply linear index by 4 to derive offset down A Block index table
+    ;;           (i32.shl
+    ;;             ;; Transform 5x5 row/col indices to a linear index
+    ;;             (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $col))
+    ;;             (i32.const 2)
+    ;;           )
+    ;;         )
+    ;;       )
+    ;;     )
+
+    ;;     (local.set $rho_ptr (i32.add (global.get $RHO_RESULT_PTR) (local.get $rho_offset)))
+
+    ;;     ;; Derive new column value -> $new_col = (2 * $col) + (3 * $row) MOD 5
+    ;;     (local.set $new_col
+    ;;       (i32.rem_u
+    ;;         (i32.add
+    ;;           (i32.shl (local.get $col) (i32.const 1))
+    ;;           (i32.mul (local.get $row) (i32.const 3))
+    ;;         )
+    ;;         (i32.const 5)
+    ;;       )
+    ;;     )
+
+    ;;     (call $log.coords (i32.const 6) (i32.const 0) (local.get $col)     (local.get $row))
+    ;;     (call $log.coords (i32.const 6) (i32.const 1) (local.get $new_col) (local.get $row))
+
+    ;;     ;; Following the indexing convention, transform the new col coordinate and the existing row coordinate into a Pi
+    ;;     ;; block offset
+    ;;     (local.set $pi_offset
+    ;;       (i32.load
+    ;;         (memory $main)
+    ;;         (i32.add
+    ;;           (global.get $A_BLK_IDX_TAB)
+    ;;           ;; Multiply linear index by 4 to derive offset down A Block index table
+    ;;           (i32.shl
+    ;;             ;; Transform 5x5 row/col indices to a linear index
+    ;;             (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $new_col))
+    ;;             (i32.const 2)
+    ;;           )
+    ;;         )
+    ;;       )
+    ;;     )
+
+    ;;     (call $log.singleDec (i32.const 6) (i32.const 2) (local.get $rho_offset))
+    ;;     (call $log.singleDec (i32.const 6) (i32.const 3) (local.get $pi_offset))
+
+    ;;     (local.set $pi_ptr (i32.add (global.get $PI_RESULT_PTR) (local.get $pi_offset)))
+
+    ;;     (i64.store (memory $main) (local.get $pi_ptr) (i64.load (memory $main) (local.get $rho_ptr)))
+
+    ;;     (local.tee $col (i32.add (local.get $col) (i32.const 1)))
+    ;;     (br_if $col_loop (i32.lt_u (i32.const 5)))
+    ;;   )
+
+    ;;   (local.tee $row (i32.add (local.get $row) (i32.const 1)))
+    ;;   (br_if $row_loop (i32.lt_u (i32.const 5)))
+    ;; )
+
+    ;; Optimised version of the above loop
+    ;; Row 0
+    (i64.store (memory $main) offset=96  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=96  (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=112 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=104 (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=88  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=112 (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=104 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=80  (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=80  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=88  (global.get $RHO_RESULT_PTR)))
+
+    ;; Row 1
+    (i64.store (memory $main) offset=120 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=136 (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=136 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=144 (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=152 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=152 (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=128 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=120 (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=144 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=128 (global.get $RHO_RESULT_PTR)))
+
+    ;; Row 2
+    (i64.store (memory $main) offset=184 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=176 (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=160 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=184 (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=176 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=192 (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=192 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=160 (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=168 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=168 (global.get $RHO_RESULT_PTR)))
+
+    ;; Row 3
+    (i64.store (memory $main) offset=8   (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=16  (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=24  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=24  (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=0   (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=32  (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=16  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=0   (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=32  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=8   (global.get $RHO_RESULT_PTR)))
+
+    ;; Row 4
+    (i64.store (memory $main) offset=72  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=56  (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=48  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=64  (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=64  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=72  (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=40  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=40  (global.get $RHO_RESULT_PTR)))
+    (i64.store (memory $main) offset=56  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=48  (global.get $RHO_RESULT_PTR)))
+
 
     ;; (memory.copy
     ;;   (memory $debug)                 ;; Copy to memory
