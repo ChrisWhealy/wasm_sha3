@@ -9,15 +9,15 @@
 ;;               /___/___/___/___/___/| |/|               Where w is 2^l and l is 0..6
 ;;             /___/___/___/___/___/| |/| |
 ;;           /___/___/___/___/___/| |/| |/|               For SHA3 as a drop-in replacement for SHA2, l is fixed at 6,
-;;  ⋀   2   |   |   |   |   |   | |/| |/| |               making w = 5 * 5 * 2^6
+;;  ⋀   2   |160|168|176|184|192| |/| |/| |               making w = 5 * 5 * 2^6
 ;;  |       |___|___|___|___|___|/| |/| |/|                      w = 1600
-;;  |   1   |   |   |   |   |   | |/| |/| |
+;;  |   1   |120|128|136|144|152| |/| |/| |
 ;;          |___|___|___|___|___|/| |/| |/|
-;;  Y   0   |   |   |   |   |   | |/| |/| |
+;;  Y   0   | 80| 88| 96|104|112| |/| |/| |
 ;;          |___|___|___|___|___|/| |/| |/   w-1   /
-;;  |   4   |   |   |   |   |   | |/| |/   ...   /
+;;  |   4   | 40| 48| 56| 64| 72| |/| |/   ...   /
 ;;  |       |___|___|___|___|___|/| |/   2     Z
-;;  |   3   |   |   |   |   |   | |/   1     /
+;;  |   3   | 0 | 8 | 16| 24| 32| |/   1     /
 ;;  ∨       |___|___|___|___|___|/   0     /
 ;;            3   4   0   1   2
 ;;           <------- X ------->
@@ -105,6 +105,23 @@
   (global $PI_RESULT_PTR    (export "PI_RESULT_PTR")    i32 (i32.const 0x000003D4))  ;; Length 200
   (global $CHI_RESULT_PTR   (export "CHI_RESULT_PTR")   i32 (i32.const 0x0000049C))  ;; Length 200
 
+  ;; Table of offsets to access A block data according to the documented indexing convention
+  ;; The loop show below is unrolled into the sequential order in this table
+  ;;
+  ;; for x 0..4 {
+  ;;   for y 0..4 {
+  ;;     a_blk[x][y]
+  ;;   }
+  ;; }
+  (global $A_BLK_IDX_TAB i32 (i32.const 0x00000564))  ;; Length 25 * i32 = 100
+  (data (memory $main) (i32.const 0x00000564)
+    "\60\00\00\00"  (; 96;) "\68\00\00\00"  (;104;) "\70\00\00\00"  (;112;) "\50\00\00\00"  (; 80;) "\58\00\00\00"  (; 88;)
+    "\88\00\00\00"  (;136;) "\90\00\00\00"  (;144;) "\98\00\00\00"  (;152;) "\78\00\00\00"  (;120;) "\80\00\00\00"  (;128;)
+    "\B0\00\00\00"  (;176;) "\B8\00\00\00"  (;184;) "\C0\00\00\00"  (;192;) "\A0\00\00\00"  (;160;) "\A8\00\00\00"  (;168;)
+    "\10\00\00\00"  (; 16;) "\18\00\00\00"  (; 24;) "\20\00\00\00"  (; 32;) "\00\00\00\00"  (;  0;) "\08\00\00\00"  (;  8;)
+    "\38\00\00\00"  (; 56;) "\40\00\00\00"  (; 64;) "\48\00\00\00"  (; 72;) "\28\00\00\00"  (; 40;) "\30\00\00\00"  (; 48;)
+  )
+
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Memory Map: Page 2
   ;;     Offset  Length   Type    Description
@@ -122,8 +139,9 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $prepare_state
-        (param $init_mem    i32)
-        (param $digest_size i32) ;; Defaults to 256
+        (param $init_mem      i32) ;; Initialise state memory?
+        (param $copy_to_a_blk i32) ;; Copy state to A block?
+        (param $digest_size   i32) ;; Defaults to 256
 
     ;; If $digest_size is not one of 224, 256, 384 or 512, then default to 256
     (block $digest_ok
@@ -164,12 +182,16 @@
     (call $xor_data_with_rate (global.get $RATE))
 
     ;; Copy the internal state to $THETA_A_BLK_PTR
-    (memory.copy
-      (memory $main)
-      (memory $main)
-      (global.get $THETA_A_BLK_PTR)
-      (global.get $STATE_PTR)
-      (i32.const 200)
+    (if (local.get $copy_to_a_blk)
+      (then
+        (memory.copy
+          (memory $main)
+          (memory $main)
+          (global.get $THETA_A_BLK_PTR)
+          (global.get $STATE_PTR)
+          (i32.const 200)
+        )
+      )
     )
   )
 
@@ -198,20 +220,26 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_theta_c")
         (param $rounds i32)
-    (call $prepare_state (i32.const 1) (i32.const 256))
+    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
     (call $theta_c (local.get $rounds))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_theta_d")
-    (call $prepare_state (i32.const 1) (i32.const 256))
+    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
     (call $theta_c (i32.const 5))
     (call $theta_d)
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func (export "test_theta_xor_loop")
+    (call $prepare_state (i32.const 1) (i32.const 0) (i32.const 256))
+    (call $theta_xor_loop)
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_theta")
-    (call $prepare_state (i32.const 1) (i32.const 256))
+    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
     (call $theta)
   )
 
@@ -223,7 +251,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Test a succession of the inner Keccak functions
   (func (export "test_theta_rho")
-    (call $prepare_state (i32.const 1) (i32.const 256))
+    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
     (call $theta)
     (call $rho)
   )
@@ -231,7 +259,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Test a succession of the inner Keccak functions
   (func (export "test_theta_rho_pi")
-    (call $prepare_state (i32.const 1) (i32.const 256))
+    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
     (call $theta)
     (call $rho)
     (call $pi)
@@ -240,7 +268,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Test a succession of the inner Keccak functions
   (func (export "test_theta_rho_pi_chi")
-    (call $prepare_state (i32.const 1) (i32.const 256))
+    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
     (call $theta)
     (call $rho)
     (call $pi)
@@ -250,7 +278,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Test a succession of the inner Keccak functions
   (func (export "test_theta_rho_pi_chi_iota")
-    (call $prepare_state (i32.const 256) (i32.const 1))
+    (call $prepare_state (i32.const 256) (i32.const 1) (i32.const 1))
     (call $theta)
     (call $rho)
     (call $pi)
@@ -264,7 +292,7 @@
         (param $n i32)
     (local $round i32)
 
-    (call $prepare_state (i32.const 1) (i32.const 256))
+    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
 
     (loop $next_round
       (call $keccak (local.get $round))
@@ -337,9 +365,9 @@
   ;;
   ;; Reads 200 bytes starting at $THETA_A_BLK_PTR
   ;; Writes 200 bytes to $THETA_RESULT_PTR
-  ;;
-  ;; C[x,z]=A[x, 0,z] ⊕ A[x, 1,z] ⊕ A[x, 2,z] ⊕ A[x, 3,z] ⊕ A[x, 4,z]
   (func $theta (export "theta")
+    ;; (call $log.fnEnter (i32.const 2))
+
     (call $theta_c (i32.const 5))
     (call $theta_d)
     (call $theta_xor_loop)
@@ -353,6 +381,7 @@
     ;; )
     ;; (call $log.label (i32.const 6))
     ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    ;; (call $log.fnExit (i32.const 2))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -443,7 +472,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Inner functionality of Theta C function
   ;; XOR the 5 i64s starting at $data_ptr
-  ;; Matrix access follows the documented convention [$w3, $w4, $w0, $w1, $w2]
+  ;; Matrix access must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
   (func $theta_c_inner
     (param $data_ptr i32)
     (result i64)
@@ -476,8 +505,8 @@
   ;;   }
   ;; }
   ;;
-  ;; Since the above algorithm always yields fixed offsets, these b=value can be hard coded saving the need to perform a
-  ;; loop or modulo operations
+  ;; Since the above algorithm always yields fixed offsets, these values can be hard coded, thus saving the need to
+  ;; perform modulo operations inside a loop
   (func $theta_d
     (local $w0 i32)
     (local $w1 i32)
@@ -566,8 +595,10 @@
   ;;   }
   ;; }
   ;;
+  ;; Matrix access must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
   (func $theta_xor_loop
     (local $a_blk_idx     i32)
+    (local $a_blk_offset  i32)
     (local $a_blk_ptr     i32)
     (local $a_blk_word    i64)
     (local $d_fn_word     i64)
@@ -576,7 +607,16 @@
     ;; (call $log.fnEnter (i32.const 4))
 
     (local.set $result_ptr (global.get $THETA_RESULT_PTR))
-    (local.set $a_blk_ptr  (global.get $THETA_A_BLK_PTR))
+
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $THETA_A_BLK_PTR)   ;; Copy from address
+    ;;   (i32.const 200)                  ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 4))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
 
     (loop $xor_loop
       (local.set $d_fn_word
@@ -584,11 +624,28 @@
           (memory $main)
           (i32.add
             (global.get $THETA_D_OUT_PTR)
-            ;; Convert the (A block index DIV 5) to an i64 offset by multiplying by 8
+            ;; D block index is the A block index DIV 5 * 8
             (i32.shl (i32.div_u (local.get $a_blk_idx) (i32.const 5)) (i32.const 3))
           )
         )
       )
+
+      ;; To follow the indexing convention, the offset for the n'th A block word is picked up from the A Block Index
+      ;; Table.  This offset is then added to $THETA_A_BLK_PTR to pick up the correct word
+      ;;
+      ;; $a_blk_offset = $A_BLK_IDX_TAB + ($a_blk_idx * 4)
+      ;; $a_blk_ptr = $THETA_A_BLK_PTR + $a_blk_offset
+      ;; (call $log.singleDec (i32.const 4) (i32.const 2) (local.get $a_blk_idx))
+
+      (local.set $a_blk_offset
+        (i32.load
+          (memory $main)
+          (i32.add (global.get $A_BLK_IDX_TAB) (i32.shl (local.get $a_blk_idx) (i32.const 2)))
+        )
+      )
+      ;; (call $log.singleDec (i32.const 4) (i32.const 3) (local.get $a_blk_offset))
+
+      (local.set $a_blk_ptr  (i32.add (global.get $THETA_A_BLK_PTR) (local.get $a_blk_offset)))
       (local.set $a_blk_word (i64.load (memory $main) (local.get $a_blk_ptr)))
 
       ;; (call $log.singleI64 (i32.const 4) (i32.const 0) (local.get $d_fn_word))
@@ -601,10 +658,9 @@
       )
 
       (local.set $a_blk_idx  (i32.add (local.get $a_blk_idx)  (i32.const 1)))
-      (local.set $a_blk_ptr  (i32.add (local.get $a_blk_ptr)  (i32.const 8)))
       (local.set $result_ptr (i32.add (local.get $result_ptr) (i32.const 8)))
 
-      ;; Quit once all 25 words in the A block have been XOR'ed
+      ;; Quit once all 5 words in the D block have been XOR'ed with successive words in the A block
       (br_if $xor_loop (i32.lt_u (local.get $a_blk_idx) (i32.const 25)))
     )
 
