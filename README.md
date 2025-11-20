@@ -71,7 +71,7 @@ What makes the SHA3 function fundamentally different from the earlier SHA functi
 
 ## Input Block Padding
 
-The input data is divided into some number of blocks `t` of the same size as the rate where `t` is given by:
+The input data is divided into some number (`t`) of blocks of the same size as the rate where `t` is given by:
 
 ```javascript
 let t = Math.floor(file_size_in_bits / rate) + (file_size_in_bits mod rate < 4 ? 1 : 0)
@@ -82,8 +82,10 @@ The last block must be padded so that the data being processed fills an integer 
 The padding rules depend on whether SHA3 is being used in SHA2-replacement mode, or XOF mode.
 In our case, we are only concerned with SHA2-replacement mode, so the padding rules are as follows:
 
-* The data is suffixed with the padding marker bits `01`
-* The padding marker is followed by a bit sequence that starts and ends with bit `1` and between which are zero or more bit `0`s
+* The data must be suffixed with the two padding marker bits `01`
+* The padding marker must be followed by a variable length bit sequence that:
+   * Starts and ends with bit `1`
+   * Between the start and end `1`s there must be zero or more bit `0`s
 
 Thus, if the size of data `n` in the last block is 4 or more bits smaller than the rate `r`, the last block will be padded as follows:
 
