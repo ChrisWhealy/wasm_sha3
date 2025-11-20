@@ -98,22 +98,22 @@ const startWasm =
         singleBigInt: (fnId, msgId, i64) => {
           console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i64}`)
         },
-        label: lblId => console.log(debugLabels[lblId]),
+        label: labelId => console.log(debugLabels[labelId]),
       }
     }
 
     let sha3Module = await WebAssembly.instantiate(readWasmBinary(sha3WasmBinPath), debugEnv)
 
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    runTest(sha3Module, "thetaC1")
-    runTest(sha3Module, "thetaC2")
-    runTest(sha3Module, "thetaC3")
-    runTest(sha3Module, "thetaC4")
-    runTest(sha3Module, "thetaC")
-    runTest(sha3Module, "thetaD")
-    runTest(sha3Module, "thetaXorLoop")
-    runTest(sha3Module, "testTheta")
-    // runTest(sha3Module, "testRho")
+    // runTest(sha3Module, "thetaC1")
+    // runTest(sha3Module, "thetaC2")
+    // runTest(sha3Module, "thetaC3")
+    // runTest(sha3Module, "thetaC4")
+    // runTest(sha3Module, "thetaC")
+    // runTest(sha3Module, "thetaD")
+    // runTest(sha3Module, "thetaXorLoop")
+    // runTest(sha3Module, "testTheta")
+    runTest(sha3Module, "testRho")
     // runTest(sha3Module, "testPi")
     // runTest(sha3Module, "testChi")
     // runTest(sha3Module, "testIota")

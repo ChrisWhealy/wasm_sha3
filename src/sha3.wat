@@ -671,6 +671,8 @@
   ;; For each of the 25 i64 words at $THETA_RESULT_PTR, rotate each word by the successive values found in the
   ;; $RHOTATION_TABLE.  The output is written to $RHO_RESULT_PTR
   ;;
+  ;; Matrix access must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
+  ;;
   ;; fn rho(theta_out: [i64; 25]) {
   ;;   for theta_idx in 0..24 {
   ;;     rho_result[theta_idx] = ROTR(theta_out[theta_idx], $RHOTATION_TABLE[$theta_idx % 5])
@@ -678,22 +680,33 @@
   ;; }
   ;;
   (func $rho (export "rho")
-    (local $result_ptr i32)
-    (local $theta_ptr  i32)
-    (local $theta_idx  i32)
-    (local $rot_ptr    i32)
-    (local $rot_amt    i64)
-    (local $w0         i64)
+    (local $result_ptr   i32)
+    (local $theta_offset i32)
+    (local $theta_ptr    i32)
+    (local $theta_idx    i32)
+    (local $rot_ptr      i32)
+    (local $rot_amt      i64)
+    (local $w0           i64)
 
     ;; (call $log.fnEnter (i32.const 5))
 
-    (local.set $result_ptr (global.get $RHO_RESULT_PTR))
     (local.set $rot_ptr    (global.get $RHOTATION_TABLE))
-    (local.set $theta_ptr  (global.get $THETA_RESULT_PTR))
 
     (loop $rho_loop
       (local.set $rot_amt (i64.extend_i32_u (i32.load (memory $main) (local.get $rot_ptr))))
       ;; (call $log.singleBigInt (i32.const 5) (i32.const 2) (local.get $rot_amt))
+
+      ;; Transform loop index into A block offset
+      (local.set $theta_offset
+        (i32.load
+          (memory $main)
+          (i32.add (global.get $A_BLK_IDX_TAB) (i32.shl (local.get $theta_idx) (i32.const 2)))
+        )
+      )
+
+      ;; $theta_ptr and $result_ptr must point to the same index location within their respective memory blocks
+      (local.set $theta_ptr  (i32.add (global.get $THETA_RESULT_PTR) (local.get $theta_offset)))
+      (local.set $result_ptr (i32.add (global.get $RHO_RESULT_PTR)   (local.get $theta_offset)))
 
       ;; The value must be in network byte order otherwise the rotate operation will not work correctly!
       (local.set $w0
@@ -722,11 +735,8 @@
         )
       )
 
-      (local.set $theta_ptr  (i32.add (local.get $theta_ptr)  (i32.const 8)))
-      (local.set $result_ptr (i32.add (local.get $result_ptr) (i32.const 8)))
-      (local.set $rot_ptr    (i32.add (local.get $rot_ptr)    (i32.const 4)))
-      ;; Leave increment result on the stack for the following comparison
-      (local.tee $theta_idx  (i32.add (local.get $theta_idx)  (i32.const 1)))
+      (local.set $rot_ptr   (i32.add (local.get $rot_ptr)    (i32.const 4)))
+      (local.tee $theta_idx (i32.add (local.get $theta_idx)  (i32.const 1)))
 
       ;; Quit once all 25 words in the theta result block have been rotated
       (br_if $rho_loop (i32.lt_u (i32.const 25)))
