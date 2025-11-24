@@ -37,7 +37,7 @@ export const debugMsgs = [
   // FnId 7
   {
     fnName: "chi",
-    msgId: ["$row", "$row+1", "$row+2", "$col", "$w0", "$w1", "$w2", "result", "round"]
+    msgId: ["($col,$row)", "($col,$row+1)", "($col,$row+2)", "$w0", "$w1", "$w2", "result", "round"]
   },
   // FnId 8
   {
@@ -53,6 +53,11 @@ export const debugMsgs = [
   {
     fnName: "prepare_state",
     msgId: ["RATE", "CAPACITY"]
+  },
+  // FnId 11
+  {
+    fnName: "xor_data_with_rate",
+    msgId: ["Data index -> Rate offset",]
   },
 ]
 
@@ -72,4 +77,5 @@ export const debugLabels = [
   /* 12 */ "Theta C Result",
   /* 13 */ "Theta D Result",
   /* 14 */ "Digest size defaulting to 256",
+  /* 15 */ "State initialized",
 ]

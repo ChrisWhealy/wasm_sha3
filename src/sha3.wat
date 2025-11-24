@@ -2,26 +2,53 @@
 ;; An implementation of the SHA3 algorithm based on the specification published as NIST FIPS 202
 ;; https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
 ;;
-;; This module follows the state matrix indexing convention described in section 3.1.4 of the above document
+;; The SHA3 algorithm uses an internal state size (in bits) is treated a s 3-dimensional matrix whose size is given by
+;; b = 5 * 5 * w, where w = 2^l and l is 0..6
+;;
+;; When SHA3 is being used as a drop-in replacement for SHA2, l is fixed at 6
+;;
+;; Thus b = 5 * 5 * 2^6
+;;      b = 1600
+;;
+;; The state is partioned into 2 regions known as the "rate" (r) and the "capacity" (c) where r + c = b.
+;;
+;; Further, the size (in bits) of the rate is fixed at r = 2 * d, where d is the digest size (in bits) produced by the
+;; hash function. Given that SHA3 is being used as a SHA2 replacement, SHA3 must produce digests of exactly the same
+;; size as those produced by SHA2. Therefore d may only be one of 224, 256, 384 or 512.
+;;
+;; Given that the internal state size (b) is fixed at 1600 and b = c + 2d, the rate/capacity partition sizes may only be
+;; one of the pairs listed in the table below:
+;;
+;;          Size               Size
+;;        in bits            in i64s
+;;   d     r    c       d     r    c
+;; 224   448 1152     224     7   18
+;; 256   512 1088     256     8   17
+;; 384   768  832     384    12   13
+;; 512  1024  572     512    16    9
+;;
+;; This module follows the indexing convention described in section 3.1.4 of the above document
 ;;                     ___ ___ ___ ___ ___
 ;;                   /___/___/___/___/___/|
-;;                 /___/___/___/___/___/| |               The state size b = 5 * 5 * w
-;;               /___/___/___/___/___/| |/|               Where w is 2^l and l is 0..6
+;;                 /___/___/___/___/___/| |
+;;               /___/___/___/___/___/| |/|
 ;;             /___/___/___/___/___/| |/| |
-;;           /___/___/___/___/___/| |/| |/|               For SHA3 as a drop-in replacement for SHA2, l is fixed at 6,
-;;  ⋀   2   |160|168|176|184|192| |/| |/| |               making w = 5 * 5 * 2^6
-;;  |       |___|___|___|___|___|/| |/| |/|                      w = 1600
-;;  |   1   |120|128|136|144|152| |/| |/| |
+;;           /___/___/___/___/___/| |/| |/|
+;;  ⋀   2   |104|112| 80| 88| 96| |/| |/| |
+;;  |       |___|___|___|___|___|/| |/| |/|
+;;  |   1   | 64| 72| 40| 48| 56| |/| |/| |
 ;;          |___|___|___|___|___|/| |/| |/|
-;;  Y   0   | 80| 88| 96|104|112| |/| |/| |
+;;  Y   0   | 24| 32|  0|  8| 16| |/| |/| |
 ;;          |___|___|___|___|___|/| |/| |/   w-1   /
-;;  |   4   | 40| 48| 56| 64| 72| |/| |/   ...   /
+;;  |   4   |184|192|160|168|176| |/| |/   ...   /
 ;;  |       |___|___|___|___|___|/| |/   2     Z
-;;  |   3   | 0 | 8 | 16| 24| 32| |/   1     /
+;;  |   3   |144|152|120|128|136| |/   1     /
 ;;  ∨       |___|___|___|___|___|/   0     /
 ;;            3   4   0   1   2
 ;;           <------- X ------->
 ;;
+;; The linear offset of the data written to the internal state starts at the centre of the matrix and follows a wrapped,
+;; left-to-right, top-to-bottom ordering.
 ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 (module
   ;; Function types for logging/tracing
@@ -45,6 +72,7 @@
   (import "log" "singleBigInt"   (func $log.singleBigInt (type $type_i32_i32_i64)))
   (import "log" "label"          (func $log.label        (type $type_i32)))
   (import "log" "coordinatePair" (func $log.coords       (type $type_i32_i32_i32_i32)))
+  (import "log" "mappedPair"     (func $log.mappedPair   (type $type_i32_i32_i32_i32)))
 
   ;; Memory page   1     Internal stuff
   ;; Memory pages  2     Rate and Capacity buffers
@@ -90,11 +118,11 @@
 
   (global $RHOTATION_TABLE i32 (i32.const 0x000000C8))
   (data (memory $main) (i32.const 0x000000C8)
-    "\00\00\00\00"  (;  0;) "\24\00\00\00"  (; 36;) "\03\00\00\00"  (;  3;) "\29\00\00\00"  (; 41;) "\12\00\00\00"  (; 18;)
-    "\01\00\00\00"  (;  1;) "\0A\00\00\00"  (; 10;) "\2C\00\00\00"  (; 44;) "\2D\00\00\00"  (; 45;) "\02\00\00\00"  (;  2;)
-    "\3E\00\00\00"  (; 62;) "\06\00\00\00"  (;  6;) "\2B\00\00\00"  (; 43;) "\0F\00\00\00"  (; 15;) "\3D\00\00\00"  (; 61;)
-    "\1C\00\00\00"  (; 28;) "\37\00\00\00"  (; 55;) "\19\00\00\00"  (; 25;) "\15\00\00\00"  (; 21;) "\38\00\00\00"  (; 56;)
-    "\1B\00\00\00"  (; 27;) "\14\00\00\00"  (; 20;) "\27\00\00\00"  (; 39;) "\08\00\00\00"  (;  8;) "\0E\00\00\00"  (; 14;)
+    (;  0;) "\00\00\00\00"  (; 36;) "\24\00\00\00" (;  3;) "\03\00\00\00" (; 41;) "\29\00\00\00" (; 18;) "\12\00\00\00"
+    (;  1;) "\01\00\00\00"  (; 10;) "\0A\00\00\00" (; 44;) "\2C\00\00\00" (; 45;) "\2D\00\00\00" (;  2;) "\02\00\00\00"
+    (; 62;) "\3E\00\00\00"  (;  6;) "\06\00\00\00" (; 43;) "\2B\00\00\00" (; 15;) "\0F\00\00\00" (; 61;) "\3D\00\00\00"
+    (; 28;) "\1C\00\00\00"  (; 55;) "\37\00\00\00" (; 25;) "\19\00\00\00" (; 21;) "\15\00\00\00" (; 56;) "\38\00\00\00"
+    (; 27;) "\1B\00\00\00"  (; 20;) "\14\00\00\00" (; 39;) "\27\00\00\00" (;  8;) "\08\00\00\00" (; 14;) "\0E\00\00\00"
   )
 
   ;; Memory areas used by the inner Keccak functions
@@ -107,22 +135,14 @@
   (global $PI_RESULT_PTR    (export "PI_RESULT_PTR")    i32 (i32.const 0x000003D4))  ;; Length 200
   (global $CHI_RESULT_PTR   (export "CHI_RESULT_PTR")   i32 (i32.const 0x0000049C))  ;; Length 200
 
-  ;; Table of offsets to access A block data according to the documented indexing convention
-  ;; The loop transforms the (X,Y) coordinates based on the origin being at the bottom left corner, to a 5x5 matrix
-  ;; offset with the origin in the centre
-  ;;
-  ;; for x 0..4 {
-  ;;   for y 0..4 {
-  ;;     a_blk[x][y]
-  ;;   }
-  ;; }
-  (global $A_BLK_IDX_TAB i32 (i32.const 0x00000564))  ;; Length 25 * i32 = 100
+  ;; The n'th i32 in this table holds the offset into the state at which the n'th i64 in the incoming data should be written
+  (global $STATE_IDX_TAB i32 (i32.const 0x00000564))  ;; Length 25 * i32 = 100
   (data (memory $main) (i32.const 0x00000564)
-    "\60\00\00\00"  (; 96;) "\68\00\00\00"  (;104;) "\70\00\00\00"  (;112;) "\50\00\00\00"  (; 80;) "\58\00\00\00"  (; 88;)
-    "\88\00\00\00"  (;136;) "\90\00\00\00"  (;144;) "\98\00\00\00"  (;152;) "\78\00\00\00"  (;120;) "\80\00\00\00"  (;128;)
-    "\B0\00\00\00"  (;176;) "\B8\00\00\00"  (;184;) "\C0\00\00\00"  (;192;) "\A0\00\00\00"  (;160;) "\A8\00\00\00"  (;168;)
-    "\10\00\00\00"  (; 16;) "\18\00\00\00"  (; 24;) "\20\00\00\00"  (; 32;) "\00\00\00\00"  (;  0;) "\08\00\00\00"  (;  8;)
-    "\38\00\00\00"  (; 56;) "\40\00\00\00"  (; 64;) "\48\00\00\00"  (; 72;) "\28\00\00\00"  (; 40;) "\30\00\00\00"  (; 48;)
+    (; 96;) "\60\00\00\00" (;104;) "\68\00\00\00" (;112;) "\70\00\00\00" (; 80;) "\50\00\00\00" (; 88;) "\58\00\00\00"
+    (;136;) "\88\00\00\00" (;144;) "\90\00\00\00" (;152;) "\98\00\00\00" (;120;) "\78\00\00\00" (;128;) "\80\00\00\00"
+    (;176;) "\B0\00\00\00" (;184;) "\B8\00\00\00" (;192;) "\C0\00\00\00" (;160;) "\A0\00\00\00" (;168;) "\A8\00\00\00"
+    (; 16;) "\10\00\00\00" (; 24;) "\18\00\00\00" (; 32;) "\20\00\00\00" (;  0;) "\00\00\00\00" (;  8;) "\08\00\00\00"
+    (; 56;) "\38\00\00\00" (; 64;) "\40\00\00\00" (; 72;) "\48\00\00\00" (; 40;) "\28\00\00\00" (; 48;) "\30\00\00\00"
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -143,8 +163,10 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $prepare_state
         (param $init_mem      i32) ;; Initialise state memory?
-        (param $copy_to_a_blk i32) ;; Copy state to A block?
+        (param $copy_to_a_blk i32) ;; Copy state to Theta A block?
         (param $digest_size   i32) ;; Defaults to 256
+
+    ;; (call $log.fnEnter (i32.const 10))
 
     ;; If $digest_size is not one of 224, 256, 384 or 512, then default to 256
     (block $digest_ok
@@ -161,6 +183,7 @@
     (if (local.get $init_mem)
       (then
         (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200))
+        (call $log.label (i32.const 15))
       )
     )
 
@@ -196,28 +219,64 @@
         )
       )
     )
+
+    ;; (call $log.fnExit (i32.const 10))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; In place XOR the data at $RATE_PTR with the data at $DATA_PTR
+  ;; The data is wrtten to the rate in the order determined by the indexing convention
   (func $xor_data_with_rate
         (param $rate_words i32)
+    (local $data_idx    i32)
     (local $rate_offset i32)
+    (local $rate_ptr    i32)
+
+    ;; (call $log.fnEnter (i32.const 11))
 
     (loop $xor_loop
+      ;; Derive the offset within the rate at which the n'th i64 in the incoming data should be written
+      (local.set $rate_offset
+        (i32.load
+          (memory $main)
+          (i32.add (global.get $STATE_IDX_TAB) (i32.shl (local.get $data_idx) (i32.const 2)))
+        )
+      )
+      (local.set $rate_ptr (i32.add (global.get $RATE_PTR) (local.get $rate_offset)))
+
+      ;; (call $log.mappedPair (i32.const 11) (i32.const 0) (local.get $data_idx) (local.get $rate_offset))
+
       (i64.store
         (memory $main)
-        (i32.add (global.get $RATE_PTR) (local.get $rate_offset))
+        (local.get $rate_ptr)
         (i64.xor
-          (i64.load (memory $main) (i32.add (global.get $RATE_PTR) (local.get $rate_offset)))
-          (i64.load (memory $main) (i32.add (global.get $DATA_PTR) (local.get $rate_offset)))
+          (i64.load (memory $main) (local.get $rate_ptr))
+          (i64.load (memory $main) (i32.add (global.get $DATA_PTR) (i32.shl (local.get $data_idx) (i32.const 3))))
         )
       )
 
-      (local.set $rate_offset (i32.add (local.get $rate_offset) (i32.const 8)))
-      (local.tee $rate_words  (i32.sub (local.get $rate_words)  (i32.const 1)))
+      (local.set $data_idx   (i32.add (local.get $data_idx)   (i32.const 1)))
+      (local.tee $rate_words (i32.sub (local.get $rate_words) (i32.const 1)))
       (br_if $xor_loop)
     )
+
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $STATE_PTR)         ;; Copy from address
+    ;;   (i32.const 200)                 ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 3))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+
+    ;; (call $log.fnEnter (i32.const 11))
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func (export "test_xor_data_with_rate")
+        (param $rounds i32)
+    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -338,6 +397,30 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Transform $row and $col into a memory offset following the indexing convention
+  ;; $linear_idx = ($row * 5) + $col
+  ;; Address in PI_RESULT_BLK = $PI_RESULT_PTR + $STATE_IDX_TAB[$linear_idx]
+  (func $xy_to_state_offset
+        (param $row i32)
+        (param $col i32)
+        (result i32)
+
+    ;; Load offset from the state index table
+    (i32.load
+      (memory $main)
+      (i32.add
+        (global.get $STATE_IDX_TAB)
+        ;; Multiply linear index by 4 to derive offset down A Block index table
+        (i32.shl
+          ;; Transform 5x5 row/col coordinates to a linear index
+          (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $col))
+          (i32.const 2)
+        )
+      )
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Perform a single round of the Keccak function
   ;; The output lives at $CHI_RESULT_PTR because the iota function performs an in-place modification
   (func $keccak
@@ -411,52 +494,40 @@
     ;; (call $log.label (i32.const 4))
     ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
 
-    ;; $to_ptr must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
-    (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 80)))
-
     (block $call_count
-      ;; State[0, 0..4]
-      ;; (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      ;; State row 0
+      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 80)))
+      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
       ;; (call $log.singleI64 (i32.const 1) (i32.const 0) (local.get $result))
-      ;; (i64.store (memory $main) (global.get $THETA_C_OUT_PTR) (local.get $result))
-
-      (i64.store (memory $main) (global.get $THETA_C_OUT_PTR) (call $theta_c_inner (local.get $to_ptr)))
+      (i64.store (memory $main) (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 1)))
-      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 120)))
 
-      ;; State[1, 0..4]
-      ;; (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      ;; State row 1
+      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 40)))
+      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
       ;; (call $log.singleI64 (i32.const 1) (i32.const 1) (local.get $result))
-      ;; (i64.store (memory $main) offset=8 (global.get $THETA_C_OUT_PTR) (local.get $result))
-
       (i64.store (memory $main) offset=8 (global.get $THETA_C_OUT_PTR) (call $theta_c_inner (local.get $to_ptr)))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 2)))
-      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 160)))
 
-      ;; State[2, 0..4]
-      ;; (local.set $result (call $theta_c_inner (local.get $to_ptr)))
-      ;; (call $log.singleI64 (i32.const 1) (i32.const 2) (local.get $result))
-      ;; (i64.store (memory $main) offset=16 (global.get $THETA_C_OUT_PTR) (local.get $result))
-
-      (i64.store (memory $main) offset=16 (global.get $THETA_C_OUT_PTR) (call $theta_c_inner (local.get $to_ptr)))
-      (br_if $call_count (i32.eq (local.get $n) (i32.const 3)))
+      ;; State row 2
       (local.set $to_ptr (global.get $THETA_A_BLK_PTR))
+      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      ;; (call $log.singleI64 (i32.const 1) (i32.const 2) (local.get $result))
+      (i64.store (memory $main) offset=16 (global.get $THETA_C_OUT_PTR) (local.get $result))
+      (br_if $call_count (i32.eq (local.get $n) (i32.const 3)))
 
-      ;; State[3, 0..4]
-      ;; (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      ;; State row 3
+      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 160)))
+      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
       ;; (call $log.singleI64 (i32.const 1) (i32.const 3) (local.get $result))
-      ;; (i64.store (memory $main) offset=24 (global.get $THETA_C_OUT_PTR) (local.get $result))
-
-      (i64.store (memory $main) offset=24 (global.get $THETA_C_OUT_PTR) (call $theta_c_inner (local.get $to_ptr)))
+      (i64.store (memory $main) offset=24 (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 4)))
-      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 40)))
 
-      ;; State[4, 0..4]
-      ;; (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      ;; State row 4
+      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 120)))
+      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
       ;; (call $log.singleI64 (i32.const 1) (i32.const 4) (local.get $result))
-      ;; (i64.store (memory $main) offset=32 (global.get $THETA_C_OUT_PTR) (local.get $result))
-
-      (i64.store (memory $main) offset=32 (global.get $THETA_C_OUT_PTR) (call $theta_c_inner (local.get $to_ptr)))
+      (i64.store (memory $main) offset=32 (global.get $THETA_C_OUT_PTR) (local.get $result))
     )
 
     ;; (memory.copy
@@ -609,8 +680,6 @@
 
     ;; (call $log.fnEnter (i32.const 4))
 
-    (local.set $result_ptr (global.get $THETA_RESULT_PTR))
-
     ;; (memory.copy
     ;;   (memory $debug)                 ;; Copy to memory
     ;;   (memory $main)                  ;; Copy from memory
@@ -633,22 +702,24 @@
         )
       )
 
-      ;; To follow the indexing convention, the offset for the n'th A block word is picked up from the A Block Index
-      ;; Table.  This offset is then added to $THETA_A_BLK_PTR to pick up the correct word
+      ;; The offset of the n'th A block word is picked up from the state index table.
+      ;; This offset is then added to $THETA_A_BLK_PTR to pick up the correct word
       ;;
-      ;; $a_blk_offset = $A_BLK_IDX_TAB + ($a_blk_idx * 4)
+      ;; $a_blk_offset = $STATE_IDX_TAB + ($a_blk_idx * 4)
       ;; $a_blk_ptr = $THETA_A_BLK_PTR + $a_blk_offset
       ;; (call $log.singleDec (i32.const 4) (i32.const 2) (local.get $a_blk_idx))
 
       (local.set $a_blk_offset
         (i32.load
           (memory $main)
-          (i32.add (global.get $A_BLK_IDX_TAB) (i32.shl (local.get $a_blk_idx) (i32.const 2)))
+          (i32.add (global.get $STATE_IDX_TAB) (i32.shl (local.get $a_blk_idx) (i32.const 2)))
         )
       )
       ;; (call $log.singleDec (i32.const 4) (i32.const 3) (local.get $a_blk_offset))
 
-      (local.set $a_blk_ptr  (i32.add (global.get $THETA_A_BLK_PTR) (local.get $a_blk_offset)))
+      ;; The offset of the input worrd and the result word should be the same
+      (local.set $result_ptr (i32.add (global.get $THETA_RESULT_PTR) (local.get $a_blk_offset)))
+      (local.set $a_blk_ptr  (i32.add (global.get $THETA_A_BLK_PTR)  (local.get $a_blk_offset)))
       (local.set $a_blk_word (i64.load (memory $main) (local.get $a_blk_ptr)))
 
       ;; (call $log.singleI64 (i32.const 4) (i32.const 0) (local.get $d_fn_word))
@@ -660,8 +731,7 @@
         (i64.xor (local.get $d_fn_word) (local.get $a_blk_word))
       )
 
-      (local.set $a_blk_idx  (i32.add (local.get $a_blk_idx)  (i32.const 1)))
-      (local.set $result_ptr (i32.add (local.get $result_ptr) (i32.const 8)))
+      (local.set $a_blk_idx (i32.add (local.get $a_blk_idx) (i32.const 1)))
 
       ;; Quit once all 5 words in the D block have been XOR'ed with successive words in the A block
       (br_if $xor_loop (i32.lt_u (local.get $a_blk_idx) (i32.const 25)))
@@ -699,11 +769,11 @@
       (local.set $rot_amt (i64.extend_i32_u (i32.load (memory $main) (local.get $rot_ptr))))
       ;; (call $log.singleBigInt (i32.const 5) (i32.const 2) (local.get $rot_amt))
 
-      ;; Transform loop index into A block offset
+      ;; Transform loop index into state offset
       (local.set $theta_offset
         (i32.load
           (memory $main)
-          (i32.add (global.get $A_BLK_IDX_TAB) (i32.shl (local.get $theta_idx) (i32.const 2)))
+          (i32.add (global.get $STATE_IDX_TAB) (i32.shl (local.get $theta_idx) (i32.const 2)))
         )
       )
 
@@ -759,7 +829,7 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; For each row in the state matrix, reorder the words according to the following transformation.
+  ;; For each row in the state matrix, reorder the columns according to the following transformation.
   ;; Matrix access must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
   ;;
   ;; fn pi(rho_out: [i64; 25]) {
@@ -799,8 +869,8 @@
     ;;       (i32.load
     ;;         (memory $main)
     ;;         (i32.add
-    ;;           (global.get $A_BLK_IDX_TAB)
-    ;;           ;; Multiply linear index by 4 to derive offset down A Block index table
+    ;;           (global.get $STATE_IDX_TAB)
+    ;;           ;; Multiply linear index by 4 to derive offset down state index table
     ;;           (i32.shl
     ;;             ;; Transform 5x5 row/col indices to a linear index
     ;;             (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $col))
@@ -832,7 +902,7 @@
     ;;       (i32.load
     ;;         (memory $main)
     ;;         (i32.add
-    ;;           (global.get $A_BLK_IDX_TAB)
+    ;;           (global.get $STATE_IDX_TAB)
     ;;           ;; Multiply linear index by 4 to derive offset down A Block index table
     ;;           (i32.shl
     ;;             ;; Transform 5x5 row/col indices to a linear index
@@ -894,7 +964,6 @@
     (i64.store (memory $main) offset=16  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=0   (global.get $RHO_RESULT_PTR)))
     (i64.store (memory $main) offset=32  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=8   (global.get $RHO_RESULT_PTR)))
 
-
     ;; (memory.copy
     ;;   (memory $debug)                 ;; Copy to memory
     ;;   (memory $main)                  ;; Copy from memory
@@ -908,7 +977,8 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; The 25 i64s at $PI_RESULT_PTR are treated as 5x5 matrix, then transformed by the following function
+  ;; For each column in the state matrix, reorder the row entries according to the following transformation.
+  ;; Matrix access must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
   ;;
   ;; fn chi(pi_out: [i64; 25]) {
   ;;   let chi_idx = 0
@@ -927,59 +997,75 @@
   ;;
   ;; This algorithm however simply performs a static mapping, so the transformation can be hardcoded rather than calculated
   (func $chi (export "chi")
-    (local $col        i32)
-    (local $row        i32)
-    (local $row+1      i32)
-    (local $row+2      i32)
-    (local $result_ptr i32)
-    (local $w0         i64)
-    (local $w1         i64)
-    (local $w2         i64)
-    (local $chi_result i64)
+    (local $col           i32)
+    (local $row           i32)
+    (local $row+1         i32)
+    (local $row+2         i32)
+    (local $result_ptr    i32)
+    (local $result_offset i32)
+    (local $w0            i64)
+    (local $w1            i64)
+    (local $w2            i64)
+    (local $chi_result    i64)
 
-    ;; (call $log.fnEnter (i32.const 7))
+    (call $log.fnEnter (i32.const 7))
 
-    (local.set $result_ptr (global.get $CHI_RESULT_PTR))
+    ;; Dump state before transformation
+    (memory.copy
+      (memory $debug)                 ;; Copy to memory
+      (memory $main)                  ;; Copy from memory
+      (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+      (global.get $PI_RESULT_PTR)     ;; Copy from address
+      (i32.const 200)                 ;; Length
+    )
+    (call $log.label (i32.const 8))
+    (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
 
     (loop $row_loop
       ;; Reset $col counter
       (local.set $col (i32.const 0))
 
-      ;; Calculate the current and next two row indicies
-      (local.set $row+1 (i32.add (local.get $row) (i32.const 1)))
-      (local.set $row+1 (select (i32.const 0) (local.get $row+1) (i32.ge_u (local.get $row+1) (i32.const 5))))
-
-      (local.set $row+2 (i32.add (local.get $row) (i32.const 2)))
-      (local.set $row+2 (select (i32.sub (local.get $row+2) (i32.const 5)) (local.get $row+2) (i32.ge_u (local.get $row+2) (i32.const 5))))
-
-      ;; (call $log.singleI32 (i32.const 7) (i32.const 0) (local.get $row))
-      ;; (call $log.singleI32 (i32.const 7) (i32.const 1) (local.get $row+1))
-      ;; (call $log.singleI32 (i32.const 7) (i32.const 2) (local.get $row+2))
+      ;; Calculate the next two row indices
+      (local.set $row+1 (i32.rem_u (i32.add (local.get $row) (i32.const 1)) (i32.const 5)))
+      (local.set $row+2 (i32.rem_u (i32.add (local.get $row) (i32.const 2)) (i32.const 5)))
 
       (loop $col_loop
-        ;; (call $log.singleI32 (i32.const 7) (i32.const 3) (local.get $col))
-        ;; (call $log.singleDec (i32.const 7) (i32.const 8)
-        ;;   (i32.add
-        ;;     (i32.mul (local.get $row) (i32.const 5))
-        ;;     (local.get $col)
-        ;;   )
-        ;; )
+        (call $log.coords (i32.const 7) (i32.const 0) (local.get $col) (local.get $row))
+        (call $log.coords (i32.const 7) (i32.const 1) (local.get $col) (local.get $row+1))
+        (call $log.coords (i32.const 7) (i32.const 2) (local.get $col) (local.get $row+2))
 
-        (local.set $w0 (i64.load (memory $main) (call $chi_word_offset (local.get $row)   (local.get $col))))
-        (local.set $w1 (i64.load (memory $main) (call $chi_word_offset (local.get $row+1) (local.get $col))))
-        (local.set $w2 (i64.load (memory $main) (call $chi_word_offset (local.get $row+2) (local.get $col))))
+        (local.tee $result_offset (call $xy_to_state_offset (local.get $row) (local.get $col)))
+        (local.set $result_ptr (i32.add (global.get $CHI_RESULT_PTR)))
 
-        ;; (call $log.singleI64 (i32.const 7) (i32.const 4) (local.get $w0))
-        ;; (call $log.singleI64 (i32.const 7) (i32.const 5) (local.get $w1))
-        ;; (call $log.singleI64 (i32.const 7) (i32.const 6) (local.get $w2))
+        (local.set $w0
+          (i64.load
+            (memory $main)
+            (i32.add (global.get $PI_RESULT_PTR) (local.get $result_offset))
+          )
+        )
+        (local.set $w1
+          (i64.load
+            (memory $main)
+            (i32.add (global.get $PI_RESULT_PTR) (call $xy_to_state_offset (local.get $row+1) (local.get $col)))
+          )
+        )
+        (local.set $w2
+          (i64.load
+            (memory $main)
+            (i32.add (global.get $PI_RESULT_PTR) (call $xy_to_state_offset (local.get $row+2) (local.get $col)))
+          )
+        )
+
+        (call $log.singleI64 (i32.const 7) (i32.const 3) (local.get $w0))
+        (call $log.singleI64 (i32.const 7) (i32.const 4) (local.get $w1))
+        (call $log.singleI64 (i32.const 7) (i32.const 5) (local.get $w2))
 
         (local.set $chi_result (call $chi_inner (local.get $w0) (local.get $w1) (local.get $w2)))
-        ;; (call $log.singleI64 (i32.const 7) (i32.const 7) (local.get $chi_result))
+        (call $log.singleI64 (i32.const 7) (i32.const 6) (local.get $chi_result))
 
         (i64.store (memory $main) (local.get $result_ptr) (local.get $chi_result))
 
-        (local.set $result_ptr (i32.add (local.get $result_ptr) (i32.const 8)))
-        (local.tee $col        (i32.add (local.get $col)        (i32.const 1)))
+        (local.tee $col (i32.add (local.get $col) (i32.const 1)))
         (br_if $col_loop (i32.lt_u (i32.const 5)))
       )
 
@@ -987,18 +1073,20 @@
       (br_if $row_loop (i32.lt_u (i32.const 5)))
     )
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $CHI_RESULT_PTR)    ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-    ;; (call $log.label (i32.const 9))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-    ;; (call $log.fnExit (i32.const 7))
+    ;; Dump state after transformation
+    (memory.copy
+      (memory $debug)                 ;; Copy to memory
+      (memory $main)                  ;; Copy from memory
+      (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+      (global.get $CHI_RESULT_PTR)    ;; Copy from address
+      (i32.const 200)                 ;; Length
+    )
+    (call $log.label (i32.const 9))
+    (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    (call $log.fnExit (i32.const 7))
   )
 
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; $w0 XOR (NOT($w1) AND $w2)
   (func $chi_inner
         (param $w0 i64)
@@ -1006,21 +1094,6 @@
         (param $w2 i64)
         (result i64)
     (i64.xor (local.get $w0) (i64.and (i64.xor (local.get $w1) (i64.const -1)) (local.get $w2)))
-  )
-
-  ;; Transform $row and $col into a memory offset
-  ;; Offset = (($row * 5) + $col) * 8
-  (func $chi_word_offset
-        (param $row i32)
-        (param $col i32)
-        (result i32)
-    (i32.add
-      (global.get $PI_RESULT_PTR)
-      (i32.shl  ;; Multiply index by 8 to get offset
-        (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $col))  ;; Calculate index from row and column
-        (i32.const 3)
-      )
-    )
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

@@ -47,7 +47,7 @@ const runTest = (wasmMod, testName) => {
 
     if (resultByte != expectedByte) {
       success = false
-      console.log(`${testName} error at byte ${idx}: expected ${u8AsHexStr(expectedByte)}, got ${u8AsHexStr(resultByte)}`)
+      // console.log(`${testName} error at byte ${idx}: expected ${u8AsHexStr(expectedByte)}, got ${u8AsHexStr(resultByte)}`)
     }
   }
 
@@ -95,6 +95,9 @@ const startWasm =
         singleDec: (fnId, msgId, i32) => {
           console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i32}`)
         },
+        mappedPair: (fnId, msgId, v1, v2) => {
+          console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]}: ${v1} -> ${v2}`)
+        },
         coordinatePair: (fnId, msgId, v1, v2) => {
           console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = (${v1},${v2})`)
         },
@@ -108,6 +111,7 @@ const startWasm =
     let sha3Module = await WebAssembly.instantiate(readWasmBinary(sha3WasmBinPath), debugEnv)
 
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    runTest(sha3Module, "xorDataWithRate")
     // runTest(sha3Module, "thetaC1")
     // runTest(sha3Module, "thetaC2")
     // runTest(sha3Module, "thetaC3")
@@ -117,7 +121,7 @@ const startWasm =
     // runTest(sha3Module, "thetaXorLoop")
     // runTest(sha3Module, "testTheta")
     // runTest(sha3Module, "testRho")
-    runTest(sha3Module, "testPi")
+    // runTest(sha3Module, "testPi")
     // runTest(sha3Module, "testChi")
     // runTest(sha3Module, "testIota")
     // runTest(sha3Module, "testThetaRho")
