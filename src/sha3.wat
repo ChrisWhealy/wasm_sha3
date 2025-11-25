@@ -99,8 +99,8 @@
   ;;
   (global $KECCAK_ROUND_CONSTANTS_PTR i32 (i32.const 0x00000000))
   ;; IMPORTANT
-  ;; The round constant values have been deliberately added in big endian format!
-  ;; This optimization avoids the need for two swizzle operations in the iota function
+  ;; The round constant values listed here are deliberately given in big endian format!
+  ;; This optimization avoids having to perform two extra swizzle operations in the iota function
   (data $keccak_round_constants (memory $main) (i32.const 0x00000000)
     "\00\00\00\00\00\00\00\01" (; Round  0;) "\00\00\00\00\00\00\80\82" (; Round  1;)
     "\80\00\00\00\00\00\80\8a" (; Round  2;) "\80\00\00\00\80\00\80\00" (; Round  3;)
@@ -120,7 +120,7 @@
   ;; turn is derived from the length l (where w = 2^l)
   ;;
   ;; Word zero always has a rotation value of 0, but for the 24 other words in the 5 * 5 state matrix, the rotation
-  ;; amount t is defined by
+  ;; amount for the word at x,y is stored as r[x,y] and defined as
   ;;
   ;; for w=64
   ;;
@@ -353,7 +353,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Test a succession of the inner Keccak functions
   (func (export "test_theta_rho_pi_chi_iota")
-    (call $prepare_state (i32.const 256) (i32.const 1) (i32.const 1))
+    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
     (call $theta)
     (call $rho)
     (call $pi)
@@ -393,26 +393,25 @@
     (memory.copy
       (memory $main)               ;; Copy to memory
       (memory $main)               ;; Copy from memory
-      (global.get $CAPACITY_PTR)   ;; Copy to address
+      (global.get $STATE_PTR)      ;; Copy to address
       (global.get $CHI_RESULT_PTR) ;; Copy from address
       (i32.const 200)              ;; Length
     )
 
-    (memory.copy
-      (memory $debug)                 ;; Copy to memory
-      (memory $main)                  ;; Copy from memory
-      (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-      (global.get $CAPACITY_PTR)      ;; Copy from address
-      (i32.const 200)                 ;; Length
-    )
-    (call $log.label (i32.const 5))
-    (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $STATE_PTR)         ;; Copy from address
+    ;;   (i32.const 200)                 ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 5))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Transform $row and $col into a memory offset following the indexing convention
-  ;; $linear_idx = ($row * 5) + $col
-  ;; Return the offset stored at STATE_IDX_TAB[$linear_idx]
+  ;; Transform $row and $col indices into a memory offset following the indexing convention
+  ;; Return the offset stored at STATE_IDX_TAB[($row * 5) + $col]
   (func $xy_to_state_offset
         (param $row i32)
         (param $col i32)
@@ -438,17 +437,17 @@
   ;; The output lives at $CHI_RESULT_PTR because the iota function performs an in-place modification
   (func $keccak
         (param $round i32)
-    (call $log.fnEnterNth (i32.const 9) (local.get $round))
+    ;; (call $log.fnEnterNth (i32.const 9) (local.get $round))
 
-    (memory.copy
-      (memory $debug)                 ;; Copy to memory
-      (memory $main)                  ;; Copy from memory
-      (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-      (global.get $THETA_A_BLK_PTR)   ;; Copy from address
-      (i32.const 200)                 ;; Length
-    )
-    (call $log.label (i32.const 4))
-    (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $THETA_A_BLK_PTR)   ;; Copy from address
+    ;;   (i32.const 200)                 ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 4))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
 
     (call $theta)
     (call $rho)
@@ -456,7 +455,7 @@
     (call $chi)
     (call $iota (local.get $round))
 
-    (call $log.fnExitNth (i32.const 9) (local.get $round))
+    ;; (call $log.fnExitNth (i32.const 9) (local.get $round))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
