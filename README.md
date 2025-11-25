@@ -144,4 +144,4 @@ This module follows the state array indexing convention described in section 3.1
 
 The linear order of the data in expected test results starts in the bottom left corner `(3,3)` of the above matrix.
 
-The array data then follows the order `(3,3), (3,4), (3,0), (3,1), (3,2)` followed by `(2,3), (2,4), (2,0), (2,1), (2,2)`, then `(0,3), (0,4), (0,0), (0,1), (0,2)` etc.
+The array data then follows the order `(3,3), (4,3), (0,3), (1,3), (2,3)` followed by `(3,4), (4,4), (0,4), (1,4), (2,4)`, then `(3,0), (4,0), (0,0), (1,0), (2,0)` etc.
