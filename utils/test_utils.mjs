@@ -6,8 +6,8 @@ const DIGEST_LENGTH = 256
 const LENGTH = 6
 const WORD_LENGTH = 2 ** LENGTH
 const STATE_SIZE = 5 * 5 * WORD_LENGTH
-const RATE = STATE_SIZE - (2 * DIGEST_LENGTH)
-const CAPACITY = STATE_SIZE - RATE
+const CAPACITY = 2 * DIGEST_LENGTH
+const RATE = STATE_SIZE - CAPACITY
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const toHexFormat = byteArray => {
