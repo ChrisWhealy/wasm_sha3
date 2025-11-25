@@ -676,6 +676,7 @@
     (local $a_blk_ptr     i32)
     (local $a_blk_word    i64)
     (local $d_fn_word     i64)
+    (local $xor_result    i64)
     (local $result_ptr    i32)
 
     ;; (call $log.fnEnter (i32.const 4))
@@ -717,19 +718,17 @@
       )
       ;; (call $log.singleDec (i32.const 4) (i32.const 3) (local.get $a_blk_offset))
 
-      ;; The offset of the input worrd and the result word should be the same
+      ;; The offset of the input word and the result word should be the same
       (local.set $result_ptr (i32.add (global.get $THETA_RESULT_PTR) (local.get $a_blk_offset)))
       (local.set $a_blk_ptr  (i32.add (global.get $THETA_A_BLK_PTR)  (local.get $a_blk_offset)))
       (local.set $a_blk_word (i64.load (memory $main) (local.get $a_blk_ptr)))
+      (local.set $xor_result (i64.xor (local.get $d_fn_word) (local.get $a_blk_word)))
 
       ;; (call $log.singleI64 (i32.const 4) (i32.const 0) (local.get $d_fn_word))
       ;; (call $log.singleI64 (i32.const 4) (i32.const 1) (local.get $a_blk_word))
+      ;; (call $log.singleI64 (i32.const 4) (i32.const 4) (local.get $xor_result))
 
-      (i64.store
-        (memory $main)
-        (local.get $result_ptr)
-        (i64.xor (local.get $d_fn_word) (local.get $a_blk_word))
-      )
+      (i64.store (memory $main) (local.get $result_ptr) (local.get $xor_result))
 
       (local.set $a_blk_idx (i32.add (local.get $a_blk_idx) (i32.const 1)))
 

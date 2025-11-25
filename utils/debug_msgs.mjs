@@ -22,7 +22,7 @@ export const debugMsgs = [
   // FnId 4
   {
     fnName: "theta_xor_loop",
-    msgId: ["$d_fn_word", "$a_blk_word", "$a_blk_idx", "$a_blk_offset"]
+    msgId: ["$d_fn_word ", "$a_blk_word", "$a_blk_idx", "$a_blk_offset", 'XOR result ']
   },
   // FnId 5
   {
