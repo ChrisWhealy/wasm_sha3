@@ -141,3 +141,7 @@ For the same input followed by the same number of squeeze rounds, the same outpu
 This module follows the state array indexing convention described in section 3.1.4 of the above document
 
 ![Indexing convention of internal state matrix](./docs/indexing_convention.png)
+
+The linear order of the data in expected test results starts in the bottom left corner `(3,3)` of the above matrix.
+
+The array data then follows the order `(3,3), (3,4), (3,0), (3,1), (3,2)` followed by `(2,3), (2,4), (2,0), (2,1), (2,2)`, then `(0,3), (0,4), (0,0), (0,1), (0,2)` etc.
