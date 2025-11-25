@@ -183,7 +183,7 @@
     (if (local.get $init_mem)
       (then
         (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200))
-        (call $log.label (i32.const 15))
+        ;; (call $log.label (i32.const 15))
       )
     )
 
@@ -472,8 +472,8 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Theta C function
-  ;; Perform n rounds of $theta_c_inner
-  ;; The output of each $theta_c_inner call is written as a successive i64 starting at $THETA_C_OUT_PTR
+  ;; For each row of the state matrix, XOR words 0..4 together write the results as successive i64s starting at
+  ;; $THETA_C_OUT_PTR.  The XOR functionality is containing in function $theta_c_inner
   ;;
   ;; The parameter $n is only needed to test a single round of $theta_c_inner.
   ;; In normal operation, this parameter is hard-coded to 5

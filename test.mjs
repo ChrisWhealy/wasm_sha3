@@ -47,7 +47,7 @@ const runTest = (wasmMod, testName) => {
 
     if (resultByte != expectedByte) {
       success = false
-      // console.log(`${testName} error at byte ${idx}: expected ${u8AsHexStr(expectedByte)}, got ${u8AsHexStr(resultByte)}`)
+      console.log(`${testName} error at byte ${idx}: expected ${u8AsHexStr(expectedByte)}, got ${u8AsHexStr(resultByte)}`)
     }
   }
 
@@ -111,12 +111,12 @@ const startWasm =
     let sha3Module = await WebAssembly.instantiate(readWasmBinary(sha3WasmBinPath), debugEnv)
 
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    runTest(sha3Module, "xorDataWithRate")
-    // runTest(sha3Module, "thetaC1")
-    // runTest(sha3Module, "thetaC2")
-    // runTest(sha3Module, "thetaC3")
-    // runTest(sha3Module, "thetaC4")
-    // runTest(sha3Module, "thetaC")
+    // runTest(sha3Module, "xorDataWithRate")
+    runTest(sha3Module, "thetaC1")
+    runTest(sha3Module, "thetaC2")
+    runTest(sha3Module, "thetaC3")
+    runTest(sha3Module, "thetaC4")
+    runTest(sha3Module, "thetaC")
     // runTest(sha3Module, "thetaD")
     // runTest(sha3Module, "thetaXorLoop")
     // runTest(sha3Module, "testTheta")
