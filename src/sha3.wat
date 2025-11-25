@@ -412,18 +412,18 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Transform $row and $col into a memory offset following the indexing convention
   ;; $linear_idx = ($row * 5) + $col
-  ;; Address in PI_RESULT_BLK = $PI_RESULT_PTR + $STATE_IDX_TAB[$linear_idx]
+  ;; Return the offset stored at STATE_IDX_TAB[$linear_idx]
   (func $xy_to_state_offset
         (param $row i32)
         (param $col i32)
         (result i32)
 
-    ;; Load offset from the state index table
+    ;; Return offset from the state index table
     (i32.load
       (memory $main)
       (i32.add
         (global.get $STATE_IDX_TAB)
-        ;; Multiply linear index by 4 to derive offset down A Block index table
+        ;; Multiply linear index by 4 to derive offset within the state index table
         (i32.shl
           ;; Transform 5x5 row/col coordinates to a linear index
           (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $col))
@@ -1020,18 +1020,18 @@
     (local $w2            i64)
     (local $chi_result    i64)
 
-    (call $log.fnEnter (i32.const 7))
+    ;; (call $log.fnEnter (i32.const 7))
 
     ;; Dump state before transformation
-    (memory.copy
-      (memory $debug)                 ;; Copy to memory
-      (memory $main)                  ;; Copy from memory
-      (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-      (global.get $PI_RESULT_PTR)     ;; Copy from address
-      (i32.const 200)                 ;; Length
-    )
-    (call $log.label (i32.const 8))
-    (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $PI_RESULT_PTR)     ;; Copy from address
+    ;;   (i32.const 200)                 ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 8))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
 
     (loop $row_loop
       ;; Reset $col counter
@@ -1042,9 +1042,9 @@
       (local.set $row+2 (i32.rem_u (i32.add (local.get $row) (i32.const 2)) (i32.const 5)))
 
       (loop $col_loop
-        (call $log.coords (i32.const 7) (i32.const 0) (local.get $col) (local.get $row))
-        (call $log.coords (i32.const 7) (i32.const 1) (local.get $col) (local.get $row+1))
-        (call $log.coords (i32.const 7) (i32.const 2) (local.get $col) (local.get $row+2))
+        ;; (call $log.coords (i32.const 7) (i32.const 0) (local.get $col) (local.get $row))
+        ;; (call $log.coords (i32.const 7) (i32.const 1) (local.get $col) (local.get $row+1))
+        ;; (call $log.coords (i32.const 7) (i32.const 2) (local.get $col) (local.get $row+2))
 
         (local.tee $result_offset (call $xy_to_state_offset (local.get $row) (local.get $col)))
         (local.set $result_ptr (i32.add (global.get $CHI_RESULT_PTR)))
@@ -1068,12 +1068,21 @@
           )
         )
 
-        (call $log.singleI64 (i32.const 7) (i32.const 3) (local.get $w0))
-        (call $log.singleI64 (i32.const 7) (i32.const 4) (local.get $w1))
-        (call $log.singleI64 (i32.const 7) (i32.const 5) (local.get $w2))
+        ;; (call $log.singleI64 (i32.const 7) (i32.const 3) (local.get $w0))
+        ;; (call $log.singleI64 (i32.const 7) (i32.const 4) (local.get $w1))
+        ;; (call $log.singleI64 (i32.const 7) (i32.const 5) (local.get $w2))
 
-        (local.set $chi_result (call $chi_inner (local.get $w0) (local.get $w1) (local.get $w2)))
-        (call $log.singleI64 (i32.const 7) (i32.const 6) (local.get $chi_result))
+        ;; $w0 XOR (NOT($w1) AND $w2)
+        (local.set $chi_result
+          (i64.xor
+            (local.get $w0)
+            (i64.and
+              (i64.xor (local.get $w1) (i64.const -1))
+              (local.get $w2)
+            )
+          )
+        )
+        ;; (call $log.singleI64 (i32.const 7) (i32.const 6) (local.get $chi_result))
 
         (i64.store (memory $main) (local.get $result_ptr) (local.get $chi_result))
 
@@ -1086,26 +1095,16 @@
     )
 
     ;; Dump state after transformation
-    (memory.copy
-      (memory $debug)                 ;; Copy to memory
-      (memory $main)                  ;; Copy from memory
-      (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-      (global.get $CHI_RESULT_PTR)    ;; Copy from address
-      (i32.const 200)                 ;; Length
-    )
-    (call $log.label (i32.const 9))
-    (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-    (call $log.fnExit (i32.const 7))
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; $w0 XOR (NOT($w1) AND $w2)
-  (func $chi_inner
-        (param $w0 i64)
-        (param $w1 i64)
-        (param $w2 i64)
-        (result i64)
-    (i64.xor (local.get $w0) (i64.and (i64.xor (local.get $w1) (i64.const -1)) (local.get $w2)))
+    ;; (memory.copy
+    ;;   (memory $debug)                 ;; Copy to memory
+    ;;   (memory $main)                  ;; Copy from memory
+    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;   (global.get $CHI_RESULT_PTR)    ;; Copy from address
+    ;;   (i32.const 200)                 ;; Length
+    ;; )
+    ;; (call $log.label (i32.const 9))
+    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    ;; (call $log.fnExit (i32.const 7))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
