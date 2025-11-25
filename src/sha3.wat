@@ -116,10 +116,23 @@
     "\00\00\00\00\80\00\00\01" (; Round 22;) "\80\00\00\00\80\00\80\08" (; Round 23;)
   )
 
+  ;; The rotation amounts used by the Rho function (hence "rhotation" table) are derived from the word length w which in
+  ;; turn is derived from the length l (where w = 2^l)
+  ;;
+  ;; Word zero always has a rotation value of 0, but for the 24 other words in the 5 * 5 state matrix, the rotation
+  ;; amount t is defined by
+  ;;
+  ;; for w=64
+  ;;
+  ;; r[0,0] = 0
+  ;; Then for t = 0..23:
+  ;;   Walk x,y coordinates with (x, y) <- (y, (2x + 3y) mod 5)
+  ;;   r[x, y] = ((t+1) * (t+2) / 2) mod w
+  ;;
   (global $RHOTATION_TABLE i32 (i32.const 0x000000C8))
   (data (memory $main) (i32.const 0x000000C8)
     (;  0;) "\00\00\00\00"  (; 36;) "\24\00\00\00" (;  3;) "\03\00\00\00" (; 41;) "\29\00\00\00" (; 18;) "\12\00\00\00"
-    (;  1;) "\01\00\00\00"  (; 10;) "\0A\00\00\00" (; 44;) "\2C\00\00\00" (; 45;) "\2D\00\00\00" (;  2;) "\02\00\00\00"
+    (;  1;) "\01\00\00\00"  (; 44;) "\2C\00\00\00" (; 10;) "\0A\00\00\00" (; 45;) "\2D\00\00\00" (;  2;) "\02\00\00\00"
     (; 62;) "\3E\00\00\00"  (;  6;) "\06\00\00\00" (; 43;) "\2B\00\00\00" (; 15;) "\0F\00\00\00" (; 61;) "\3D\00\00\00"
     (; 28;) "\1C\00\00\00"  (; 55;) "\37\00\00\00" (; 25;) "\19\00\00\00" (; 21;) "\15\00\00\00" (; 56;) "\38\00\00\00"
     (; 27;) "\1B\00\00\00"  (; 20;) "\14\00\00\00" (; 39;) "\27\00\00\00" (;  8;) "\08\00\00\00" (; 14;) "\0E\00\00\00"
@@ -762,7 +775,7 @@
 
     ;; (call $log.fnEnter (i32.const 5))
 
-    (local.set $rot_ptr    (global.get $RHOTATION_TABLE))
+    (local.set $rot_ptr (global.get $RHOTATION_TABLE))
 
     (loop $rho_loop
       (local.set $rot_amt (i64.extend_i32_u (i32.load (memory $main) (local.get $rot_ptr))))
