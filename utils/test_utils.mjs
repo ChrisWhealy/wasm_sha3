@@ -23,8 +23,8 @@ const toHexFormat = byteArray => {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-// Take a single block of input data (that must be smaller than the rate size) and return it as a UInt8Array containing
-// padded with the correct bit sequence
+// Take a single block of input data (that must be smaller than the rate size) and return it as a UInt8Array padded with
+// the correct bit sequence
 const sha3Padding = testData => {
   const rateLenAsBytes = RATE >>> 3
   const pad1Byte = 0x61
