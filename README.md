@@ -113,11 +113,11 @@ Note that if the data is an exact integer multiple of the block size `r`, then a
 Now that the input data `X` has been organised into some integer number `t` of blocks of size `r` (the last of which has been appropriately padded), the "absorb" phase performs the following loop:
 
 ```rust
-  // Internal state starts as 200 initialised i64s
-  let mut state[i64; 200] = [0; 200];
+  // Internal state starts as 200 initialised u64s
+  let mut state[u64; 200] = [0; 200];
   // The rate size in bits is given by 1600 - (2 * digest_size)
   // Assuming a digest size of 256 bits the rate size = 1600 - (2 * 256) = 1088
-  let rate_size = 1088 >>> 6;  // As i64 words
+  let rate_size = 1088 >>> 6;  // As u64 words
 
   for idx in X.size {
     state = keccak_f([state[0..rate_size] XOR X[idx], ...state[rate_size..]])
@@ -187,7 +187,7 @@ Each of the five, internal step functions is identified with a Greek letter and 
 
 This function performs three basic internal steps:
 
-1. Step Theta-C takes each column in the 5x5 matrix and XORs the `i64` row values together, thus collapsing a entire column down to a single `i64`.
+1. Step Theta-C takes each column in the 5x5 matrix and XORs the `u64` row values together, thus collapsing a entire column down to a single `u64`.
    ```rust
    fn theta_c(state: [[u64; 5]; 5]) -> [u64; 5] {
        let mut result: [u64; 5] = [0; 5];
@@ -200,7 +200,7 @@ This function performs three basic internal steps:
        result
    }
    ```
-2. Step Theta-D takes the Theta-C output and for each `i64`, XORs the previous value MOD 5 with the next value MOD 5 rotated right by one bit
+2. Step Theta-D takes the Theta-C output and for each `u64`, XORs the previous value MOD 5 with the next value MOD 5 rotated right by one bit
    ```rust
    fn theta_d(c: [u64; 5]) -> [u64; 5] {
        let mut result: [u64; 5] = [0; 5];
