@@ -490,7 +490,6 @@ const KECCAK_24_CAPACITY = [
 export const testData = {
   xorDataWithRate: {
     wasmTestFnName: "test_xor_data_with_rate",
-    wasmTestFnArgs: [1],
     wasmGlobalExportPtrIn: ["DATA_PTR"],
     testData: [DATA_BLK_1],
     wasmGlobalExportPtrOut: "RATE_PTR",

@@ -220,7 +220,7 @@
     ;; XOR first input block with the rate
     (call $xor_data_with_rate (global.get $RATE))
 
-    ;; Copy the internal state to $THETA_A_BLK_PTR
+    ;; If necessary, copy the internal state to $THETA_A_BLK_PTR
     (if (local.get $copy_to_a_blk)
       (then
         (memory.copy
@@ -288,7 +288,6 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_xor_data_with_rate")
-        (param $rounds i32)
     (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
   )
 
