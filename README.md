@@ -188,6 +188,7 @@ Each of the five, internal step functions is identified with a Greek letter and 
 This function performs three basic internal steps:
 
 1. Step Theta-C takes each column in the 5x5 matrix and XORs the `u64` row values together, thus collapsing a entire column down to a single `u64`.
+
    ```rust
    fn theta_c(state: [[u64; 5]; 5]) -> [u64; 5] {
        let mut result: [u64; 5] = [0; 5];
@@ -201,6 +202,7 @@ This function performs three basic internal steps:
    }
    ```
 2. Step Theta-D takes the Theta-C output and for each `u64`, XORs the previous value MOD 5 with the next value MOD 5 rotated right by one bit
+
    ```rust
    fn theta_d(c: [u64; 5]) -> [u64; 5] {
        let mut result: [u64; 5] = [0; 5];
@@ -212,7 +214,8 @@ This function performs three basic internal steps:
        result
    }
    ```
-3. The last step inside the Theta function is to XOR every column value in row `y` with the corresponding value from output of the Theta-D step
+3. The last step inside the Theta function is to XOR every column value in row `y` with the `y`'th value from the Theta-D step output
+
    ```rust
    fn theta(state: [[u64; 5]; 5]) -> [[u64; 5]; 5] {
        let mut result: [[u64; 5]; 5] = [[0; 5]; 5];
