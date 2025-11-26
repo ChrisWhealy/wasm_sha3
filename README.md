@@ -145,3 +145,60 @@ This module follows the state array indexing convention described in section 3.1
 The linear order of the data in expected test results starts in the bottom left corner `(3,3)` of the above matrix.
 
 The array data then follows the order `(3,3), (4,3), (0,3), (1,3), (2,3)` followed by `(3,4), (4,4), (0,4), (1,4), (2,4)`, then `(3,0), (4,0), (0,0), (1,0), (2,0)` etc.
+
+# How the Keccak Function Works Internally
+
+Internally, the Keccak function uses a sequence of five inner functions, known a step functions.
+Each one of these step functions is identified with a Greek letter.
+
+These are (in order of execution):
+* &theta; Theta
+* &rho; Rho
+* &pi; Pi
+* &chi; Chi
+* &iota; Iota
+
+## &theta; Theta
+
+This function performs three basic internal steps:
+
+1. Step Theta-C takes each column in the 5x5 matrix and XORs the `i64` row values together, thus collapsing a entire column down to a single `i64`.
+   ```rust
+   fn theta_c(state: [[u64; 5]; 5]) -> [u64; 5] {
+       let mut result: [u64; 5] = [0; 5];
+       for x in 0..4 {
+           for y in 0..4 {
+               result[x] = result[x] ^ state[x][y];
+           }
+       }
+
+       result
+   }
+   ```
+2. Step Theta-D takes the Theta-C output and for each `i64`, XORs the previous value MOD 5 with the next value MOD 5 rotated right by one bit
+   ```rust
+   fn theta_d(c: [u64; 5]) -> [u64; 5] {
+       let mut result: [u64; 5] = [0; 5];
+       for i in 0..4 {
+           let prev: u64 = c[if i == 0 { 4 } else { i-1 }];
+           let next: u64 = c[i+1 % 5];
+           result[i] = prev ^ (next >> 1);
+       }
+       result
+   }
+   ```
+3. The last step inside the Theta function is to XOR every column value in row `y` with the corresponding value from output of the Theta-D step
+   ```rust
+   fn theta(state: [[u64; 5]; 5]) -> [[u64; 5]; 5] {
+       let mut result: [[u64; 5]; 5] = [[0; 5]; 5];
+       let c = theta_c(state);
+       let d = theta_d(c);
+
+       for y in 0..4 {
+           for x in 0..4 {
+               result[x][y] = state[x][y] ^ d[y];
+           }
+       }
+       result
+   }
+   ```
