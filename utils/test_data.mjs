@@ -1,10 +1,11 @@
-import { sha3Padding } from './test_utils.mjs'
+import { toHexFormat } from './binary_utils.mjs'
+import { sha3Padding256 } from './test_utils.mjs'
 
 const TEST_DATA = "The quick brown fox jumps over the lazy dog"
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const DATA_BLK_1 = sha3Padding(TEST_DATA)
-// console.log(`DATA_BLK_1 = ${toHexFormat(DATA_BLK_1)}`)
+export const DATA_BLK_256 = sha3Padding256(TEST_DATA)
+console.log(`DATA_BLK_256 = ${toHexFormat(DATA_BLK_256)}`)
 
 // Input data followed by the padding bit sequence 011[*0]1
 //   0 ->  96     54 68 65 20 71 75 69 63  |The quic|
@@ -24,17 +25,6 @@ export const DATA_BLK_1 = sha3Padding(TEST_DATA)
 // 112 -> 168     00 00 00 00 00 00 00 00  |........|
 // 120 ->  16     00 00 00 00 00 00 00 00  |........|
 // 128 ->  24     00 00 00 00 00 00 00 01  |........|
-
-export const DATA_BLK_2 = [
-  0x47, 0x09, 0x15, 0x02, 0xca, 0xba, 0xea, 0x5c,
-  0x5d, 0xca, 0xae, 0xce, 0x58, 0xfc, 0xda, 0x09,
-  0xdf, 0xa4, 0xf4, 0x1c, 0x83, 0x64, 0x7a, 0x9c,
-  0x92, 0xd2, 0xa4, 0xa8, 0x85, 0x55, 0x7f, 0x32,
-  0x1e, 0x38, 0x95, 0x75, 0x36, 0xe5, 0x8e, 0x9c,
-  0xee, 0x14, 0xb9, 0xae, 0xaf, 0x5c, 0xc1, 0x6b,
-  0x23, 0x94, 0xdb, 0x47, 0xe8, 0x23, 0x2a, 0x44,
-  0x68, 0x2a, 0x48, 0x42, 0xf9, 0x3e, 0x4c, 0xac,
-]
 
 // The initial internal state after the input data has been transferred following the indexing convention
 // Digest = 256 -> Rate size = 1088
@@ -491,7 +481,7 @@ export const testData = {
   xorDataWithRate: {
     wasmTestFnName: "test_xor_data_with_rate",
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "RATE_PTR",
     expected: XOR_DATA_WITH_RATE_RESULT
   },
@@ -500,7 +490,7 @@ export const testData = {
     wasmTestFnName: "test_theta_c",
     wasmTestFnArgs: [1],
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
     expected: THETA_C_1_RESULT
   },
@@ -509,7 +499,7 @@ export const testData = {
     wasmTestFnName: "test_theta_c",
     wasmTestFnArgs: [2],
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
     expected: THETA_C_2_RESULT
   },
@@ -518,7 +508,7 @@ export const testData = {
     wasmTestFnName: "test_theta_c",
     wasmTestFnArgs: [3],
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
     expected: THETA_C_3_RESULT
   },
@@ -527,7 +517,7 @@ export const testData = {
     wasmTestFnName: "test_theta_c",
     wasmTestFnArgs: [4],
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
     expected: THETA_C_4_RESULT
   },
@@ -536,7 +526,7 @@ export const testData = {
     wasmTestFnName: "test_theta_c",
     wasmTestFnArgs: [5],
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
     expected: THETA_C_RESULT
   },
@@ -544,7 +534,7 @@ export const testData = {
   thetaD: {
     wasmTestFnName: "test_theta_d",
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "THETA_D_OUT_PTR",
     expected: THETA_D_RESULT
   },
@@ -560,7 +550,7 @@ export const testData = {
   testTheta: {
     wasmTestFnName: "test_theta",
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "THETA_RESULT_PTR",
     expected: THETA_RESULT
   },
@@ -600,7 +590,7 @@ export const testData = {
   testThetaRho: {
     wasmTestFnName: "test_theta_rho",
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "RHO_RESULT_PTR",
     expected: RHO_RESULT
   },
@@ -608,7 +598,7 @@ export const testData = {
   testThetaRhoPi: {
     wasmTestFnName: "test_theta_rho_pi",
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "PI_RESULT_PTR",
     expected: PI_RESULT
   },
@@ -616,7 +606,7 @@ export const testData = {
   testThetaRhoPiChi: {
     wasmTestFnName: "test_theta_rho_pi_chi",
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
     expected: CHI_RESULT
   },
@@ -624,7 +614,7 @@ export const testData = {
   testThetaRhoPiChiIota: {
     wasmTestFnName: "test_theta_rho_pi_chi_iota",
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
     expected: IOTA_RESULT
   },
@@ -633,7 +623,7 @@ export const testData = {
     wasmTestFnName: "test_keccak",
     wasmTestFnArgs: [1],
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
     expected: IOTA_RESULT
   },
@@ -642,7 +632,7 @@ export const testData = {
     wasmTestFnName: "test_keccak",
     wasmTestFnArgs: [2],
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
     expected: KECCAK_2_RESULT
   },
@@ -651,7 +641,7 @@ export const testData = {
     wasmTestFnName: "test_keccak",
     wasmTestFnArgs: [24],
     wasmGlobalExportPtrIn: ["DATA_PTR"],
-    testData: [DATA_BLK_1],
+    testData: [DATA_BLK_256],
     wasmGlobalExportPtrOut: "STATE_PTR",
     expected: [
       ...KECCAK_24_RATE,

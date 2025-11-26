@@ -50,6 +50,19 @@ const i32FromArrayBuffer = memory => {
   return offset => wasmMem8[offset] || wasmMem8[offset + 1] << 8 || wasmMem8[offset + 2] << 16 || wasmMem8[offset + 3] << 32
 }
 
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const toHexFormat = byteArray => {
+  const hex = Array.from(byteArray, b => '0x' + b.toString(16).padStart(2, '0'))
+  let output = '[\n'
+
+  for (let i = 0; i < hex.length; i += 8) {
+    output += '  ' + hex.slice(i, i + 8).join(', ') + ',\n'
+  }
+
+  output += ']'
+  return output
+}
+
 export {
   swapI32Endianness,
   swapI64Endianness,
@@ -61,4 +74,5 @@ export {
   u64AsHexStr,
   u32AsHexStr,
   writeStringToArrayBuffer,
+  toHexFormat,
 }

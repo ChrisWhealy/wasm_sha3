@@ -1,56 +1,64 @@
 import { u8AsHexStr } from "./binary_utils.mjs"
 
-// Required SHA3 output digest length
-// May only be one of 224, 256, 384 or 512
-const DIGEST_LENGTH = 256
-
-// Define SHA3 internal state dimensions
-const LENGTH = 6
-const WORD_LENGTH = 2 ** LENGTH
-const STATE_SIZE = 5 * 5 * WORD_LENGTH
-const CAPACITY = 2 * DIGEST_LENGTH
-const RATE = STATE_SIZE - CAPACITY
-
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const toHexFormat = byteArray => {
-  const hex = Array.from(byteArray, b => '0x' + b.toString(16).padStart(2, '0'))
-  let output = '[\n'
-
-  for (let i = 0; i < hex.length; i += 8) {
-    output += '  ' + hex.slice(i, i + 8).join(', ') + ',\n'
+const defineState = digestLen => {
+  // Required SHA3 output digest length may only be one of 224, 256, 384 or 512
+  if (digestLen !== 224 && digestLen !== 256 && digestLen !== 384 && digestLen !== 256) {
+    console.error(`Invalid digest length ${digestLen} supplied.  Defaulting to 256 bits`)
+    digestLen = 256
   }
 
-  output += ']'
-  return output
+  // Define SHA3 internal state dimensions
+  const LENGTH = 6  // Hard-coded since this is a drop-in replacement for SHA2
+  const WORD_LENGTH = 2 ** LENGTH
+  const STATE_SIZE = 5 * 5 * WORD_LENGTH
+  const CAPACITY = 2 * digestLen
+  const RATE = STATE_SIZE - CAPACITY
+
+  return {
+    getWordLength: () => WORD_LENGTH,
+
+    getStateSize: () => STATE_SIZE,
+    getStateSizeBytes: () => STATE_SIZE >>> 3,
+    getStateSizeWords: () => STATE_SIZE >>> 6,
+
+    getCapacity: () => CAPACITY,
+    getCapacityBytes: () => CAPACITY >>> 3,
+    getCapacityWords: () => CAPACITY >>> 6,
+
+    getRate: () => RATE,
+    getRateBytes: () => RATE >>> 3,
+    getRateWords: () => RATE >>> 6,
+  }
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Take a single block of input data (that must be smaller than the rate size) and return it as a UInt8Array padded with
 // the correct bit sequence
-const sha3Padding = testData => {
-  const rateLenAsBytes = RATE >>> 3
+const sha3PaddingForRate = digestLen => {
+  const state = defineState(digestLen)
   const pad1Byte = 0x61
   const padFirstByte = 0x60
   const padLastByte = 0x01
 
-  let arr = new Uint8Array(rateLenAsBytes)
-  let encoded = new TextEncoder().encode(testData)
+  let arr = new Uint8Array(state.getRateBytes())
 
-  arr.set(encoded)
+  return testData => {
+    let encoded = new TextEncoder().encode(testData)
+    arr.set(encoded)
 
-  // Insert padding
-  let bytesRem = rateLenAsBytes - encoded.length
+    // Insert padding
+    let bytesRem = state.getRateBytes() - encoded.length
 
-  if (bytesRem === 1) {
-    arr.set(pad1Byte, encoded.length - 1)
-  } else if (bytesRem === 2) {
-    arr.set([padFirstByte, padLastByte], encoded.length - 2)
-  } else {
-    let zeroes = new Uint8Array(bytesRem - 2)
-    arr.set([padFirstByte, ...zeroes, padLastByte], encoded.length)
+    if (bytesRem === 1) {
+      arr.set(pad1Byte, encoded.length - 1)
+    } else {
+      arr.set(padFirstByte, encoded.length)
+      arr.set(padLastByte, arr.length - 1)
+    }
+
+    return arr
   }
-
-  return arr
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -78,6 +86,7 @@ const runTest = (wasmMod, thisTest) => {
   if (thisTest.wasmTestFnArgs) {
     testName += thisTest.wasmTestFnArgs.join(',')
   }
+  testName += ')'
 
   for (let idx = 0; idx < thisTest.expected.length; idx++) {
     let resultByte = wasmMem8[outputPtr + idx]
@@ -89,16 +98,14 @@ const runTest = (wasmMod, thisTest) => {
     }
   }
 
-  console.log(`${success ? "✅" : "❌"} Test ${testName})`)
+  console.log(`${success ? "✅" : "❌"} Test ${testName}`)
 }
+
+const sha3Padding256 = sha3PaddingForRate(256)
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 export {
-  sha3Padding,
-  toHexFormat,
-  DIGEST_LENGTH,
-  STATE_SIZE,
-  RATE,
-  CAPACITY,
+  sha3Padding256,
   runTest,
+  defineState,
 }
