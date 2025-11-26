@@ -165,7 +165,7 @@ rate = 1600 - 2 * d
 
 4. Perform 24 rounds of the five step functions against the data in the internal state.
 
-5. Have we hit end-of-file?
+5. Did step 2 hit end of file?
 
    No? - Goto step 2<br>Yes?  - Goto step 6
 
