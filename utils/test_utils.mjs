@@ -53,8 +53,8 @@ const sha3PaddingForRate = digestLen => {
     if (bytesRem === 1) {
       arr.set(pad1Byte, encoded.length - 1)
     } else {
-      arr.set(padFirstByte, encoded.length)
-      arr.set(padLastByte, arr.length - 1)
+      arr[encoded.length] = padFirstByte
+      arr[arr.length - 1] = padLastByte
     }
 
     return arr
