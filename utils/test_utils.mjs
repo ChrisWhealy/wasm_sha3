@@ -1,3 +1,5 @@
+import { u8AsHexStr } from "./binary_utils.mjs"
+
 // Required SHA3 output digest length
 // May only be one of 224, 256, 384 or 512
 const DIGEST_LENGTH = 256
@@ -71,6 +73,11 @@ const runTest = (wasmMod, thisTest) => {
   // Compare expected results with the data found at outputPtr
   let outputPtr = wasmMod.instance.exports[thisTest.wasmGlobalExportPtrOut].value
   let success = true
+  let testName = `${thisTest.wasmTestFnName}(`
+
+  if (thisTest.wasmTestFnArgs) {
+    testName += thisTest.wasmTestFnArgs.join(',')
+  }
 
   for (let idx = 0; idx < thisTest.expected.length; idx++) {
     let resultByte = wasmMem8[outputPtr + idx]
@@ -82,7 +89,7 @@ const runTest = (wasmMod, thisTest) => {
     }
   }
 
-  console.log(`${success ? "✅" : "❌"} Test ${thisTest.wasmTestFnName}`)
+  console.log(`${success ? "✅" : "❌"} Test ${testName})`)
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

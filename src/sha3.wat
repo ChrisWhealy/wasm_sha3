@@ -858,88 +858,9 @@
   ;;
   ;; Since this algorithm results in a static reordering of the i64s, the final transformation can simply be hardcoded
   ;; rather than calculated.
-  ;;
-
   (func $pi (export "pi")
-    ;; (local $col        i32)
-    ;; (local $new_col    i32)
-    ;; (local $row        i32)
-    ;; (local $rho_offset i32)
-    ;; (local $rho_ptr    i32)
-    ;; (local $pi_offset  i32)
-    ;; (local $pi_ptr     i32)
-
     ;; (call $log.fnEnter (i32.const 6))
 
-    ;; (loop $row_loop
-    ;;   (local.set $col (i32.const 0))
-
-    ;;   (loop $col_loop
-    ;;     ;; Following the indexing convention, transform the current row/col coordinates into a Rho block offset
-    ;;     (local.set $rho_offset
-    ;;       (i32.load
-    ;;         (memory $main)
-    ;;         (i32.add
-    ;;           (global.get $STATE_IDX_TAB)
-    ;;           ;; Multiply linear index by 4 to derive offset down state index table
-    ;;           (i32.shl
-    ;;             ;; Transform 5x5 row/col indices to a linear index
-    ;;             (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $col))
-    ;;             (i32.const 2)
-    ;;           )
-    ;;         )
-    ;;       )
-    ;;     )
-
-    ;;     (local.set $rho_ptr (i32.add (global.get $RHO_RESULT_PTR) (local.get $rho_offset)))
-
-    ;;     ;; Derive new column value -> $new_col = (2 * $col) + (3 * $row) MOD 5
-    ;;     (local.set $new_col
-    ;;       (i32.rem_u
-    ;;         (i32.add
-    ;;           (i32.shl (local.get $col) (i32.const 1))
-    ;;           (i32.mul (local.get $row) (i32.const 3))
-    ;;         )
-    ;;         (i32.const 5)
-    ;;       )
-    ;;     )
-
-    ;;     (call $log.coords (i32.const 6) (i32.const 0) (local.get $col)     (local.get $row))
-    ;;     (call $log.coords (i32.const 6) (i32.const 1) (local.get $new_col) (local.get $row))
-
-    ;;     ;; Following the indexing convention, transform the new col coordinate and the existing row coordinate into a Pi
-    ;;     ;; block offset
-    ;;     (local.set $pi_offset
-    ;;       (i32.load
-    ;;         (memory $main)
-    ;;         (i32.add
-    ;;           (global.get $STATE_IDX_TAB)
-    ;;           ;; Multiply linear index by 4 to derive offset down A Block index table
-    ;;           (i32.shl
-    ;;             ;; Transform 5x5 row/col indices to a linear index
-    ;;             (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $new_col))
-    ;;             (i32.const 2)
-    ;;           )
-    ;;         )
-    ;;       )
-    ;;     )
-
-    ;;     (call $log.singleDec (i32.const 6) (i32.const 2) (local.get $rho_offset))
-    ;;     (call $log.singleDec (i32.const 6) (i32.const 3) (local.get $pi_offset))
-
-    ;;     (local.set $pi_ptr (i32.add (global.get $PI_RESULT_PTR) (local.get $pi_offset)))
-
-    ;;     (i64.store (memory $main) (local.get $pi_ptr) (i64.load (memory $main) (local.get $rho_ptr)))
-
-    ;;     (local.tee $col (i32.add (local.get $col) (i32.const 1)))
-    ;;     (br_if $col_loop (i32.lt_u (i32.const 5)))
-    ;;   )
-
-    ;;   (local.tee $row (i32.add (local.get $row) (i32.const 1)))
-    ;;   (br_if $row_loop (i32.lt_u (i32.const 5)))
-    ;; )
-
-    ;; The above loop can be optimised to the following hardcoded sequence of i64.store statements
     ;; Row 2: offsets 160 - 192
     (i64.store (memory $main) offset=184 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=176 (global.get $RHO_RESULT_PTR)))
     (i64.store (memory $main) offset=160 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=184 (global.get $RHO_RESULT_PTR)))
