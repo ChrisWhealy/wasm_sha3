@@ -148,15 +148,40 @@ The array data then follows the order `(3,3), (4,3), (0,3), (1,3), (2,3)` follow
 
 # How the Keccak Function Works Internally
 
-Internally, the Keccak function uses a sequence of five inner functions, known a step functions.
-Each one of these step functions is identified with a Greek letter.
+In this example, the internal state is always 1600 bits, and the required digest output size `d` is 256 bits; therefore, the rate will be:
 
-These are (in order of execution):
+```
+rate = 1600 - 2 * d
+     = 1600 - 2 * 256
+     = 1088 bits
+```
+
+1. To start with, the Keccak function's internal state is initialised to 200 bytes of `0x00`.
+
+2. Consume `rate` bits from the input file/stream.
+   If this results in consuming less than `rate` bits, then pad the remaining space as described above.
+
+3. The data already present in the rate region of the internal state is XOR'ed with the input data.
+
+4. Perform 24 rounds of the five step functions against the data in the internal state.
+
+5. Have we hit end-of-file?
+
+   No? - Goto step 2<br>Yes?  - Goto step 6
+
+6. The required digest is the first `d` bits in the rate region of the internal state.
+
+## Internal Step Functions
+
+Each of the five, internal step functions is identified with a Greek letter and they are always executed in the following order:
+
 * &theta; Theta
 * &rho; Rho
 * &pi; Pi
 * &chi; Chi
 * &iota; Iota
+
+![Keccak Internals](./docs/keccak_internals.png)
 
 ## &theta; Theta
 
