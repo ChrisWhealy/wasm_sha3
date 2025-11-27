@@ -159,17 +159,17 @@ rate = 1600 - 2 * d
 1. To start with, the Keccak function's internal state is initialised to 200 bytes of `0x00`.
 
 2. Consume `rate` bits from the input file/stream.
-   If this results in consuming less than `rate` bits, then pad the remaining space as described above.
+   If the input supplies less than `rate` bits, then pad the input data such that it fills a complete rate block as described above.
 
-3. The data already present in the rate region of the internal state is XOR'ed with the input data.
+3. XOR the input data with the data already present in the rate region of the internal state.
 
-4. Perform 24 rounds of the five step functions against the data in the internal state.
+4. Perform 24 rounds of the five step functions documented below against the data in the internal state.
 
 5. Did step 2 hit end of file?
 
    No? - Goto step 2<br>Yes?  - Goto step 6
 
-6. The required digest is the first `d` bits in the rate region of the internal state.
+6. We're done - the required digest is the first `d` bits in the rate region of the internal state.
 
 ## Internal Step Functions
 
