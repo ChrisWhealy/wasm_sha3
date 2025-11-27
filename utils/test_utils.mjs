@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { u8AsHexStr } from "./binary_utils.mjs"
+import { diff } from 'node:util'
 
 const PAD_MARKER = 0x61
 const PAD_MARKER_START = 0x60
@@ -75,19 +76,27 @@ const uInt8ArrayDiff = (thisTest, wasmMod) => {
     let expectedByte = thisTest.expected[idx]
 
     if (resultByte != expectedByte) {
-      diffs.push(`    at index ${idx}: expected ${u8AsHexStr(expectedByte)}, got ${u8AsHexStr(resultByte)}`)
+      diffs.push({
+        idx: idx,
+        expected: expectedByte,
+        got: resultByte
+      })
     }
   }
 
   return diffs
 }
 
+const formatUInt8ArrayDiff = d =>
+  `    at index ${d.idx}: expected ${u8AsHexStr(d.expected)}, got ${u8AsHexStr(d.got)}`
+
+
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const testWasmFn = (wasmMod, thisTest) => {
   let testName = `${thisTest.wasmTestFnName}(${thisTest.wasmTestFnArgs ? thisTest.wasmTestFnArgs.join(',') : ''})`
   let wasmMem8 = new Uint8Array(wasmMod.instance.exports.memory.buffer)
 
-  // Write test data to the locations in the pointer list
+  // Write test data to the locations in WASM memory given in the pointer list
   for (let idx = 0; idx < thisTest.wasmGlobalExportPtrIn.length; idx++) {
     let toPtr = wasmMod.instance.exports[thisTest.wasmGlobalExportPtrIn[idx]].value
     wasmMem8.set(thisTest.testData[idx], toPtr)
@@ -96,15 +105,18 @@ const testWasmFn = (wasmMod, thisTest) => {
   // Test WASM function
   test(testName,
     () => {
+      let wasmFn = wasmMod.instance.exports[thisTest.wasmTestFnName]
+
+      // The WASM functions being tested never return any values; instead, they mutate shared memory
       if (thisTest.wasmTestFnArgs && thisTest.wasmTestFnArgs.length > 0) {
-        wasmMod.instance.exports[thisTest.wasmTestFnName](...thisTest.wasmTestFnArgs)
+        wasmFn(...thisTest.wasmTestFnArgs)
       } else {
-        wasmMod.instance.exports[thisTest.wasmTestFnName]()
+        wasmFn()
       }
 
       let diffs = uInt8ArrayDiff(thisTest, wasmMod)
 
-      assert.equal(diffs.length, 0, `❌ UInt8Arrays differ\n${diffs.join('\n')}`)
+      assert.equal(diffs.length, 0, `❌ UInt8Arrays differ\n${diffs.map(formatUInt8ArrayDiff).join('\n')}`)
     }
   )
 }
