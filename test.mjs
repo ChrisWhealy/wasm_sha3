@@ -14,11 +14,11 @@ import { INPUT_STR, DATA_BLKS, testData } from "./utils/test_data.mjs"
 test('Rate block padding', () => {
   let dataLen = INPUT_STR.length
 
-  for (let idx=0; idx < DATA_BLKS.length; idx++) {
+  for (let idx = 0; idx < DATA_BLKS.length; idx++) {
     let dataBlk = DATA_BLKS[idx]
 
     assert.equal(dataBlk[dataLen], PAD_MARKER_START, `Pad marker start byte should be 0x${PAD_MARKER_START.toString(16)}`)
-    assert.equal(dataBlk[dataBlk.length-1], PAD_MARKER_END, `Pad marker end byte should be 0x${PAD_MARKER_END.toString(16)}`)
+    assert.equal(dataBlk[dataBlk.length - 1], PAD_MARKER_END, `Pad marker end byte should be 0x${PAD_MARKER_END.toString(16)}`)
   }
 })
 

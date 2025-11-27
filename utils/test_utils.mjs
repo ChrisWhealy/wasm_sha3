@@ -8,15 +8,16 @@ const PAD_MARKER_START = 0x60
 const PAD_MARKER_END = 0x01
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const defineState = digestLen => {
-  // Required SHA3 output digest length may only be one of 224, 256, 384 or 512
+// For a given digest length, define the dimensions of the SHA3 internal state
+// Since this is a drop-in replacement for SHA2, not only must the digest length be one of 224, 256, 384 or 512 bits,
+// but the exponent of the word length is fixed at 6 (i.e. 64-bit words)
+const defineInternalState = digestLen => {
   if (digestLen !== 224 && digestLen !== 256 && digestLen !== 384 && digestLen !== 512) {
     console.error(`Invalid digest length ${digestLen} supplied.  Defaulting to 256 bits`)
     digestLen = 256
   }
 
-  // Define dimnensions of the SHA3 internal state
-  const LENGTH = 6  // Can be 0..6, but here is hard-coded since this is a drop-in replacement for SHA2
+  const LENGTH = 6
   const WORD_LENGTH = 2 ** LENGTH
   const STATE_SIZE = 5 * 5 * WORD_LENGTH
   const CAPACITY = 2 * digestLen
@@ -41,9 +42,9 @@ const defineState = digestLen => {
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Take a single block of input data (that must be at least 8 bits smaller than the rate size) and return it as a
-// UInt8Array followed by the correct padding bit sequence
+// UInt8Array followed by the correct padding bit sequence 011[*0]1
 const sha3PaddingForDigest = digestLen => {
-  const state = defineState(digestLen)
+  const state = defineInternalState(digestLen)
 
   let arr = new Uint8Array(state.getRateBytes())
 
@@ -138,5 +139,4 @@ export {
   sha3Padding384,
   sha3Padding512,
   testWasmFn,
-  defineState,
 }
