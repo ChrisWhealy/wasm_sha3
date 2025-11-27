@@ -19,13 +19,16 @@
 ;; Given that the internal state size (b) is fixed at 1600 and b = c + 2d, the rate/capacity partition sizes may only be
 ;; one of the pairs listed in the table below:
 ;;
-;;          Size               Size
-;;        in bits            in i64s
-;;   d     r    c       d     r    c
-;; 224   448 1152     224     7   18
-;; 256   512 1088     256     8   17
-;; 384   768  832     384    12   13
-;; 512  1024  572     512    16    9
+;; +--------+--------------+--------------+
+;; |        | Size in bits | Size in u64s |
+;; | Digest +--------------|-------+------|
+;; | Length |     r |    c |     r |    c |
+;; +--------+-------+------+-------+------+
+;; |    224 |  1152 |  448 |    18 |    7 |
+;; |    256 |  1088 |  512 |    17 |    8 |
+;; |    384 |   832 |  768 |    13 |   12 |
+;; |    512 |   572 | 1024 |     9 |   16 |
+;; +--------+-------+------+-------+------+
 ;;
 ;; This module follows the indexing convention described in section 3.1.4 of the above document
 ;;                     ___ ___ ___ ___ ___

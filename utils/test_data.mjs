@@ -1,11 +1,47 @@
 import { toHexFormat } from './binary_utils.mjs'
-import { sha3Padding256 } from './test_utils.mjs'
+import { sha3Padding224, sha3Padding256, sha3Padding384, sha3Padding512 } from './test_utils.mjs'
 
-const TEST_DATA = "The quick brown fox jumps over the lazy dog"
+const INPUT_STR = "The quick brown fox jumps over the lazy dog"
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const DATA_BLK_256 = sha3Padding256(TEST_DATA)
-console.log(`DATA_BLK_256 = ${toHexFormat(DATA_BLK_256)}`)
+// DATA_BLK_224 should be 18 words long
+const DATA_BLK_224 = sha3Padding224(INPUT_STR)
+// console.log(`DATA_BLK_224 = ${toHexFormat(DATA_BLK_224)}`)
+
+// DATA_BLK_256 should be 17 words long
+const DATA_BLK_256 = sha3Padding256(INPUT_STR)
+// console.log(`DATA_BLK_256 = ${toHexFormat(DATA_BLK_256)}`)
+
+// DATA_BLK_384 should be 13 words long
+const DATA_BLK_384 = sha3Padding384(INPUT_STR)
+// console.log(`DATA_BLK_384 = ${toHexFormat(DATA_BLK_384)}`)
+
+// DATA_BLK_512 should be 9 words long
+const DATA_BLK_512 = sha3Padding512(INPUT_STR)
+// console.log(`DATA_BLK_512 = ${toHexFormat(DATA_BLK_512)}`)
+
+//   0 ->  96     54 68 65 20 71 75 69 63  |The quic|
+//   8 -> 104     6b 20 62 72 6f 77 6e 20  |k brown |
+//  16 -> 112     66 6f 78 20 6a 75 6d 70  |fox jump|
+//  24 ->  80     73 20 6f 76 65 72 20 74  |s over t|
+//  32 ->  88     68 65 20 6c 61 7a 79 20  |he lazy |
+//  40 -> 136     64 6f 67 60 00 00 00 00  |dog`....|
+//  48 -> 144     00 00 00 00 00 00 00 00  |........|
+//  56 -> 152     00 00 00 00 00 00 00 00  |........|
+//  64 -> 120     00 00 00 00 00 00 00 00  |........|
+//  72 -> 128     00 00 00 00 00 00 00 00  |........|
+//  80 -> 176     00 00 00 00 00 00 00 00  |........|
+//  88 -> 184     00 00 00 00 00 00 00 00  |........|
+//  96 -> 192     00 00 00 00 00 00 00 00  |........|
+// 104 -> 160     00 00 00 00 00 00 00 00  |........|
+// 112 -> 168     00 00 00 00 00 00 00 00  |........|
+// 120 ->  16     00 00 00 00 00 00 00 00  |........|
+// 128 ->  24     00 00 00 00 00 00 00 00  |........|
+// 136 ->  32     00 00 00 00 00 00 00 01  |........|
+
+// console.log(`DATA_BLK_256 = ${toHexFormat(DATA_BLK_256)}`)
+// console.log(`DATA_BLK_384 = ${toHexFormat(DATA_BLK_384)}`)
+// console.log(`DATA_BLK_512 = ${toHexFormat(DATA_BLK_512)}`)
 
 // Input data followed by the padding bit sequence 011[*0]1
 //   0 ->  96     54 68 65 20 71 75 69 63  |The quic|
@@ -477,7 +513,7 @@ const KECCAK_24_CAPACITY = [
   0xfd, 0x39, 0x8c, 0xb2, 0xb6, 0x33, 0x1e, 0x74,
 ]
 
-export const testData = {
+const testData = {
   xorDataWithRate: {
     wasmTestFnName: "test_xor_data_with_rate",
     wasmGlobalExportPtrIn: ["DATA_PTR"],
@@ -648,4 +684,18 @@ export const testData = {
       ...KECCAK_24_CAPACITY,
     ]
   },
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const DATA_BLKS = [
+  DATA_BLK_224,
+  DATA_BLK_256,
+  DATA_BLK_384,
+  DATA_BLK_512,
+]
+
+export {
+  INPUT_STR,
+  DATA_BLKS,
+  testData,
 }
