@@ -6,11 +6,8 @@ process.on('warning', w => w.name === 'ExperimentalWarning' ? {} : console.warn(
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { startWasm } from "./utils/wasi.mjs"
 import { testWasmFn, PAD_MARKER_START, PAD_MARKER_END } from "./utils/test_utils.mjs"
 import { INPUT_STR, DATA_BLKS, testData } from "./utils/test_data.mjs"
-
-let sha3Module = await startWasm()
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Test that the generated rate blocks have been padded correctly
@@ -27,23 +24,23 @@ test('Rate block padding', () => {
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Test SHA3 WASM functions
-testWasmFn(sha3Module, testData.xorDataWithRate)
-testWasmFn(sha3Module, testData.thetaC1)
-testWasmFn(sha3Module, testData.thetaC2)
-testWasmFn(sha3Module, testData.thetaC3)
-testWasmFn(sha3Module, testData.thetaC4)
-testWasmFn(sha3Module, testData.thetaC)
-testWasmFn(sha3Module, testData.thetaD)
-testWasmFn(sha3Module, testData.thetaXorLoop)
-testWasmFn(sha3Module, testData.testTheta)
-testWasmFn(sha3Module, testData.testRho)
-testWasmFn(sha3Module, testData.testPi)
-testWasmFn(sha3Module, testData.testChi)
-testWasmFn(sha3Module, testData.testIota)
-testWasmFn(sha3Module, testData.testThetaRho)
-testWasmFn(sha3Module, testData.testThetaRhoPi)
-testWasmFn(sha3Module, testData.testThetaRhoPiChi)
-testWasmFn(sha3Module, testData.testThetaRhoPiChiIota)
-testWasmFn(sha3Module, testData.testKeccak1)
-testWasmFn(sha3Module, testData.testKeccak2)
-testWasmFn(sha3Module, testData.testKeccak24)
+testWasmFn(testData.xorDataWithRate)
+testWasmFn(testData.thetaC1)
+testWasmFn(testData.thetaC2)
+testWasmFn(testData.thetaC3)
+testWasmFn(testData.thetaC4)
+testWasmFn(testData.thetaC)
+testWasmFn(testData.thetaD)
+testWasmFn(testData.thetaXorLoop)
+testWasmFn(testData.testTheta)
+testWasmFn(testData.testRho)
+testWasmFn(testData.testPi)
+testWasmFn(testData.testChi)
+testWasmFn(testData.testIota)
+testWasmFn(testData.testThetaRho)
+testWasmFn(testData.testThetaRhoPi)
+testWasmFn(testData.testThetaRhoPiChi)
+testWasmFn(testData.testThetaRhoPiChiIota)
+testWasmFn(testData.testKeccak1)
+testWasmFn(testData.testKeccak2)
+testWasmFn(testData.testKeccak24)

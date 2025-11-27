@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { u8AsHexStr } from "./binary_utils.mjs"
-import { diff } from 'node:util'
+import { startWasm } from "./wasi.mjs"
 
 const PAD_MARKER = 0x61
 const PAD_MARKER_START = 0x60
@@ -92,7 +92,9 @@ const formatUInt8ArrayDiff = d =>
 
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const testWasmFn = (wasmMod, thisTest) => {
+// Each test must run against its own isolated WASM instance
+const testWasmFn = async thisTest => {
+  let wasmMod = await startWasm()
   let testName = `${thisTest.wasmTestFnName}(${thisTest.wasmTestFnArgs ? thisTest.wasmTestFnArgs.join(',') : ''})`
   let wasmMem8 = new Uint8Array(wasmMod.instance.exports.memory.buffer)
 
