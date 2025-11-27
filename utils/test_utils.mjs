@@ -12,7 +12,7 @@ const PAD_MARKER_END = 0x01
 // Since this is a drop-in replacement for SHA2, not only must the digest length be one of 224, 256, 384 or 512 bits,
 // but the exponent of the word length is fixed at 6 (i.e. 64-bit words)
 const defineInternalState = digestLen => {
-  if (digestLen !== 224 && digestLen !== 256 && digestLen !== 384 && digestLen !== 512) {
+  if (digestLen !== '224' && digestLen !== '256' && digestLen !== '384' && digestLen !== '512') {
     console.error(`Invalid digest length ${digestLen} supplied.  Defaulting to 256 bits`)
     digestLen = 256
   }
@@ -53,9 +53,7 @@ const sha3PaddingForDigest = digestLen => {
     arr.set(encoded)
 
     // Insert padding
-    let bytesRem = state.getRateBytes() - encoded.length
-
-    if (bytesRem === 1) {
+    if (state.getRateBytes() - encoded.length === 1) {
       arr.set(PAD_MARKER, encoded.length - 1)
     } else {
       arr[encoded.length] = PAD_MARKER_START
@@ -94,20 +92,33 @@ const formatUInt8ArrayDiff = d =>
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Each test must run against its own isolated WASM instance
-const testWasmFn = async thisTest => {
-  let wasmMod = await startWasm()
+const testWasmFn = thisTest => {
   let testName = `${thisTest.wasmTestFnName}(${thisTest.wasmTestFnArgs ? thisTest.wasmTestFnArgs.join(',') : ''})`
-  let wasmMem8 = new Uint8Array(wasmMod.instance.exports.memory.buffer)
-
-  // Write test data to the locations in WASM memory given in the pointer list
-  for (let idx = 0; idx < thisTest.wasmGlobalExportPtrIn.length; idx++) {
-    let toPtr = wasmMod.instance.exports[thisTest.wasmGlobalExportPtrIn[idx]].value
-    wasmMem8.set(thisTest.testData[idx], toPtr)
-  }
 
   // Test WASM function
   test(testName,
-    () => {
+    async () => {
+      let wasmMod = await startWasm()
+      let wasmMem8 = new Uint8Array(wasmMod.instance.exports.memory.buffer)
+
+      // Write test data to the locations in WASM memory given in the pointer list
+      for (let idx = 0; idx < thisTest.wasmGlobalExportPtrIn.length; idx++) {
+        const toPtr = wasmMod.instance.exports[thisTest.wasmGlobalExportPtrIn[idx]].value
+        let src = thisTest.testData[idx]
+
+        // If src points to the INPUT_DATA wrapper, use its .value
+        if (src && src.value) {
+          src = src.value
+        }
+
+        // Sanity check that we actuall have some test data
+        if (src == null) {
+          throw new Error(`No test data for ${thisTest.wasmTestFnName}[${idx}] – got ${src}`)
+        }
+
+        wasmMem8.set(src, toPtr)
+      }
+
       let wasmFn = wasmMod.instance.exports[thisTest.wasmTestFnName]
 
       // The WASM functions being tested never return any values; instead, they mutate shared memory
@@ -124,19 +135,11 @@ const testWasmFn = async thisTest => {
   )
 }
 
-const sha3Padding224 = sha3PaddingForDigest(224)
-const sha3Padding256 = sha3PaddingForDigest(256)
-const sha3Padding384 = sha3PaddingForDigest(384)
-const sha3Padding512 = sha3PaddingForDigest(512)
-
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 export {
   PAD_MARKER,
   PAD_MARKER_START,
   PAD_MARKER_END,
-  sha3Padding224,
-  sha3Padding256,
-  sha3Padding384,
-  sha3Padding512,
+  sha3PaddingForDigest,
   testWasmFn,
 }
