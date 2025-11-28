@@ -1,7 +1,7 @@
-export const INPUT_DATA = { value: null }
-
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const XOR_DATA_WITH_RATE_RESULT = [
+// Expected test results for digest length of 256 bits
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+export const XOR_DATA_WITH_RATE_RESULT = [
   // Row 2
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -34,7 +34,7 @@ const XOR_DATA_WITH_RATE_RESULT = [
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]
 
-const THETA_C_1_RESULT = [
+export const THETA_C_1_RESULT = [
   0x42, 0x62, 0x30, 0x68, 0x70, 0x7f, 0x33, 0x67,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -42,7 +42,7 @@ const THETA_C_1_RESULT = [
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]
 
-const THETA_C_2_RESULT = [
+export const THETA_C_2_RESULT = [
   0x42, 0x62, 0x30, 0x68, 0x70, 0x7f, 0x33, 0x67,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -50,15 +50,7 @@ const THETA_C_2_RESULT = [
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]
 
-const THETA_C_3_RESULT = [
-  0x42, 0x62, 0x30, 0x68, 0x70, 0x7f, 0x33, 0x67,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-]
-
-const THETA_C_4_RESULT = [
+export const THETA_C_3_RESULT = [
   0x42, 0x62, 0x30, 0x68, 0x70, 0x7f, 0x33, 0x67,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
@@ -66,7 +58,15 @@ const THETA_C_4_RESULT = [
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]
 
-const THETA_C_RESULT = [
+export const THETA_C_4_RESULT = [
+  0x42, 0x62, 0x30, 0x68, 0x70, 0x7f, 0x33, 0x67,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+]
+
+export const THETA_C_RESULT = [
   0x42, 0x62, 0x30, 0x68, 0x70, 0x7f, 0x33, 0x67,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
@@ -74,7 +74,7 @@ const THETA_C_RESULT = [
   0x64, 0x6f, 0x67, 0x60, 0x00, 0x00, 0x00, 0x00,
 ]
 
-const THETA_D_RESULT = [
+export const THETA_D_RESULT = [
   0x64, 0x6f, 0x67, 0x60, 0x00, 0x00, 0x00, 0x00,
   0xc2, 0x62, 0x30, 0x68, 0x70, 0x7f, 0x33, 0x67,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -85,7 +85,7 @@ const THETA_D_RESULT = [
 // This data is artificial in the sense that is was not generated from a Theta A block that has been passed through the
 // Theta C and D functions.  It exists simply to demonstrate that the XOR loop performed as the last step in the Theta
 // function behaves as expected
-const THETA_D_OUT_FOR_XOR_LOOP = [
+export const THETA_D_OUT_FOR_XOR_LOOP = [
   0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
   0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22,
   0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44,
@@ -95,7 +95,7 @@ const THETA_D_OUT_FOR_XOR_LOOP = [
 
 // The array data is in row-major order for the A Block, but is accessed according to the documented indexing convention.
 // The X,Y coordinates shown in the comments show the indexing order - beacuse its easy to get this wrong...
-const THETA_A_BLK_FOR_XOR_LOOP = [
+export const THETA_A_BLK_FOR_XOR_LOOP = [
   // Row 3
   /* (3,3) */ 0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb, 0xbb,
   /* (4,3) */ 0xcb, 0xcb, 0xcb, 0xcb, 0xcb, 0xcb, 0xcb, 0xcb,
@@ -134,7 +134,7 @@ const THETA_A_BLK_FOR_XOR_LOOP = [
 
 // The result data been defined such that if successful, the XOR loop should yield the X,Y coordinate of the particular
 // word when accessed using the documented indexing convention
-const THETA_XOR_LOOP_RESULT = [
+export const THETA_XOR_LOOP_RESULT = [
   // Row 3
   /* (3,3) */ 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33,
   /* (4,3) */ 0x43, 0x43, 0x43, 0x43, 0x43, 0x43, 0x43, 0x43,
@@ -172,7 +172,7 @@ const THETA_XOR_LOOP_RESULT = [
 ]
 
 // Expected intermediate internal state after theta function
-const THETA_RESULT = [
+export const THETA_RESULT = [
   // Row 3
   /* (3,3) */ 0x32, 0x37, 0xb3, 0xb0, 0x00, 0x00, 0x00, 0x01,
   /* (4,3) */ 0x32, 0x37, 0xb3, 0xb0, 0x00, 0x00, 0x00, 0x01,
@@ -210,7 +210,7 @@ const THETA_RESULT = [
 ]
 
 // Expected intermediate internal state after rho function
-const RHO_RESULT = [
+export const RHO_RESULT = [
   // Row 3
   /* (3,3) */ 0x00, 0x00, 0x09, 0x91, 0xbd, 0x9d, 0x80, 0x00,
   /* (4,3) */ 0x37, 0xb3, 0xb0, 0x00, 0x00, 0x00, 0x01, 0x32,
@@ -248,7 +248,7 @@ const RHO_RESULT = [
 ]
 
 // Expected intermediate internal state after pi function
-const PI_RESULT = [
+export const PI_RESULT = [
   // Row 3
   /* (3,3) */ 0x00, 0x00, 0x00, 0x99, 0x1b, 0xd9, 0xd8, 0x00,
   /* (4,3) */ 0x00, 0x00, 0x00, 0x13, 0x23, 0x7b, 0x3b, 0x00,
@@ -286,7 +286,7 @@ const PI_RESULT = [
 ]
 
 // Expected intermediate internal state after chi function
-const CHI_RESULT = [
+export const CHI_RESULT = [
   // Row 3
   /* (3,3) */ 0x0c, 0x48, 0x02, 0x9b, 0x9a, 0x1a, 0xd8, 0x46,
   /* (4,3) */ 0x00, 0x40, 0x01, 0xfb, 0x2f, 0x37, 0x97, 0x2c,
@@ -324,7 +324,7 @@ const CHI_RESULT = [
 ]
 
 // Expected intermediate internal state after iota function
-const IOTA_RESULT = [
+export const IOTA_RESULT = [
   // Row 3
   /* (3,3) */ 0x0c, 0x48, 0x02, 0x9b, 0x9a, 0x1a, 0xd8, 0x47,
   /* (4,3) */ 0x00, 0x40, 0x01, 0xfb, 0x2f, 0x37, 0x97, 0x2c,
@@ -361,7 +361,7 @@ const IOTA_RESULT = [
   /* (2,2) */ 0x00, 0x40, 0x06, 0x74, 0x26, 0x23, 0x06, 0x85,
 ]
 
-const KECCAK_2_RESULT = [
+export const KECCAK_2_RESULT = [
   // Rate
   0x5f, 0x26, 0xad, 0xb1, 0x2d, 0x41, 0xa8, 0xc6,
   0x6f, 0x1f, 0x50, 0x22, 0x66, 0x50, 0xb2, 0x32,
@@ -393,7 +393,7 @@ const KECCAK_2_RESULT = [
 ]
 
 // Rate size = 1088 for w=64
-const KECCAK_24_RATE = [
+export const KECCAK_24_RATE = [
   0xc1, 0x10, 0x06, 0x03, 0x88, 0x20, 0x04, 0x38,
   0x91, 0x74, 0xc6, 0x0a, 0x00, 0xb9, 0xec, 0x36,
   0x93, 0xc4, 0xe3, 0x1d, 0x29, 0x1b, 0xc0, 0x39,
@@ -413,7 +413,7 @@ const KECCAK_24_RATE = [
   0x1a, 0x5e, 0x4c, 0xd4, 0x9a, 0xbf, 0x86, 0x27,
 ]
 
-const KECCAK_24_CAPACITY = [
+export const KECCAK_24_CAPACITY = [
   0x58, 0x05, 0x1c, 0xce, 0x5d, 0x3f, 0xd2, 0xba,
   0x6e, 0xca, 0x0d, 0xf5, 0x7f, 0x16, 0x08, 0xf1,
   0xb0, 0x96, 0x9b, 0xaa, 0xa4, 0xf1, 0x85, 0x65,
@@ -423,194 +423,3 @@ const KECCAK_24_CAPACITY = [
   0xab, 0x1e, 0xab, 0xbf, 0x14, 0x42, 0xae, 0xdf,
   0xfd, 0x39, 0x8c, 0xb2, 0xb6, 0x33, 0x1e, 0x74,
 ]
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testXorDataWithRate = {
-  wasmTestFnName: "test_xor_data_with_rate",
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "RATE_PTR",
-  expected: XOR_DATA_WITH_RATE_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testThetaC1 = {
-  wasmTestFnName: "test_theta_c",
-  wasmTestFnArgs: [1],
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
-  expected: THETA_C_1_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testThetaC2 = {
-  wasmTestFnName: "test_theta_c",
-  wasmTestFnArgs: [2],
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
-  expected: THETA_C_2_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testThetaC3 = {
-  wasmTestFnName: "test_theta_c",
-  wasmTestFnArgs: [3],
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
-  expected: THETA_C_3_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testThetaC4 = {
-  wasmTestFnName: "test_theta_c",
-  wasmTestFnArgs: [4],
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
-  expected: THETA_C_4_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testThetaC = {
-  wasmTestFnName: "test_theta_c",
-  wasmTestFnArgs: [5],
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
-  expected: THETA_C_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testThetaD = {
-  wasmTestFnName: "test_theta_d",
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "THETA_D_OUT_PTR",
-  expected: THETA_D_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testThetaXorLoop = {
-  wasmTestFnName: "test_theta_xor_loop",
-  wasmGlobalExportPtrIn: ["THETA_D_OUT_PTR", "THETA_A_BLK_PTR"],
-  testData: [THETA_D_OUT_FOR_XOR_LOOP, THETA_A_BLK_FOR_XOR_LOOP],
-  wasmGlobalExportPtrOut: "THETA_RESULT_PTR",
-  expected: THETA_XOR_LOOP_RESULT,
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testTheta = {
-  wasmTestFnName: "test_theta",
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "THETA_RESULT_PTR",
-  expected: THETA_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testRho = {
-  wasmTestFnName: "rho",
-  wasmGlobalExportPtrIn: ["THETA_RESULT_PTR"],
-  testData: [THETA_RESULT],
-  wasmGlobalExportPtrOut: "RHO_RESULT_PTR",
-  expected: RHO_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testPi = {
-  wasmTestFnName: "pi",
-  wasmGlobalExportPtrIn: ["RHO_RESULT_PTR"],
-  testData: [RHO_RESULT],
-  wasmGlobalExportPtrOut: "PI_RESULT_PTR",
-  expected: PI_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testChi = {
-  wasmTestFnName: "chi",
-  wasmGlobalExportPtrIn: ["PI_RESULT_PTR"],
-  testData: [PI_RESULT],
-  wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
-  expected: CHI_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testIota = {
-  wasmTestFnName: "test_iota",
-  wasmGlobalExportPtrIn: ["CHI_RESULT_PTR"],
-  testData: [CHI_RESULT],
-  wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
-  expected: IOTA_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testThetaRho = {
-  wasmTestFnName: "test_theta_rho",
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "RHO_RESULT_PTR",
-  expected: RHO_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testThetaRhoPi = {
-  wasmTestFnName: "test_theta_rho_pi",
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "PI_RESULT_PTR",
-  expected: PI_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testThetaRhoPiChi = {
-  wasmTestFnName: "test_theta_rho_pi_chi",
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
-  expected: CHI_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testThetaRhoPiChiIota = {
-  wasmTestFnName: "test_theta_rho_pi_chi_iota",
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
-  expected: IOTA_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testKeccak1 = {
-  wasmTestFnName: "test_keccak",
-  wasmTestFnArgs: [1],
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
-  expected: IOTA_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testKeccak2 = {
-  wasmTestFnName: "test_keccak",
-  wasmTestFnArgs: [2],
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
-  expected: KECCAK_2_RESULT
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export const testKeccak24 = {
-  wasmTestFnName: "test_keccak",
-  wasmTestFnArgs: [24],
-  wasmGlobalExportPtrIn: ["DATA_PTR"],
-  testData: [INPUT_DATA],
-  wasmGlobalExportPtrOut: "STATE_PTR",
-  expected: [
-    ...KECCAK_24_RATE,
-    ...KECCAK_24_CAPACITY,
-  ]
-}

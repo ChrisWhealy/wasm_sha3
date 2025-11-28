@@ -6,28 +6,238 @@ process.removeAllListeners('warning')
 process.on('warning', w => w.name === 'ExperimentalWarning' ? {} : console.warn(w.name, w.message))
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const DIGEST_LENGTH = '256'
-const INPUT_STR = "The quick brown fox jumps over the lazy dog"
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-
 import { testWasmFn, PAD_MARKER_START, PAD_MARKER_END, sha3PaddingForDigest } from "./utils/test_utils.mjs"
 
-const TEST_MOD = await (d => import(`./test_data/digest_${d}.mjs`))(DIGEST_LENGTH)
-TEST_MOD.INPUT_DATA.value = sha3PaddingForDigest(DIGEST_LENGTH, INPUT_STR)
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const digestLength = '256'
+const inputStr = "The quick brown fox jumps over the lazy dog"
+const paddedInputBlk = sha3PaddingForDigest(digestLength, inputStr)
+const testData = await import(`./test_data/digest_${digestLength}.mjs`)
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testXorDataWithRate = {
+  wasmTestFnName: "test_xor_data_with_rate",
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "RATE_PTR",
+  expected: testData.XOR_DATA_WITH_RATE_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testThetaC1 = {
+  wasmTestFnName: "test_theta_c",
+  wasmTestFnArgs: [1],
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
+  expected: testData.THETA_C_1_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testThetaC2 = {
+  wasmTestFnName: "test_theta_c",
+  wasmTestFnArgs: [2],
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
+  expected: testData.THETA_C_2_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testThetaC3 = {
+  wasmTestFnName: "test_theta_c",
+  wasmTestFnArgs: [3],
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
+  expected: testData.THETA_C_3_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testThetaC4 = {
+  wasmTestFnName: "test_theta_c",
+  wasmTestFnArgs: [4],
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
+  expected: testData.THETA_C_4_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testThetaC = {
+  wasmTestFnName: "test_theta_c",
+  wasmTestFnArgs: [5],
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "THETA_C_OUT_PTR",
+  expected: testData.THETA_C_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testThetaD = {
+  wasmTestFnName: "test_theta_d",
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "THETA_D_OUT_PTR",
+  expected: testData.THETA_D_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testThetaXorLoop = {
+  wasmTestFnName: "test_theta_xor_loop",
+  wasmInputData: [
+    { writeToPtr: "THETA_D_OUT_PTR", inputData: testData.THETA_D_OUT_FOR_XOR_LOOP },
+    { writeToPtr: "THETA_A_BLK_PTR", inputData: testData.THETA_A_BLK_FOR_XOR_LOOP },
+  ],
+  wasmGlobalExportPtrOut: "THETA_RESULT_PTR",
+  expected: testData.THETA_XOR_LOOP_RESULT,
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testTheta = {
+  wasmTestFnName: "test_theta",
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "THETA_RESULT_PTR",
+  expected: testData.THETA_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testRho = {
+  wasmTestFnName: "rho",
+  wasmInputData: [
+    { writeToPtr: "THETA_RESULT_PTR", inputData: testData.THETA_RESULT },
+  ],
+  wasmGlobalExportPtrOut: "RHO_RESULT_PTR",
+  expected: testData.RHO_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testPi = {
+  wasmTestFnName: "pi",
+  wasmInputData: [
+    { writeToPtr: "RHO_RESULT_PTR", inputData: testData.RHO_RESULT },
+  ],
+  wasmGlobalExportPtrOut: "PI_RESULT_PTR",
+  expected: testData.PI_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testChi = {
+  wasmTestFnName: "chi",
+  wasmInputData: [
+    { writeToPtr: "PI_RESULT_PTR", inputData: testData.PI_RESULT },
+  ],
+  wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
+  expected: testData.CHI_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testIota = {
+  wasmTestFnName: "test_iota",
+  wasmInputData: [
+    { writeToPtr: "CHI_RESULT_PTR", inputData: testData.CHI_RESULT },
+  ],
+  wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
+  expected: testData.IOTA_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testThetaRho = {
+  wasmTestFnName: "test_theta_rho",
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "RHO_RESULT_PTR",
+  expected: testData.RHO_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testThetaRhoPi = {
+  wasmTestFnName: "test_theta_rho_pi",
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "PI_RESULT_PTR",
+  expected: testData.PI_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testThetaRhoPiChi = {
+  wasmTestFnName: "test_theta_rho_pi_chi",
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
+  expected: testData.CHI_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testThetaRhoPiChiIota = {
+  wasmTestFnName: "test_theta_rho_pi_chi_iota",
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
+  expected: testData.IOTA_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testKeccak1 = {
+  wasmTestFnName: "test_keccak",
+  wasmTestFnArgs: [1],
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
+  expected: testData.IOTA_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testKeccak2 = {
+  wasmTestFnName: "test_keccak",
+  wasmTestFnArgs: [2],
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "CHI_RESULT_PTR",
+  expected: testData.KECCAK_2_RESULT
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const testKeccak24 = {
+  wasmTestFnName: "test_keccak",
+  wasmTestFnArgs: [24],
+  wasmInputData: [
+    { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
+  ],
+  wasmGlobalExportPtrOut: "STATE_PTR",
+  expected: [
+    ...testData.KECCAK_24_RATE,
+    ...testData.KECCAK_24_CAPACITY,
+  ]
+}
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Test that the generated rate block has been padded correctly
 test('Rate block padding', () => {
   assert.equal(
-    TEST_MOD.INPUT_DATA.value[INPUT_STR.length],
+    paddedInputBlk[inputStr.length],
     PAD_MARKER_START,
     `Pad marker start byte should be 0x${PAD_MARKER_START.toString(16)}`
   )
   assert.equal(
-    TEST_MOD.INPUT_DATA.value[TEST_MOD.INPUT_DATA.value.length - 1],
+    paddedInputBlk[paddedInputBlk.length - 1],
     PAD_MARKER_END,
     `Pad marker end byte should be 0x${PAD_MARKER_END.toString(16)}`
   )
@@ -35,23 +245,23 @@ test('Rate block padding', () => {
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Test SHA3 WASM functions
-testWasmFn(TEST_MOD.testXorDataWithRate)
-testWasmFn(TEST_MOD.testThetaC1)
-testWasmFn(TEST_MOD.testThetaC2)
-testWasmFn(TEST_MOD.testThetaC3)
-testWasmFn(TEST_MOD.testThetaC4)
-testWasmFn(TEST_MOD.testThetaC)
-testWasmFn(TEST_MOD.testThetaD)
-testWasmFn(TEST_MOD.testThetaXorLoop)
-testWasmFn(TEST_MOD.testTheta)
-testWasmFn(TEST_MOD.testRho)
-testWasmFn(TEST_MOD.testPi)
-testWasmFn(TEST_MOD.testChi)
-testWasmFn(TEST_MOD.testIota)
-testWasmFn(TEST_MOD.testThetaRho)
-testWasmFn(TEST_MOD.testThetaRhoPi)
-testWasmFn(TEST_MOD.testThetaRhoPiChi)
-testWasmFn(TEST_MOD.testThetaRhoPiChiIota)
-testWasmFn(TEST_MOD.testKeccak1)
-testWasmFn(TEST_MOD.testKeccak2)
-testWasmFn(TEST_MOD.testKeccak24)
+testWasmFn(testXorDataWithRate)
+testWasmFn(testThetaC1)
+testWasmFn(testThetaC2)
+testWasmFn(testThetaC3)
+testWasmFn(testThetaC4)
+testWasmFn(testThetaC)
+testWasmFn(testThetaD)
+testWasmFn(testThetaXorLoop)
+testWasmFn(testTheta)
+testWasmFn(testRho)
+testWasmFn(testPi)
+testWasmFn(testChi)
+testWasmFn(testIota)
+testWasmFn(testThetaRho)
+testWasmFn(testThetaRhoPi)
+testWasmFn(testThetaRhoPiChi)
+testWasmFn(testThetaRhoPiChiIota)
+testWasmFn(testKeccak1)
+testWasmFn(testKeccak2)
+testWasmFn(testKeccak24)

@@ -98,22 +98,23 @@ const testWasmFn = thisTest => {
       let wasmMod = await startWasm()
       let wasmMem8 = new Uint8Array(wasmMod.instance.exports.memory.buffer)
 
-      // Write test data to the locations in WASM memory given in the pointer list
-      for (let idx = 0; idx < thisTest.wasmGlobalExportPtrIn.length; idx++) {
-        const toPtr = wasmMod.instance.exports[thisTest.wasmGlobalExportPtrIn[idx]].value
-        let src = thisTest.testData[idx]
+      // Write test data to the locations in WASM memory given in the input data list
+      for (let idx = 0; idx < thisTest.wasmInputData.length; idx++) {
+        const wasmIn = thisTest.wasmInputData[idx]
+        const writeToPtr = wasmMod.instance.exports[wasmIn.writeToPtr].value
+        let src = wasmIn.inputData
 
-        // If src points to the INPUT_DATA wrapper, use its .value
-        if (src && src.value) {
-          src = src.value
-        }
+        // // If src points to the INPUT_DATA wrapper, use its .value
+        // if (src && src.value) {
+        //   src = src.value
 
-        // Sanity check that we actuall have some test data
-        if (src == null) {
-          throw new Error(`No test data for ${thisTest.wasmTestFnName}[${idx}] – got ${src}`)
-        }
+          // Sanity check that we actually have some test data
+          if (src == null) {
+            throw new Error(`No test input data for ${testName} index ${idx} - got ${src}`)
+          }
+        // }
 
-        wasmMem8.set(src, toPtr)
+        wasmMem8.set(src, writeToPtr)
       }
 
       let wasmFn = wasmMod.instance.exports[thisTest.wasmTestFnName]
