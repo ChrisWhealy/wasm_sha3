@@ -42,26 +42,23 @@ const defineInternalState = digestLen => {
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Take a single block of input data (that must be at least 8 bits smaller than the rate size) and return it as a
-// UInt8Array followed by the correct padding bit sequence 011[*0]1
-const sha3PaddingForDigest = digestLen => {
+// UInt8Array followed by the correct sequence of padding bits 011[*0]1
+const sha3PaddingForDigest = (digestLen, testData) => {
   const state = defineInternalState(digestLen)
-
   let arr = new Uint8Array(state.getRateBytes())
+  const encoded = new TextEncoder().encode(testData)
 
-  return testData => {
-    let encoded = new TextEncoder().encode(testData)
-    arr.set(encoded)
+  arr.set(encoded)
 
-    // Insert padding
-    if (state.getRateBytes() - encoded.length === 1) {
-      arr.set(PAD_MARKER, encoded.length - 1)
-    } else {
-      arr[encoded.length] = PAD_MARKER_START
-      arr[arr.length - 1] = PAD_MARKER_END
-    }
-
-    return arr
+  // Insert padding
+  if (state.getRateBytes() - encoded.length === 1) {
+    arr.set(PAD_MARKER, encoded.length - 1)
+  } else {
+    arr[encoded.length] = PAD_MARKER_START
+    arr[arr.length - 1] = PAD_MARKER_END
   }
+
+  return arr
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -121,13 +118,13 @@ const testWasmFn = thisTest => {
 
       let wasmFn = wasmMod.instance.exports[thisTest.wasmTestFnName]
 
-      // The WASM functions being tested never return any values; instead, they mutate shared memory
       if (thisTest.wasmTestFnArgs && thisTest.wasmTestFnArgs.length > 0) {
         wasmFn(...thisTest.wasmTestFnArgs)
       } else {
         wasmFn()
       }
 
+      // The WASM functions being tested never return any values; instead, they mutate shared memory
       let diffs = uInt8ArrayDiff(thisTest, wasmMod)
 
       assert.equal(diffs.length, 0, `❌ UInt8Arrays differ\n${diffs.map(formatUInt8ArrayDiff).join('\n')}`)

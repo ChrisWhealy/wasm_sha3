@@ -16,7 +16,7 @@ import assert from 'node:assert/strict'
 import { testWasmFn, PAD_MARKER_START, PAD_MARKER_END, sha3PaddingForDigest } from "./utils/test_utils.mjs"
 
 const TEST_MOD = await (d => import(`./test_data/digest_${d}.mjs`))(DIGEST_LENGTH)
-TEST_MOD.INPUT_DATA.value = sha3PaddingForDigest(DIGEST_LENGTH)(INPUT_STR)
+TEST_MOD.INPUT_DATA.value = sha3PaddingForDigest(DIGEST_LENGTH, INPUT_STR)
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Test that the generated rate block has been padded correctly
