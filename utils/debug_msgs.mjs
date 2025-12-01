@@ -52,12 +52,17 @@ export const debugMsgs = [
   // FnId 10
   {
     fnName: "prepare_state",
-    msgId: ["RATE", "CAPACITY", "Digest length"]
+    msgId: ["RATE", "CAPACITY", "Received digest length"]
   },
   // FnId 11
   {
     fnName: "xor_data_with_rate",
     msgId: ["Data index -> Rate offset",]
+  },
+  // FnId 12
+  {
+    fnName: "test_keccak",
+    msgId: ["",]
   },
 ]
 

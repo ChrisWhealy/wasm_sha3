@@ -12,7 +12,7 @@ const PAD_MARKER_END = 0x01
 // Since this is a drop-in replacement for SHA2, not only must the digest length be one of 224, 256, 384 or 512 bits,
 // but the exponent of the word length is fixed at 6 (i.e. 64-bit words)
 const defineInternalState = digestLen => {
-  if (digestLen !== '224' && digestLen !== '256' && digestLen !== '384' && digestLen !== '512') {
+  if (digestLen !== 224 && digestLen !== 256 && digestLen !== 384 && digestLen !== 512) {
     console.error(`Invalid digest length ${digestLen} supplied.  Defaulting to 256 bits`)
     digestLen = 256
   }
