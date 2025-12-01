@@ -102,19 +102,13 @@ const testWasmFn = thisTest => {
       for (let idx = 0; idx < thisTest.wasmInputData.length; idx++) {
         const wasmIn = thisTest.wasmInputData[idx]
         const writeToPtr = wasmMod.instance.exports[wasmIn.writeToPtr].value
-        let src = wasmIn.inputData
 
-        // // If src points to the INPUT_DATA wrapper, use its .value
-        // if (src && src.value) {
-        //   src = src.value
+        // Sanity check that we actually have some test data
+        if (!wasmIn.inputData || wasmIn.inputData.length === 0) {
+          throw new Error(`No test input data for ${testName} index ${idx}`)
+        }
 
-          // Sanity check that we actually have some test data
-          if (src == null) {
-            throw new Error(`No test input data for ${testName} index ${idx} - got ${src}`)
-          }
-        // }
-
-        wasmMem8.set(src, writeToPtr)
+        wasmMem8.set(wasmIn.inputData, writeToPtr)
       }
 
       let wasmFn = wasmMod.instance.exports[thisTest.wasmTestFnName]

@@ -37,35 +37,35 @@ const startWasm =
         hexdump: debugModule.instance.exports.hexdump
       },
       log: {
-        fnEnter: fnId => console.log(`===> ${debugMsgs[fnId].fnName}`),
-        fnExit: fnId => console.log(`<=== ${debugMsgs[fnId].fnName}`),
-        fnEnterNth: (fnId, n) => console.log(`===> ${debugMsgs[fnId].fnName} ${n}`),
-        fnExitNth: (fnId, n) => console.log(`<=== ${debugMsgs[fnId].fnName} ${n}`),
-        singleI64: (fnId, msgId, i64) => {
-          console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${u64AsHexStr(i64)}`)
-        },
-        singleI32: (fnId, msgId, i32) => {
-          console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${u32AsHexStr(i32)}`)
-        },
-        singleDec: (fnId, msgId, i32) => {
-          console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i32}`)
-        },
-        mappedPair: (fnId, msgId, v1, v2) => {
-          console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]}: ${v1} -> ${v2}`)
-        },
-        coordinatePair: (fnId, msgId, v1, v2) => {
-          console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = (${v1},${v2})`)
-        },
-        singleBigInt: (fnId, msgId, i64) => {
-          console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i64}`)
-        },
-        label: labelId => console.log(debugLabels[labelId]),
+        fnEnter: (debugActive, fnId) => debugActive ? console.log(`===> ${debugMsgs[fnId].fnName}`) : {},
+        fnExit: (debugActive, fnId) => debugActive ? console.log(`<=== ${debugMsgs[fnId].fnName}`) : {},
+        fnEnterNth: (debugActive, fnId, n) => debugActive ? console.log(`===> ${debugMsgs[fnId].fnName} ${n}`) : {},
+        fnExitNth: (debugActive, fnId, n) => debugActive ? console.log(`<=== ${debugMsgs[fnId].fnName} ${n}`) : {},
+        singleI64: (debugActive, fnId, msgId, i64) => debugActive
+          ? console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${u64AsHexStr(i64)}`)
+          : {},
+        singleI32: (debugActive, fnId, msgId, i32) => debugActive
+          ? console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${u32AsHexStr(i32)}`)
+          : {},
+        singleDec: (debugActive, fnId, msgId, i32) => debugActive
+          ? console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i32}`)
+          : {},
+        mappedPair: (debugActive, fnId, msgId, v1, v2) => debugActive
+          ? console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]}: ${v1} -> ${v2}`)
+          : {},
+        coordinatePair: (debugActive, fnId, msgId, v1, v2) => debugActive
+          ? console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = (${v1},${v2})`)
+          : {},
+        singleBigInt: (debugActive, fnId, msgId, i64) => debugActive
+          ? console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i64}`)
+          : {},
+        label: (debugActive, labelId) => debugActive ? console.log(debugLabels[labelId]) : {},
       }
     }
 
     return await WebAssembly.instantiate(readWasmBinary(sha3WasmBinPath), debugEnv)
   }
 
-  export {
-    startWasm
-  }
+export {
+  startWasm
+}

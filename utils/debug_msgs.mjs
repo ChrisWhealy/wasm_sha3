@@ -52,7 +52,7 @@ export const debugMsgs = [
   // FnId 10
   {
     fnName: "prepare_state",
-    msgId: ["RATE", "CAPACITY"]
+    msgId: ["RATE", "CAPACITY", "Digest length"]
   },
   // FnId 11
   {
