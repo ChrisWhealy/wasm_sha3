@@ -11,7 +11,7 @@ import assert from 'node:assert/strict'
 import { testWasmFn, PAD_MARKER_START, PAD_MARKER_END, sha3PaddingForDigest } from "./utils/test_utils.mjs"
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const digestLength = '224'
+const digestLength = 224
 const inputStr = "The quick brown fox jumps over the lazy dog"
 const paddedInputBlk = sha3PaddingForDigest(digestLength, inputStr)
 const testData = await import(`./test_data/digest_${digestLength}.mjs`)
@@ -19,7 +19,7 @@ const testData = await import(`./test_data/digest_${digestLength}.mjs`)
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const testXorDataWithRate = {
   wasmTestFnName: "test_xor_data_with_rate",
-  wasmTestFnArgs: [+digestLength],
+  wasmTestFnArgs: [digestLength],
   wasmInputData: [
     { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
   ],
