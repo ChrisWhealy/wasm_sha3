@@ -636,7 +636,7 @@
     (local $w3 i32)
     (local $w4 i32)
     (local $debug_active i32)
-    (local.set $debug_active (i32.const 1))
+    ;; (local.set $debug_active (i32.const 1))
     (call $log.fnEnter (local.get $debug_active) (i32.const 2))
 
     (local.set $w0          (global.get $THETA_C_OUT_PTR))
