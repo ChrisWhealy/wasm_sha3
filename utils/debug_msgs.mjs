@@ -72,7 +72,7 @@ export const debugLabels = [
   /* 2 */  "Rate (Before XORing with data block)",
   /* 3 */  "Rate (After XORing with data block)",
   /* 4 */  "Theta A block",
-  /* 5 */  "New Capacity & Rate",
+  /* 5 */  "New Rate & Capacity",
   /* 6 */  "Theta Result",
   /* 7 */  "Rho Result",
   /* 8 */  "Pi Result",

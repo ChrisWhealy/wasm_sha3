@@ -1,5 +1,7 @@
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Expected test results for digest length of 256 bits
+// Rate = 17 words
+// Capacity = 8 words
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 export const XOR_DATA_WITH_RATE_RESULT = [
   // Row 2

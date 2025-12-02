@@ -203,8 +203,7 @@ const testThetaRhoPiChiIota = {
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const testKeccak1 = {
   wasmTestFnName: "test_keccak",
-  wasmTestFnArgs: [digestLength],
-  wasmTestFnArgs: [1],
+  wasmTestFnArgs: [digestLength, 1],
   wasmInputData: [
     { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
   ],
@@ -215,8 +214,7 @@ const testKeccak1 = {
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const testKeccak2 = {
   wasmTestFnName: "test_keccak",
-  wasmTestFnArgs: [digestLength],
-  wasmTestFnArgs: [2],
+  wasmTestFnArgs: [digestLength, 2],
   wasmInputData: [
     { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
   ],
@@ -227,8 +225,7 @@ const testKeccak2 = {
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const testKeccak24 = {
   wasmTestFnName: "test_keccak",
-  wasmTestFnArgs: [digestLength],
-  wasmTestFnArgs: [24],
+  wasmTestFnArgs: [digestLength, 24],
   wasmInputData: [
     { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
   ],
@@ -256,7 +253,7 @@ test('Rate block padding', () => {
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Test SHA3 WASM functions
-// testWasmFn(testXorDataWithRate)
+testWasmFn(testXorDataWithRate)
 testWasmFn(testThetaC1)
 testWasmFn(testThetaC2)
 testWasmFn(testThetaC3)
@@ -273,6 +270,6 @@ testWasmFn(testThetaRho)
 testWasmFn(testThetaRhoPi)
 testWasmFn(testThetaRhoPiChi)
 testWasmFn(testThetaRhoPiChiIota)
-// testWasmFn(testKeccak1)
-// testWasmFn(testKeccak2)
-// testWasmFn(testKeccak24)
+testWasmFn(testKeccak1)
+testWasmFn(testKeccak2)
+testWasmFn(testKeccak24)
