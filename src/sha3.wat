@@ -430,15 +430,19 @@
       (i32.const 200)              ;; Length
     )
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $STATE_PTR)         ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 5))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $STATE_PTR)         ;; Copy from address
+          (i32.const 200)                 ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 5))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+      )
+    )
     (call $log.fnExit (local.get $debug_active) (i32.const 12))
   )
 
@@ -474,15 +478,19 @@
     ;; (local.set $debug_active (i32.const 1))
     (call $log.fnEnterNth (local.get $debug_active) (i32.const 9) (local.get $round))
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $THETA_A_BLK_PTR)   ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 4))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $THETA_A_BLK_PTR)   ;; Copy from address
+          (i32.const 200)                 ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 4))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+      )
+    )
 
     (call $theta)
     (call $rho)
@@ -507,15 +515,19 @@
     (call $theta_d)
     (call $theta_xor_loop)
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $THETA_RESULT_PTR)  ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 6))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $THETA_RESULT_PTR)  ;; Copy from address
+          (i32.const 200)                 ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 6))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+      )
+    )
     (call $log.fnExit (local.get $debug_active) (i32.const 2))
   )
 
@@ -534,15 +546,19 @@
     ;; (local.set $debug_active (i32.const 1))
     (call $log.fnEnter (local.get $debug_active) (i32.const 0))
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $THETA_A_BLK_PTR)   ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 4))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $THETA_A_BLK_PTR)   ;; Copy from address
+          (i32.const 200)                 ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 4))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+      )
+    )
 
     (block $call_count
       ;; State row 0
@@ -580,15 +596,19 @@
       (i64.store (memory $main) offset=32 (global.get $THETA_C_OUT_PTR) (local.get $result))
     )
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $THETA_C_OUT_PTR)   ;; Copy from address
-    ;;   (i32.const 40)                  ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 12))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 40))
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $THETA_C_OUT_PTR)   ;; Copy from address
+          (i32.const 40)                  ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 12))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 40))
+      )
+    )
 
     (call $log.fnExit (local.get $debug_active) (i32.const 0))
   )
@@ -653,15 +673,19 @@
     (i64.store (memory $main) offset=24 (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w2) (local.get $w4)))
     (i64.store (memory $main) offset=32 (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w3) (local.get $w0)))
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $THETA_D_OUT_PTR)   ;; Copy from address
-    ;;   (i32.const 40)                  ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 13))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 40))
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $THETA_D_OUT_PTR)   ;; Copy from address
+          (i32.const 40)                  ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 13))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 40))
+      )
+    )
 
     (call $log.fnExit (local.get $debug_active) (i32.const 2))
   )
@@ -707,8 +731,8 @@
       )
     )
 
-    ;; (call $log.fnExit (local.get $debug_active) (i32.const 3))
     (i64x2.extract_lane 0 (i8x16.swizzle (local.get $res) (global.get $SWAP_I64_ENDIANESS)))
+    (call $log.fnExit (local.get $debug_active) (i32.const 3))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -735,15 +759,19 @@
 
     (call $log.fnEnter (local.get $debug_active) (i32.const 4))
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $THETA_A_BLK_PTR)   ;; Copy from address
-    ;;   (i32.const 200)                  ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 4))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $THETA_A_BLK_PTR)   ;; Copy from address
+          (i32.const 200)                  ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 4))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+      )
+    )
 
     (loop $xor_loop
       (local.set $d_fn_word
@@ -870,15 +898,19 @@
       (br_if $rho_loop (i32.lt_u (i32.const 25)))
     )
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $RHO_RESULT_PTR)    ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 7))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $RHO_RESULT_PTR)    ;; Copy from address
+          (i32.const 200)                 ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 7))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+      )
+    )
 
     (call $log.fnExit (local.get $debug_active) (i32.const 5))
   )
@@ -942,15 +974,19 @@
     (i64.store (memory $main) offset=16  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=0   (global.get $RHO_RESULT_PTR)))
     (i64.store (memory $main) offset=32  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=8   (global.get $RHO_RESULT_PTR)))
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $PI_RESULT_PTR)     ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 8))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $PI_RESULT_PTR)     ;; Copy from address
+          (i32.const 200)                 ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 8))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+      )
+    )
     (call $log.fnExit (local.get $debug_active) (i32.const 6))
   )
 
@@ -992,15 +1028,19 @@
     (call $log.fnEnter (local.get $debug_active) (i32.const 7))
 
     ;; Dump state before transformation
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $PI_RESULT_PTR)     ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 8))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $PI_RESULT_PTR)     ;; Copy from address
+          (i32.const 200)                 ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 8))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+      )
+    )
 
     (loop $row_loop
       ;; Reset $col counter
@@ -1064,15 +1104,19 @@
     )
 
     ;; Dump state after transformation
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $CHI_RESULT_PTR)    ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 9))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $CHI_RESULT_PTR)    ;; Copy from address
+          (i32.const 200)                 ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 9))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+      )
+    )
     (call $log.fnExit (local.get $debug_active) (i32.const 7))
   )
 
@@ -1096,15 +1140,19 @@
     (call $log.fnEnter (local.get $debug_active) (i32.const 8))
     (call $log.singleDec (local.get $debug_active) (i32.const 8) (i32.const 0) (local.get $round))
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $KECCAK_ROUND_CONSTANTS_PTR) ;; Copy from address
-    ;;   (i32.const 192)                 ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 11))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 192))
+    (if (local.get $debug_active)
+      (then
+      (memory.copy
+        (memory $debug)                 ;; Copy to memory
+        (memory $main)                  ;; Copy from memory
+        (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+        (global.get $KECCAK_ROUND_CONSTANTS_PTR) ;; Copy from address
+        (i32.const 192)                 ;; Length
+      )
+      (call $log.label (local.get $debug_active) (i32.const 11))
+      (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 192))
+      )
+    )
 
     (local.set $rnd_const
       (i64.load
@@ -1129,15 +1177,19 @@
       (local.get $xor_result)
     )
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $CHI_RESULT_PTR)    ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
-    ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 10))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $CHI_RESULT_PTR)    ;; Copy from address
+          (i32.const 200)                 ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 10))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+      )
+    )
     (call $log.fnExit (local.get $debug_active) (i32.const 8))
   )
 )
