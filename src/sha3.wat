@@ -394,7 +394,9 @@
 
     (local $round i32)
     (local $debug_active i32)
+
     ;; (local.set $debug_active (i32.const 1))
+
     (call $log.fnEnter (local.get $debug_active) (i32.const 12))
 
     (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
@@ -983,7 +985,8 @@
     (local $w1            i64)
     (local $w2            i64)
     (local $chi_result    i64)
-    (local $debug_active i32)
+    (local $debug_active  i32)
+
     ;; (local.set $debug_active (i32.const 1))
 
     (call $log.fnEnter (local.get $debug_active) (i32.const 7))
