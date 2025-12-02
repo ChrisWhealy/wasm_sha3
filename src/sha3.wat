@@ -183,7 +183,7 @@
         (param $digest_len    i32) ;; Defaults to 256
 
     (local $debug_active i32)
-    (local.set $debug_active (i32.const 1))
+    ;; (local.set $debug_active (i32.const 1))
 
     (call $log.fnEnter (local.get $debug_active) (i32.const 10))
     (call $log.singleDec (local.get $debug_active) (i32.const 10) (i32.const 2) (local.get $digest_len))
@@ -304,27 +304,34 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_theta_c")
+        (param $digest_len i32)
         (param $rounds i32)
-    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
+    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
     (call $theta_c (local.get $rounds))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_theta_d")
-    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
+        (param $digest_len i32)
+
+    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
     (call $theta_c (i32.const 5))
     (call $theta_d)
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_theta_xor_loop")
-    (call $prepare_state (i32.const 1) (i32.const 0) (i32.const 256))
+        (param $digest_len i32)
+
+    (call $prepare_state (i32.const 1) (i32.const 0) (local.get $digest_len))
     (call $theta_xor_loop)
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_theta")
-    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
+        (param $digest_len i32)
+
+    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
     (call $theta)
   )
 
@@ -336,7 +343,9 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Test a succession of the inner Keccak functions
   (func (export "test_theta_rho")
-    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
+        (param $digest_len i32)
+
+    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
     (call $theta)
     (call $rho)
   )
@@ -344,7 +353,9 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Test a succession of the inner Keccak functions
   (func (export "test_theta_rho_pi")
-    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
+        (param $digest_len i32)
+
+    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
     (call $theta)
     (call $rho)
     (call $pi)
@@ -353,7 +364,9 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Test a succession of the inner Keccak functions
   (func (export "test_theta_rho_pi_chi")
-    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
+        (param $digest_len i32)
+
+    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
     (call $theta)
     (call $rho)
     (call $pi)
@@ -363,7 +376,9 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Test a succession of the inner Keccak functions
   (func (export "test_theta_rho_pi_chi_iota")
-    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
+        (param $digest_len i32)
+
+    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
     (call $theta)
     (call $rho)
     (call $pi)
@@ -374,13 +389,15 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Perform $n rounds of the Keccak function against the 64-byte block of data at $DATA_PTR
   (func (export "test_keccak")
+        (param $digest_len i32)
         (param $n i32)
+
     (local $round i32)
     (local $debug_active i32)
     ;; (local.set $debug_active (i32.const 1))
     (call $log.fnEnter (local.get $debug_active) (i32.const 12))
 
-    (call $prepare_state (i32.const 1) (i32.const 1) (i32.const 256))
+    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
 
     (loop $next_round
       (call $keccak (local.get $round))
@@ -619,7 +636,7 @@
     (local $w3 i32)
     (local $w4 i32)
     (local $debug_active i32)
-    ;; (local.set $debug_active (i32.const 1))
+    (local.set $debug_active (i32.const 1))
     (call $log.fnEnter (local.get $debug_active) (i32.const 2))
 
     (local.set $w0          (global.get $THETA_C_OUT_PTR))
