@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Suppress ExperimentalWarning message when importing WASI
 process.removeAllListeners('warning')
 process.on('warning', w => w.name === 'ExperimentalWarning' ? {} : console.warn(w.name, w.message))
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { testWasmFn, PAD_MARKER_START, PAD_MARKER_END, sha3PaddingForDigest } from "./utils/test_utils.mjs"
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const inputStr = "The quick brown fox jumps over the lazy dog"
 const digestLengths = [224, 256, 384, 512]
 
@@ -18,7 +18,7 @@ for (const digestLength of digestLengths) {
   const paddedInputBlk = sha3PaddingForDigest(digestLength, inputStr)
   const testData = await import(`./test_data/digest_${digestLength}.mjs`)
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testXorDataWithRate = {
     wasmTestFnName: "test_xor_data_with_rate",
     wasmTestFnArgs: [digestLength],
@@ -29,7 +29,7 @@ for (const digestLength of digestLengths) {
     expected: testData.XOR_DATA_WITH_RATE_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testThetaC1 = {
     wasmTestFnName: "test_theta_c",
     wasmTestFnArgs: [digestLength, 1],
@@ -40,7 +40,7 @@ for (const digestLength of digestLengths) {
     expected: testData.THETA_C_1_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testThetaC2 = {
     wasmTestFnName: "test_theta_c",
     wasmTestFnArgs: [digestLength, 2],
@@ -51,7 +51,7 @@ for (const digestLength of digestLengths) {
     expected: testData.THETA_C_2_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testThetaC3 = {
     wasmTestFnName: "test_theta_c",
     wasmTestFnArgs: [digestLength, 3],
@@ -62,7 +62,7 @@ for (const digestLength of digestLengths) {
     expected: testData.THETA_C_3_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testThetaC4 = {
     wasmTestFnName: "test_theta_c",
     wasmTestFnArgs: [digestLength, 4],
@@ -73,7 +73,7 @@ for (const digestLength of digestLengths) {
     expected: testData.THETA_C_4_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testThetaC = {
     wasmTestFnName: "test_theta_c",
     wasmTestFnArgs: [digestLength, 5],
@@ -84,7 +84,7 @@ for (const digestLength of digestLengths) {
     expected: testData.THETA_C_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testThetaD = {
     wasmTestFnName: "test_theta_d",
     wasmTestFnArgs: [digestLength],
@@ -95,7 +95,7 @@ for (const digestLength of digestLengths) {
     expected: testData.THETA_D_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testThetaXorLoop = {
     wasmTestFnName: "test_theta_xor_loop",
     wasmTestFnArgs: [digestLength],
@@ -107,7 +107,7 @@ for (const digestLength of digestLengths) {
     expected: testData.THETA_XOR_LOOP_RESULT,
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testTheta = {
     wasmTestFnName: "test_theta",
     wasmTestFnArgs: [digestLength],
@@ -118,7 +118,7 @@ for (const digestLength of digestLengths) {
     expected: testData.THETA_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testRho = {
     wasmTestFnName: "rho",
     wasmInputData: [
@@ -128,7 +128,7 @@ for (const digestLength of digestLengths) {
     expected: testData.RHO_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testPi = {
     wasmTestFnName: "pi",
     wasmInputData: [
@@ -138,7 +138,7 @@ for (const digestLength of digestLengths) {
     expected: testData.PI_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testChi = {
     wasmTestFnName: "chi",
     wasmInputData: [
@@ -148,7 +148,7 @@ for (const digestLength of digestLengths) {
     expected: testData.CHI_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testIota = {
     wasmTestFnName: "test_iota",
     wasmInputData: [
@@ -158,7 +158,7 @@ for (const digestLength of digestLengths) {
     expected: testData.IOTA_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testThetaRho = {
     wasmTestFnName: "test_theta_rho",
     wasmTestFnArgs: [digestLength],
@@ -169,7 +169,7 @@ for (const digestLength of digestLengths) {
     expected: testData.RHO_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testThetaRhoPi = {
     wasmTestFnName: "test_theta_rho_pi",
     wasmTestFnArgs: [digestLength],
@@ -180,7 +180,7 @@ for (const digestLength of digestLengths) {
     expected: testData.PI_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testThetaRhoPiChi = {
     wasmTestFnName: "test_theta_rho_pi_chi",
     wasmTestFnArgs: [digestLength],
@@ -191,7 +191,7 @@ for (const digestLength of digestLengths) {
     expected: testData.CHI_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testThetaRhoPiChiIota = {
     wasmTestFnName: "test_theta_rho_pi_chi_iota",
     wasmTestFnArgs: [digestLength],
@@ -202,7 +202,7 @@ for (const digestLength of digestLengths) {
     expected: testData.IOTA_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testKeccak1 = {
     wasmTestFnName: "test_keccak",
     wasmTestFnArgs: [digestLength, 1],
@@ -213,7 +213,7 @@ for (const digestLength of digestLengths) {
     expected: testData.IOTA_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testKeccak2 = {
     wasmTestFnName: "test_keccak",
     wasmTestFnArgs: [digestLength, 2],
@@ -224,7 +224,7 @@ for (const digestLength of digestLengths) {
     expected: testData.KECCAK_2_RESULT
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testKeccak24 = {
     wasmTestFnName: "test_keccak",
     wasmTestFnArgs: [digestLength, 24],
@@ -237,9 +237,9 @@ for (const digestLength of digestLengths) {
       ...testData.KECCAK_24_CAPACITY,
     ]
   }
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   // Test that the generated rate block has been padded correctly
-  test(`Rate block padding for digest length ${digestLength}`, () => {
+  test(`\n---- Rate block padding for digest length ${digestLength} ----`, () => {
     assert.equal(
       paddedInputBlk[inputStr.length],
       PAD_MARKER_START,
@@ -252,7 +252,7 @@ for (const digestLength of digestLengths) {
     )
   })
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   // Test SHA3 WASM functions
   testWasmFn(testXorDataWithRate)
   testWasmFn(testThetaC1)
