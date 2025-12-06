@@ -9,6 +9,15 @@ const debugWasmBinPath = "./bin/debug.wasm"
 
 const readWasmBinary = pathToWasmBin => new Uint8Array(readFileSync(pathToWasmBin))
 
+const logMsgHdr = (fnId, msgId) => `${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]}`
+const logSingleI64 = (isDebug, fnId, msgId, i64) => isDebug ? console.log(`${logMsgHdr(fnId, msgId)} = ${u64AsHexStr(i64)}`) : {}
+const logSingleI32 = (isDebug, fnId, msgId, i32) => isDebug ? console.log(`${logMsgHdr(fnId, msgId)} = ${u32AsHexStr(i32)}`) : {}
+const logSingleDec = (isDebug, fnId, msgId, dec) => isDebug ? console.log(`${logMsgHdr(fnId, msgId)} = ${dec}`) : {}
+const logMappedPair = (isDebug, fnId, msgId, v1, v2) => isDebug ? console.log(`${logMsgHdr(fnId, msgId)}: ${v1} -> ${v2}`) : {}
+const logCoordPair = (isDebug, fnId, msgId, v1, v2) => isDebug ? console.log(`${logMsgHdr(fnId, msgId)} = (${v1},${v2})`) : {}
+const logSingleBigInt = (isDebug, fnId, msgId, i64) => isDebug ? console.log(`${logMsgHdr(fnId, msgId)} = ${i64}`) : {}
+const logLabel = (isDebug, labelId) => isDebug ? console.log(debugLabels[labelId]) : {}
+
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Instantiate the WASM module
 const startWasm =
@@ -37,29 +46,17 @@ const startWasm =
         hexdump: debugModule.instance.exports.hexdump
       },
       log: {
-        fnEnter: (debugActive, fnId) => debugActive ? console.log(`===> ${debugMsgs[fnId].fnName}`) : {},
-        fnExit: (debugActive, fnId) => debugActive ? console.log(`<=== ${debugMsgs[fnId].fnName}`) : {},
-        fnEnterNth: (debugActive, fnId, n) => debugActive ? console.log(`===> ${debugMsgs[fnId].fnName} ${n}`) : {},
-        fnExitNth: (debugActive, fnId, n) => debugActive ? console.log(`<=== ${debugMsgs[fnId].fnName} ${n}`) : {},
-        singleI64: (debugActive, fnId, msgId, i64) => debugActive
-          ? console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${u64AsHexStr(i64)}`)
-          : {},
-        singleI32: (debugActive, fnId, msgId, i32) => debugActive
-          ? console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${u32AsHexStr(i32)}`)
-          : {},
-        singleDec: (debugActive, fnId, msgId, i32) => debugActive
-          ? console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i32}`)
-          : {},
-        mappedPair: (debugActive, fnId, msgId, v1, v2) => debugActive
-          ? console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]}: ${v1} -> ${v2}`)
-          : {},
-        coordinatePair: (debugActive, fnId, msgId, v1, v2) => debugActive
-          ? console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = (${v1},${v2})`)
-          : {},
-        singleBigInt: (debugActive, fnId, msgId, i64) => debugActive
-          ? console.log(`${debugMsgs[fnId].fnName} ${debugMsgs[fnId].msgId[msgId]} = ${i64}`)
-          : {},
-        label: (debugActive, labelId) => debugActive ? console.log(debugLabels[labelId]) : {},
+        fnEnter: (isDebug, fnId) => isDebug ? console.log(`===> ${debugMsgs[fnId].fnName}`) : {},
+        fnExit: (isDebug, fnId) => isDebug ? console.log(`<=== ${debugMsgs[fnId].fnName}`) : {},
+        fnEnterNth: (isDebug, fnId, n) => isDebug ? console.log(`===> ${debugMsgs[fnId].fnName} ${n}`) : {},
+        fnExitNth: (isDebug, fnId, n) => isDebug ? console.log(`<=== ${debugMsgs[fnId].fnName} ${n}`) : {},
+        singleI64: logSingleI64,
+        singleI32: logSingleI32,
+        singleDec: logSingleDec,
+        mappedPair: logMappedPair,
+        coordinatePair: logCoordPair,
+        singleBigInt: logSingleBigInt,
+        label: logLabel,
       }
     }
 
