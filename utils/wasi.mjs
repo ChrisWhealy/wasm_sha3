@@ -36,10 +36,10 @@ const startWasm =
         hexdump: debugModule.instance.exports.hexdump
       },
       log: {
-        fnEnter: log.doFnEnter,
-        fnExit: log.doFnExit,
-        fnEnterNth: log.doFnEnterNth,
-        fnExitNth: log.doFnExitNth,
+        fnEnter: log.fnEnter,
+        fnExit: log.fnExit,
+        fnEnterNth: log.fnEnterNth,
+        fnExitNth: log.fnExitNth,
         singleI64: log.singleI64,
         singleI32: log.singleI32,
         singleDec: log.singleDec,
