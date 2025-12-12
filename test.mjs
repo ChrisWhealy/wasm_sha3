@@ -237,6 +237,7 @@ for (const digestLength of digestLengths) {
       ...testData.KECCAK_24_CAPACITY,
     ]
   }
+  
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   // Test that the generated rate block has been padded correctly
   test(`\n---- Rate block padding for digest length ${digestLength} ----`, () => {
