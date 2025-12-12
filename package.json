@@ -7,12 +7,14 @@
   "scripts": {
     "compile_sha3": "wat2wasm --debug-names --enable-multi-memory ./src/sha3.wat -o ./bin/sha3.wasm",
     "compile_debug": "wat2wasm --debug-names --enable-multi-memory  ./src/debug.wat -o ./bin/debug.wasm",
+    "compile_tests": "wat2wasm --debug-names --enable-multi-memory  ./src/tests.wat -o ./bin/tests.wasm",
     "opt_sha3": "wasm-opt ./bin/sha3.wasm --enable-simd --enable-multimemory --enable-multivalue --enable-bulk-memory -O4 -o ./bin/sha3.opt.wasm",
     "opt_debug": "wasm-opt ./bin/debug.wasm --enable-simd --enable-multimemory --enable-multivalue -O4 -o ./bin/debug.opt.wasm",
-    "build": "npm run compile_sha3 && npm run compile_debug  && npm run opt_sha3 && npm run opt_debug",
+    "opt_tests": "wasm-opt ./bin/tests.wasm --enable-simd --enable-multimemory --enable-multivalue -O4 -o ./bin/tests.opt.wasm",
+    "build": "npm run compile_sha3 && npm run compile_debug && npm run compile_tests && npm run opt_sha3 && npm run opt_debug && npm run opt_tests",
     "clean": "rm ./bin/*.wasm",
-    "exec": "npm run build && ./test.mjs",
-    "exec-clean": "npm run clean && npm run build && ./test.mjs"
+    "test": "npm run build && ./test.mjs",
+    "test-clean": "npm run clean && npm run build && ./test.mjs"
   },
   "keywords": [
     "SHA3",

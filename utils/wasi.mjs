@@ -5,12 +5,13 @@ import * as log from "./logging.mjs"
 // Use non-optimized binaries during testing
 const sha3WasmBinPath = "./bin/sha3.wasm"
 const debugWasmBinPath = "./bin/debug.wasm"
+const testWasmBinPath = "./bin/tests.wasm"
 
 const readWasmBinary = pathToWasmBin => new Uint8Array(readFileSync(pathToWasmBin))
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-// Instantiate the WASM module
-const startWasm =
+// Instantiate the SHA3 WASM module
+const startSha3Wasm =
   async () => {
     // Start debug module using WASI
     const wasi = new WASI({
@@ -53,6 +54,30 @@ const startWasm =
     return await WebAssembly.instantiate(readWasmBinary(sha3WasmBinPath), debugEnv)
   }
 
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Instantiate the test WASM module as a wrapper around the SHA3 module
+const startTestWasm =
+  async sha3WasmMod => {
+    let testEnv = {
+      sha3: {
+        prepareState: sha3WasmMod.instance.exports.prepare_state,
+        thetaC: sha3WasmMod.instance.exports.theta_c,
+        thetaD: sha3WasmMod.instance.exports.theta_d,
+        thetaXorLoop: sha3WasmMod.instance.exports.theta_xor_loop,
+        theta: sha3WasmMod.instance.exports.theta,
+        rho: sha3WasmMod.instance.exports.rho,
+        pi: sha3WasmMod.instance.exports.pi,
+        chi: sha3WasmMod.instance.exports.chi,
+        iota: sha3WasmMod.instance.exports.iota,
+        keccak: sha3WasmMod.instance.exports.keccak,
+        sponge: sha3WasmMod.instance.exports.sponge,
+      },
+    }
+
+    return await WebAssembly.instantiate(readWasmBinary(testWasmBinPath), testEnv)
+  }
+
 export {
-  startWasm
+  startSha3Wasm,
+  startTestWasm,
 }

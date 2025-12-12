@@ -178,6 +178,7 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $prepare_state
+        (export "prepare_state")
         (param $init_mem      i32) ;; Initialise state memory?
         (param $copy_to_a_blk i32) ;; Copy state to Theta A block?
         (param $digest_len    i32) ;; Defaults to 256
@@ -297,98 +298,31 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "test_xor_data_with_rate")
-        (param $digest_len i32)
-    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
+  ;; Transform $row and $col indices into a memory offset following the indexing convention
+  ;; Return the offset stored at STATE_IDX_TAB[($row * 5) + $col]
+  (func $xy_to_state_offset
+        (param $row i32)
+        (param $col i32)
+        (result i32)
+
+    ;; Return offset from the state index table
+    (i32.load
+      (memory $main)
+      (i32.add
+        (global.get $STATE_IDX_TAB)
+        ;; Multiply linear index by 4 to derive offset within the state index table
+        (i32.shl
+          ;; Transform 5x5 row/col coordinates to a linear index
+          (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $col))
+          (i32.const 2)
+        )
+      )
+    )
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "test_theta_c")
-        (param $digest_len i32)
-        (param $rounds i32)
-    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
-    (call $theta_c (local.get $rounds))
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "test_theta_d")
-        (param $digest_len i32)
-
-    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
-    (call $theta_c (i32.const 5))
-    (call $theta_d)
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "test_theta_xor_loop")
-        (param $digest_len i32)
-
-    (call $prepare_state (i32.const 1) (i32.const 0) (local.get $digest_len))
-    (call $theta_xor_loop)
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "test_theta")
-        (param $digest_len i32)
-
-    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
-    (call $theta)
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "test_iota")
-    (call $iota (i32.const 0))
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Test a succession of the inner Keccak functions
-  (func (export "test_theta_rho")
-        (param $digest_len i32)
-
-    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
-    (call $theta)
-    (call $rho)
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Test a succession of the inner Keccak functions
-  (func (export "test_theta_rho_pi")
-        (param $digest_len i32)
-
-    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
-    (call $theta)
-    (call $rho)
-    (call $pi)
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Test a succession of the inner Keccak functions
-  (func (export "test_theta_rho_pi_chi")
-        (param $digest_len i32)
-
-    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
-    (call $theta)
-    (call $rho)
-    (call $pi)
-    (call $chi)
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Test a succession of the inner Keccak functions
-  (func (export "test_theta_rho_pi_chi_iota")
-        (param $digest_len i32)
-
-    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
-    (call $theta)
-    (call $rho)
-    (call $pi)
-    (call $chi)
-    (call $iota (i32.const 0))
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Perform $n rounds of the Keccak function against the 64-byte block of data at $DATA_PTR
-  (func (export "test_keccak")
+  ;; Run the absorb and squeeze phases of the sponge function
+  (func (export "sponge")
         (param $digest_len i32)
         (param $n i32)
 
@@ -397,7 +331,7 @@
 
     ;; (local.set $debug_active (i32.const 1))
 
-    (call $log.fnEnter (local.get $debug_active) (i32.const 12))
+    (call $log.fnEnter (local.get $debug_active) (i32.const 13))
 
     (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
 
@@ -443,36 +377,13 @@
         (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
       )
     )
-    (call $log.fnExit (local.get $debug_active) (i32.const 12))
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Transform $row and $col indices into a memory offset following the indexing convention
-  ;; Return the offset stored at STATE_IDX_TAB[($row * 5) + $col]
-  (func $xy_to_state_offset
-        (param $row i32)
-        (param $col i32)
-        (result i32)
-
-    ;; Return offset from the state index table
-    (i32.load
-      (memory $main)
-      (i32.add
-        (global.get $STATE_IDX_TAB)
-        ;; Multiply linear index by 4 to derive offset within the state index table
-        (i32.shl
-          ;; Transform 5x5 row/col coordinates to a linear index
-          (i32.add (i32.mul (local.get $row) (i32.const 5)) (local.get $col))
-          (i32.const 2)
-        )
-      )
-    )
+    (call $log.fnExit (local.get $debug_active) (i32.const 13))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Perform a single round of the Keccak function
   ;; The output lives at $CHI_RESULT_PTR because the iota function performs an in-place modification
-  (func $keccak
+  (func $keccak (export "keccak")
         (param $round i32)
     (local $debug_active i32)
     ;; (local.set $debug_active (i32.const 1))
@@ -538,7 +449,7 @@
   ;;
   ;; The parameter $n is only needed to test a single round of $theta_c_inner.
   ;; In normal operation, this parameter is hard-coded to 5
-  (func $theta_c
+  (func $theta_c (export "theta_c")
         (param $n i32)
     (local $result i64)
     (local $to_ptr i32)
@@ -651,7 +562,7 @@
   ;;
   ;; Since the above algorithm always yields fixed offsets, these values can be hard coded, thus saving the need to
   ;; perform modulo operations inside a loop
-  (func $theta_d
+  (func $theta_d (export "theta_d")
     (local $w0 i32)
     (local $w1 i32)
     (local $w2 i32)
@@ -746,7 +657,7 @@
   ;; }
   ;;
   ;; Matrix access must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
-  (func $theta_xor_loop
+  (func $theta_xor_loop (export "theta_xor_loop")
     (local $a_blk_idx    i32)
     (local $a_blk_offset i32)
     (local $a_blk_ptr    i32)

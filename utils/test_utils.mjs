@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { u8AsHexStr } from "./binary_utils.mjs"
-import { startWasm } from "./wasi.mjs"
+import { startTestWasm, startSha3Wasm } from "./wasi.mjs"
 
 const PAD_MARKER = 0x61
 const PAD_MARKER_START = 0x60
@@ -9,8 +9,8 @@ const PAD_MARKER_END = 0x01
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // For a given digest length, define the dimensions of the SHA3 internal state
-// Since this is a drop-in replacement for SHA2, not only must the digest length be one of 224, 256, 384 or 512 bits,
-// but the exponent of the word length is fixed at 6 (i.e. 64-bit words)
+// Since this is a drop-in replacement for SHA2, not are the digest lengths restricted to 224, 256, 384 or 512 bits, but
+// the exponent of the word length is fixed at 6 (i.e. 64-bit words)
 const defineInternalState = digestLen => {
   if (digestLen !== 224 && digestLen !== 256 && digestLen !== 384 && digestLen !== 512) {
     console.error(`Invalid digest length ${digestLen} supplied.  Defaulting to 256 bits`)
@@ -95,7 +95,8 @@ const testWasmFn = thisTest => {
   // Test WASM function
   test(testName,
     async () => {
-      let wasmMod = await startWasm()
+      let wasmMod = await startSha3Wasm()
+      let testMod = await startTestWasm(wasmMod)
       let wasmMem8 = new Uint8Array(wasmMod.instance.exports.memory.buffer)
 
       // Write test data to the locations in WASM memory given in the input data list
@@ -111,12 +112,15 @@ const testWasmFn = thisTest => {
         wasmMem8.set(wasmIn.inputData, writeToPtr)
       }
 
-      let wasmFn = wasmMod.instance.exports[thisTest.wasmTestFnName]
+      // let wasmFn = wasmMod.instance.exports[thisTest.wasmTestFnName]
+      let testFn = testMod.instance.exports[thisTest.wasmTestFnName]
 
       if (thisTest.wasmTestFnArgs && thisTest.wasmTestFnArgs.length > 0) {
-        wasmFn(...thisTest.wasmTestFnArgs)
+        // wasmFn(...thisTest.wasmTestFnArgs)
+        testFn(...thisTest.wasmTestFnArgs)
       } else {
-        wasmFn()
+        // wasmFn()
+        testFn()
       }
 
       // The WASM functions being tested never return any values; instead, they mutate shared memory

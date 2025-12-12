@@ -120,7 +120,7 @@ for (const digestLength of digestLengths) {
 
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testRho = {
-    wasmTestFnName: "rho",
+    wasmTestFnName: "test_rho",
     wasmInputData: [
       { writeToPtr: "THETA_RESULT_PTR", inputData: testData.THETA_RESULT },
     ],
@@ -130,7 +130,7 @@ for (const digestLength of digestLengths) {
 
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testPi = {
-    wasmTestFnName: "pi",
+    wasmTestFnName: "test_pi",
     wasmInputData: [
       { writeToPtr: "RHO_RESULT_PTR", inputData: testData.RHO_RESULT },
     ],
@@ -140,7 +140,7 @@ for (const digestLength of digestLengths) {
 
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   const testChi = {
-    wasmTestFnName: "chi",
+    wasmTestFnName: "test_chi",
     wasmInputData: [
       { writeToPtr: "PI_RESULT_PTR", inputData: testData.PI_RESULT },
     ],
@@ -225,9 +225,9 @@ for (const digestLength of digestLengths) {
   }
 
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  const testKeccak24 = {
-    wasmTestFnName: "test_keccak",
-    wasmTestFnArgs: [digestLength, 24],
+  const testSponge = {
+    wasmTestFnName: "test_sponge",
+    wasmTestFnArgs: [digestLength],
     wasmInputData: [
       { writeToPtr: "DATA_PTR", inputData: paddedInputBlk },
     ],
@@ -273,5 +273,5 @@ for (const digestLength of digestLengths) {
   testWasmFn(testThetaRhoPiChiIota)
   testWasmFn(testKeccak1)
   testWasmFn(testKeccak2)
-  testWasmFn(testKeccak24)
+  testWasmFn(testSponge)
 }

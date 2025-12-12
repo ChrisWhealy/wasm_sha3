@@ -64,6 +64,11 @@ export const debugMsgs = [
     fnName: "test_keccak",
     msgId: ["",]
   },
+  // FnId 13
+  {
+    fnName: "sponge",
+    msgId: ["",]
+  },
 ]
 
 export const debugLabels = [
