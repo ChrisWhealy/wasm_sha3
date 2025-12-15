@@ -64,18 +64,18 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Function types for WASI calls
-  ;; (type $type_wasi_path_open (func (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
-  ;; (type $type_wasi_fd_seek   (func (param i32 i64 i32 i32)                     (result i32)))
+  (type $type_wasi_path_open (func (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
+  (type $type_wasi_fd_seek   (func (param i32 i64 i32 i32)                     (result i32)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Import WASI preview 2 OS system calls
-  ;; (import "wasi_snapshot_preview2" "args_sizes_get" (func $wasi.args_sizes_get (type $type_i32*2)))
-  ;; (import "wasi_snapshot_preview2" "args_get"       (func $wasi.args_get       (type $type_i32*2)))
-  ;; (import "wasi_snapshot_preview2" "path_open"      (func $wasi.path_open      (type $type_wasi_path_open)))
-  ;; (import "wasi_snapshot_preview2" "fd_seek"        (func $wasi.fd_seek        (type $type_wasi_fd_seek)))
-  ;; (import "wasi_snapshot_preview2" "fd_read"        (func $wasi.fd_read        (type $type_i32*4)))
-  ;; (import "wasi_snapshot_preview2" "fd_write"       (func $wasi.fd_write       (type $type_i32*4)))
-  ;; (import "wasi_snapshot_preview2" "fd_close"       (func $wasi.fd_close       (type $type_i32*1)))
+  (import "wasi_snapshot_preview2" "args_sizes_get" (func $wasi.args_sizes_get (type $type_i32*2)))
+  (import "wasi_snapshot_preview2" "args_get"       (func $wasi.args_get       (type $type_i32*2)))
+  (import "wasi_snapshot_preview2" "path_open"      (func $wasi.path_open      (type $type_wasi_path_open)))
+  (import "wasi_snapshot_preview2" "fd_seek"        (func $wasi.fd_seek        (type $type_wasi_fd_seek)))
+  (import "wasi_snapshot_preview2" "fd_read"        (func $wasi.fd_read        (type $type_i32*4)))
+  (import "wasi_snapshot_preview2" "fd_write"       (func $wasi.fd_write       (type $type_i32*4)))
+  (import "wasi_snapshot_preview2" "fd_close"       (func $wasi.fd_close       (type $type_i32*1)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; To use debugging, uncomment the env and log import statements below, then, for each function in which debugging is
@@ -85,8 +85,8 @@
   ;;  * Uncomment the calls to the various $log.XXXX functions
   ;;  * If you need to see the contents of memory, uncomment the memory.copy statement and the call to $debug.hexdump
   ;;
-  (import "env" "debug"   (memory $debug 16))
-  (import "env" "hexdump" (func $debug.hexdump (type $type_i32*3)))
+  (import "debug" "memory"  (memory $debug 16))
+  (import "debug" "hexdump" (func $debug.hexdump (type $type_i32*3)))
 
   (import "log" "fnEnter"        (func $log.fnEnter      (type $type_i32*2)))
   (import "log" "fnExit"         (func $log.fnExit       (type $type_i32*2)))
@@ -101,8 +101,8 @@
   (import "log" "mappedPair"     (func $log.mappedPair   (type $type_i32*5)))
 
   ;; Memory page   1     Internal stuff
-  ;; Memory pages  2     Rate and Capacity buffers
-  (memory $main (export "memory") 2)
+  ;; Memory pages  2     File IO pointers and buffers
+  (memory $main (export "memory") 33)
 
   (global $DEBUG_IO_BUFF_PTR  i32 (i32.const 0))
   (global $FD_STDOUT          i32 (i32.const 1))
@@ -110,7 +110,7 @@
   (global $SWAP_I64_ENDIANESS v128 (v128.const i8x16 7 6 5 4 3 2 1 0 15 14 13 12 11 10 9 8))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Memory Map: Page 1
+  ;; $main Memory Map: Page 1
   ;;     Offset  Length   Type    Description
   ;; 0x00000000     200   i64x24  24 Keccak round constants
   ;; 0x000000C8     100   i32x25  Rotation table for Rho function
@@ -122,9 +122,69 @@
   ;; 0x000003D4     200   i64x25  Pi function output
   ;; 0x0000049C     200   i64x25  Chi function output
   ;; 0x00000564     100   i32x25  State index table
-  ;; Unused
+  ;; 0x000005C8      56           Unused
   ;; 0x00000600     200   i64x25  Entropy pool (fixed at 200 bytes and subdivided into rate and capacity)
+  ;; 0x000006C8           Unused
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; File IO
+  ;; 0x00000700       4   i32     file_fd
+  ;; 0x00000708       8   i64     fd_seek file size + 9
+  ;; 0x00000710       8   i32x2   Pointer to read iovec buffer address + size
+  ;; 0x00000718       8   i32x2   Pointer to write iovec buffer address + size
+  ;; 0x00000720       8   i64     Bytes transferred by the last io operation
+  ;; 0x00000730       8   i64     File size (Little endian)
+  ;; 0x00000740       8   i64     File size (Big endian)
+  ;; 0x00000750       4   i32     Pointer to file path name
+  ;; 0x00000754       4   i32     Pointer to file path length
+  ;; 0x00000758       4   i32     Number of command line arguments
+  ;; 0x0000075C       4   i32     Command line buffer size
+  ;; 0x00000760       4   i32     Pointer to array of pointers to arguments (needs double dereferencing!)
+  ;; Unused
+  ;; 0x00000800     256   data    Command line args buffer
+  ;; 0x00000900     256   i32x64  Constants - fractional part of cube root of first 64 primes
+  ;; 0x00000A00      32   i32x8   Constants - fractional part of square root of first 8 primes
+  ;; 0x00000A20      64   i32x8   Hash values
+  ;; 0x00000A60     512   data    Message digest
+  ;; 0x00000C60      64   data    ASCII representation of SHA value
+  ;; Unused
+  ;; 0x00000D00       2   data    Two ASCII spaces
+  ;; 0x00000D03       5   data    Error message prefix "Err: "
+  ;; 0x00000D08      26           Error message "File name argument missing"
+  ;; 0x00000D28      25           Error message "No such file or directory"
+  ;; 0x00000D48      24           Error message "Unable to read file size"
+  ;; 0x00000D60      21           Error message "File too large (>4Gb)"
+  ;; 0x00000D80      18           Error message "Error reading file"
+  ;; 0x00000DA0      48           Error message "Neither a directory nor a symlink to a directory"
+  ;; 0x00000DD0      19           Error message "Bad file descriptor"
+  ;; 0x00000DF0      26           Error message "Memory allocation failed: "
+  ;; 0x00000E10      23           Error message "Operation not permitted"
+  ;; 0x00000E30      25           Error message "Filename too long (<=256)"
+  ;; 0x00000E50       6           Debug message "argc: "
+  ;; 0x00000E60      14           Debug message "argv_buf_len: "
+  ;; 0x00000E70       6           Debug message "Step: "
+  ;; 0x00000E78      13           Debug message "Return code: "
+  ;; 0x00000E90      15           Debug message "msg_blk_count: "
+  ;; 0x00000FA0      19           Debug message "File size (bytes): "
+  ;; 0x00000FC0      28           Debug message "Bytes read by wasi.fd_read: "
+  ;; 0x00000FE0      20           Debug message "wasi.fd_read count: "
+  ;; 0x00001000      18           Debug message "Copy to new addr: "
+  ;; 0x00001020      18           Debug message "Copy length     : "
+  ;; 0x00001050      30           Debug message "Allocated extra memory pages: "
+  ;; 0x00001080      27           Debug message "No memory allocation needed"
+  ;; 0x000010A0      32           Debug message "Current memory page allocation: "
+  ;; 0x000010C0      25           Debug message "wasi.fd_read chunk size: "
+  ;; 0x000010E0      22           Debug message "Processing full buffer"
+  ;; 0x00001100      17           Debug message "Hit EOF (Partial)"
+  ;; 0x00001130      14           Debug message "Hit EOF (Zero)"
+  ;; 0x00001140      22           Debug message "Building empty msg blk"
+  ;; 0x00001160      18           Debug message "File size (bits): "
+  ;; 0x00001180      17           Debug message "Distance to EOB: "
+  ;; 0x000011A0      12           Debug message "EOD offset: "
+  ;; Unused
+  ;; 0x00002000       ?   data    Buffer for strings being written to the console
+  ;; 0x00002400       ?   data    Buffer for a 2Mb chunk of file data
   ;;
+
   (global $KECCAK_ROUND_CONSTANTS_PTR i32 (i32.const 0x00000000))
   ;; IMPORTANT
   ;; The round constant values listed here are deliberately given in big endian format!
@@ -194,6 +254,139 @@
   (global $CAPACITY     (export "CAPACITY")     (mut i32) (i32.const 8))
   (global $RATE_PTR     (export "RATE_PTR")          i32  (i32.const 0x00000600))
   (global $CAPACITY_PTR (export "CAPACITY_PTR") (mut i32) (i32.const 0x00000600))  ;; Offset varies with digest size
+
+  (global $FD_FILE_PTR         i32 (i32.const 0x00000700))
+  (global $FILE_SIZE_PTR       i32 (i32.const 0x00000708))
+  (global $IOVEC_READ_BUF_PTR  i32 (i32.const 0x00000710))
+  (global $IOVEC_WRITE_BUF_PTR i32 (i32.const 0x00000718))
+  (global $NREAD_PTR           i32 (i32.const 0x00000720))
+  (global $FILE_SIZE_LE_PTR    i32 (i32.const 0x00000730))
+  (global $FILE_SIZE_BE_PTR    i32 (i32.const 0x00000740))
+  (global $FILE_PATH_PTR       i32 (i32.const 0x00000750))
+  (global $FILE_PATH_LEN_PTR   i32 (i32.const 0x00000754))
+  (global $ARGS_COUNT_PTR      i32 (i32.const 0x00000758))
+  (global $ARGV_BUF_LEN_PTR    i32 (i32.const 0x0000075C))
+  (global $ARGV_PTRS_PTR       i32 (i32.const 0x00000760))
+
+  (global $ARGV_BUF_PTR        i32 (i32.const 0x00000800))
+  (global $ASCII_HASH_PTR      i32 (i32.const 0x00000C60))
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Error messages
+  (global $ASCII_SPACES        i32 (i32.const 0x00000D00))  ;; Length = 2
+  (data (memory $main) (i32.const 0x00000D00) "  ")
+
+  (global $ERR_MSG_PREFIX      i32 (i32.const 0x00000D03))  ;; Length = 5
+  (data (memory $main) (i32.const 0x00000D03) "Err: ")
+
+  (global $ERR_MSG_BAD_ARGS    i32 (i32.const 0x00000D08))  ;; Length = 43
+  (data (memory $main) (i32.const 0x00000D08) "Bad args. Expected sha256|sha224 <filename>")
+
+  (global $ERR_MSG_NOENT       i32 (i32.const 0x00000D38))  ;; Length = 25
+  (data (memory $main) (i32.const 0x00000D38) "No such file or directory")
+
+  (global $ERR_FILE_SIZE_READ  i32 (i32.const 0x00000D58))  ;; Length = 24
+  (data (memory $main) (i32.const 0x00000D58) "Unable to read file size")
+
+  (global $ERR_FILE_TOO_LARGE  i32 (i32.const 0x00000D70))  ;; Length = 21
+  (data (memory $main) (i32.const 0x00000D70) "File too large (>4Gb)")
+
+  (global $ERR_READING_FILE    i32 (i32.const 0x00000D90))  ;; Length = 18
+  (data (memory $main) (i32.const 0x00000D90) "Error reading file")
+
+  (global $ERR_NOT_DIR_SYMLINK i32 (i32.const 0x00000DB0))  ;; Length = 48
+  (data (memory $main) (i32.const 0x00000DB0) "Neither a directory nor a symlink to a directory")
+
+  (global $ERR_BAD_FD          i32 (i32.const 0x00000DE0))  ;; Length = 19
+  (data (memory $main) (i32.const 0x00000DE0) "Bad file descriptor")
+
+  (global $ERR_MEM_ALLOC       i32 (i32.const 0x00000E00))  ;; Length = 26
+  (data (memory $main) (i32.const 0x00000E00) "Memory allocation failed: ")
+
+  (global $ERR_NOT_PERMITTED   i32 (i32.const 0x00000E20))  ;; Length = 23
+  (data (memory $main) (i32.const 0x00000E20) "Operation not permitted")
+
+  (global $ERR_ARGV_TOO_LONG   i32 (i32.const 0x00000E40))  ;; Length = 25
+  (data (memory $main) (i32.const 0x00000E40) "Filename too long (>=256)")
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Debug messages (don't comment these out)
+  (global $DBG_MSG_ARGC        i32 (i32.const 0x00000E60))  ;; Length = 6
+  (data (memory $main) (i32.const 0x00000E60) "argc: ")
+
+  (global $DBG_MSG_ARGV_LEN    i32 (i32.const 0x00000E70))  ;; Length = 14
+  (data (memory $main) (i32.const 0x00000E70) "argv_buf_len: ")
+
+  (global $DBG_STEP            i32 (i32.const 0x00000E80))  ;; Length = 6
+  (data (memory $main) (i32.const 0x00000E80) "Step: ")
+
+  (global $DBG_RETURN_CODE     i32 (i32.const 0x00000E88))  ;; Length = 13
+  (data (memory $main) (i32.const 0x00000E88) "Return code: ")
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Debug messages (can be commented out)
+  ;; (global $DBG_MSG_BLK_COUNT   i32 (i32.const 0x00000EA0))  ;; Length = 15
+  ;; (data (memory $main) (i32.const 0x00000EA0) "msg_blk_count: ")
+
+  ;; (global $DBG_FILE_SIZE       i32 (i32.const 0x00000EB0))  ;; Length = 19
+  ;; (data (memory $main) (i32.const 0x00000EB0) "File size (bytes): ")
+
+  ;; (global $DBG_BYTES_READ      i32 (i32.const 0x00000ED0))  ;; Length = 28
+  ;; (data (memory $main) (i32.const 0x00000ED0) "Bytes read by wasi.fd_read: ")
+
+  ;; (global $DBG_READ_COUNT      i32 (i32.const 0x00000EF0))  ;; Length = 20
+  ;; (data (memory $main) (i32.const 0x00000EF0) "wasi.fd_read count: ")
+
+  ;; (global $DBG_COPY_MEM_TO     i32 (i32.const 0x00000F10))  ;; Length = 18
+  ;; (data (memory $main) (i32.const 0x00000F10) "Copy to new addr: ")
+
+  ;; (global $DBG_COPY_MEM_LEN    i32 (i32.const 0x00000F30))  ;; Length = 18
+  ;; (data (memory $main) (i32.const 0x00000F30) "Copy length     : ")
+
+  ;; (global $DBG_MEM_GROWN       i32 (i32.const 0x00000F50))  ;; Length = 30
+  ;; (data (memory $main) (i32.const 0x00000F50) "Allocated extra memory pages: ")
+
+  ;; (global $DBG_NO_MEM_ALLOC    i32 (i32.const 0x00000F80))  ;; Length = 27
+  ;; (data (memory $main) (i32.const 0x00000F80) "No memory allocation needed")
+
+  ;; (global $DBG_MEM_SIZE        i32 (i32.const 0x00000FA0))  ;; Length = 32
+  ;; (data (memory $main) (i32.const 0x00000FA0) "Current memory page allocation: ")
+
+  ;; (global $DBG_CHUNK_SIZE      i32 (i32.const 0x00000FC0))  ;; Length = 25
+  ;; (data (memory $main) (i32.const 0x00000FC0) "wasi.fd_read chunk size: ")
+
+  ;; (global $DBG_FULL_BUFFER     i32 (i32.const 0x00000FE0))  ;; Length = 22
+  ;; (data (memory $main) (i32.const 0x00000FE0) "Processing full buffer")
+
+  ;; (global $DBG_EOF_PARTIAL     i32 (i32.const 0x00001000))  ;; Length = 19
+  ;; (data (memory $main) (i32.const 0x00001000) "Hit EOF (Partial): ")
+
+  ;; (global $DBG_EOF_ZERO        i32 (i32.const 0x00001030))  ;; Length = 16
+  ;; (data (memory $main) (i32.const 0x00001030) "Hit EOF (Zero): ")
+
+  ;; (global $DBG_EMPTY_MSG_BLK   i32 (i32.const 0x00001040))  ;; Length = 22
+  ;; (data (memory $main) (i32.const 0x00001040) "Building empty msg blk")
+
+  ;; (global $DBG_FILE_SIZE_BITS  i32 (i32.const 0x00001060))  ;; Length = 18
+  ;; (data (memory $main) (i32.const 0x00001060) "File size (bits): ")
+
+  ;; (global $DBG_EOB_DISTANCE    i32 (i32.const 0x00001080))  ;; Length = 17
+  ;; (data (memory $main) (i32.const 0x00001080) "Distance to EOB: ")
+
+  ;; (global $DBG_EOD_OFFSET      i32 (i32.const 0x000010A0))  ;; Length = 12
+  ;; (data (memory $main) (i32.const 0x000010A0) "EOD offset: ")
+
+  ;; (global $DBG_SHA_ARG         i32 (i32.const 0x000010B0))  ;; Length = 9
+  ;; (data (memory $main) (i32.const 0x000010B0) "SHA arg: ")
+
+  (global $STR_WRITE_BUF_PTR   i32 (i32.const 0x00002000))
+
+  ;; $main Memory Map: Pages 2-33
+  (global $READ_BUFFER_PTR     i32 (i32.const 0x00010000))  ;; Start of memory page 2
+  (global $READ_BUFFER_SIZE    i32 (i32.const 0x00200000))  ;; fd_read buffer size = 2Mb
+
+  ;; If you change the value of $READ_BUFFER_SIZE, you must manually update $MSG_BLKS_PER_BUFFER!
+  (global $MSG_BLKS_PER_BUFFER i32 (i32.const 0x00008000))  ;; $READ_BUFFER_SIZE / 64
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "_start"))

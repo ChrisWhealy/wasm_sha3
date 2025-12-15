@@ -6,6 +6,10 @@ import { startTestWasm, startSha3Wasm } from "./wasi.mjs"
 const PAD_MARKER = 0x61
 const PAD_MARKER_START = 0x60
 const PAD_MARKER_END = 0x01
+const DEV_MODE = true
+
+// Use non-optimized binaries during testing
+const sha3WasmBinPath = "./bin/sha3.wasm"
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // For a given digest length, define the dimensions of the SHA3 internal state
@@ -95,7 +99,7 @@ const testWasmFn = thisTest => {
   // Test WASM function
   test(testName,
     async () => {
-      let wasmMod = await startSha3Wasm()
+      let wasmMod = await startSha3Wasm(sha3WasmBinPath, DEV_MODE)
       let testMod = await startTestWasm(wasmMod)
       let wasmMem8 = new Uint8Array(wasmMod.instance.exports.memory.buffer)
 
