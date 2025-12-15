@@ -73,16 +73,17 @@
   ;; (import "wasi_snapshot_preview2" "args_get"       (func $wasi.args_get       (type $type_i32*2)))
   ;; (import "wasi_snapshot_preview2" "path_open"      (func $wasi.path_open      (type $type_wasi_path_open)))
   ;; (import "wasi_snapshot_preview2" "fd_seek"        (func $wasi.fd_seek        (type $type_wasi_fd_seek)))
-  ;; (import "wasi_snapshot_preview2" "fd_read"        (func $wasi.fd_read        (type $type_wasi_i32*4)))
-  ;; (import "wasi_snapshot_preview2" "fd_write"       (func $wasi.fd_write       (type $type_wasi_i32*4)))
-  ;; (import "wasi_snapshot_preview2" "fd_close"       (func $wasi.fd_close       (type $type_wasi_i32*1)))
+  ;; (import "wasi_snapshot_preview2" "fd_read"        (func $wasi.fd_read        (type $type_i32*4)))
+  ;; (import "wasi_snapshot_preview2" "fd_write"       (func $wasi.fd_write       (type $type_i32*4)))
+  ;; (import "wasi_snapshot_preview2" "fd_close"       (func $wasi.fd_close       (type $type_i32*1)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; To use debugging, uncomment the import statements below then for each function in which debugging is needed:
-  ;;  * Uncomment the declaration of $debug_active
-  ;;  * Uncomment the initialization of $debug_active to 1
-  ;;  * Uncomment the calls to $log.XXXX functions
-  ;;  * If the hexdump function is also needed, uncomment the memory.copy statement and the call to $debug.hexdump
+  ;; To use debugging, uncomment the env and log import statements below, then, for each function in which debugging is
+  ;; needed:
+  ;;  * Uncomment the declaration of $debug_active and $fn_id
+  ;;  * Uncomment the initialization of $debug_active to 1 and $fn_id to whatever that function's debug ID is
+  ;;  * Uncomment the calls to the various $log.XXXX functions
+  ;;  * If you need to see the contents of memory, uncomment the memory.copy statement and the call to $debug.hexdump
   ;;
   (import "env" "debug"   (memory $debug 16))
   (import "env" "hexdump" (func $debug.hexdump (type $type_i32*3)))
@@ -120,6 +121,9 @@
   ;; 0x0000030C     200   i64x25  Rho function output
   ;; 0x000003D4     200   i64x25  Pi function output
   ;; 0x0000049C     200   i64x25  Chi function output
+  ;; 0x00000564     100   i32x25  State index table
+  ;; Unused
+  ;; 0x00000600     200   i64x25  Entropy pool (fixed at 200 bytes and subdivided into rate and capacity)
   ;;
   (global $KECCAK_ROUND_CONSTANTS_PTR i32 (i32.const 0x00000000))
   ;; IMPORTANT
@@ -182,20 +186,14 @@
     (; 56;) "\38\00\00\00" (; 64;) "\40\00\00\00" (; 72;) "\48\00\00\00" (; 40;) "\28\00\00\00" (; 48;) "\30\00\00\00"
   )
 
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Memory Map: Page 2
-  ;;     Offset  Length   Type    Description
-  ;; 0x00010000     200  i64x25   Internal state buffer - fixed at 200 bytes or 1600 bits
-  ;; 0x00010000      64   i64x8   Rate buffer
-  ;; 0x00010088     136   i64x17  Capacity buffer
-  (global $STATE_PTR    (export "STATE_PTR")    i32 (i32.const 0x00010000))  ;; Length fixed at 200
-  (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x000100C8))  ;; Length determined by the rate
+  (global $STATE_PTR    (export "STATE_PTR")    i32 (i32.const 0x00000600))  ;; Length fixed at 200
+  (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x000006C8))  ;; Length determined by the rate
 
-  ;; Default digest size = 256, so in 64-bit words, rate = 17 and capacity = 8
+  ;; Default digest size = 256 bits, so in 64-bit words, rate = 17 and capacity = 8
   (global $RATE         (export "RATE")         (mut i32) (i32.const 17))
   (global $CAPACITY     (export "CAPACITY")     (mut i32) (i32.const 8))
-  (global $RATE_PTR     (export "RATE_PTR")          i32  (i32.const 0x00010000))
-  (global $CAPACITY_PTR (export "CAPACITY_PTR") (mut i32) (i32.const 0x00010000))  ;; Length depends on digest size
+  (global $RATE_PTR     (export "RATE_PTR")          i32  (i32.const 0x00000600))
+  (global $CAPACITY_PTR (export "CAPACITY_PTR") (mut i32) (i32.const 0x00000600))  ;; Offset varies with digest size
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "_start"))

@@ -20,7 +20,7 @@ const singleI64 = (isDebug, fnId, msgId, i64) => isDebug && console.log(`${getMs
 const singleI32 = (isDebug, fnId, msgId, i32) => isDebug && console.log(`${getMsgHdr(fnId, msgId)} = ${u32AsHexStr(i32)}`)
 const singleDec = (isDebug, fnId, msgId, dec) => isDebug && console.log(`${getMsgHdr(fnId, msgId)} = ${dec}`)
 const mappedPair = (isDebug, fnId, msgId, v1, v2) => isDebug && console.log(`${getMsgHdr(fnId, msgId)}: ${v1} -> ${v2}`)
-const coordPair = (isDebug, fnId, msgId, v1, v2) => isDebug && console.log(`${getMsgHdr(fnId, msgId)} = (${v1},${v2})`)
+const coordinatePair = (isDebug, fnId, msgId, v1, v2) => isDebug && console.log(`${getMsgHdr(fnId, msgId)} = (${v1},${v2})`)
 const singleBigInt = (isDebug, fnId, msgId, i64) => isDebug && console.log(`${getMsgHdr(fnId, msgId)} = ${i64}`)
 const label = (isDebug, labelId) => isDebug && console.log(debugLabels[labelId])
 
@@ -33,7 +33,7 @@ export {
   singleI32,
   singleDec,
   mappedPair,
-  coordPair,
+  coordinatePair,
   singleBigInt,
   label,
 }

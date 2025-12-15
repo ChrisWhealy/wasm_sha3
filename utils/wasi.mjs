@@ -36,19 +36,7 @@ const startSha3Wasm =
         debug: debugModule.instance.exports.memory,
         hexdump: debugModule.instance.exports.hexdump
       },
-      log: {
-        fnEnter: log.fnEnter,
-        fnExit: log.fnExit,
-        fnEnterNth: log.fnEnterNth,
-        fnExitNth: log.fnExitNth,
-        singleI64: log.singleI64,
-        singleI32: log.singleI32,
-        singleDec: log.singleDec,
-        mappedPair: log.mappedPair,
-        coordinatePair: log.coordPair,
-        singleBigInt: log.singleBigInt,
-        label: log.label,
-      }
+      log,
     }
 
     return await WebAssembly.instantiate(readWasmBinary(sha3WasmBinPath), debugEnv)
