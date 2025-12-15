@@ -63,20 +63,41 @@
   (type $type_i32*3_i64 (func (param i32 i32 i32 i64)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; (import "env" "debug"   (memory $debug 16))
-  ;; (import "env" "hexdump" (func $debug.hexdump (type $type_i32*3)))
+  ;; Function types for WASI calls
+  ;; (type $type_wasi_path_open (func (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
+  ;; (type $type_wasi_fd_seek   (func (param i32 i64 i32 i32)                     (result i32)))
 
-  ;; (import "log" "fnEnter"        (func $log.fnEnter      (type $type_i32*2)))
-  ;; (import "log" "fnExit"         (func $log.fnExit       (type $type_i32*2)))
-  ;; (import "log" "fnEnterNth"     (func $log.fnEnterNth   (type $type_i32*3)))
-  ;; (import "log" "fnExitNth"      (func $log.fnExitNth    (type $type_i32*3)))
-  ;; (import "log" "singleI64"      (func $log.singleI64    (type $type_i32*3_i64)))
-  ;; (import "log" "singleI32"      (func $log.singleI32    (type $type_i32*4)))
-  ;; (import "log" "singleDec"      (func $log.singleDec    (type $type_i32*4)))
-  ;; (import "log" "singleBigInt"   (func $log.singleBigInt (type $type_i32*3_i64)))
-  ;; (import "log" "label"          (func $log.label        (type $type_i32*2)))
-  ;; (import "log" "coordinatePair" (func $log.coords       (type $type_i32*5)))
-  ;; (import "log" "mappedPair"     (func $log.mappedPair   (type $type_i32*5)))
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Import WASI preview 2 OS system calls
+  ;; (import "wasi_snapshot_preview2" "args_sizes_get" (func $wasi.args_sizes_get (type $type_i32*2)))
+  ;; (import "wasi_snapshot_preview2" "args_get"       (func $wasi.args_get       (type $type_i32*2)))
+  ;; (import "wasi_snapshot_preview2" "path_open"      (func $wasi.path_open      (type $type_wasi_path_open)))
+  ;; (import "wasi_snapshot_preview2" "fd_seek"        (func $wasi.fd_seek        (type $type_wasi_fd_seek)))
+  ;; (import "wasi_snapshot_preview2" "fd_read"        (func $wasi.fd_read        (type $type_wasi_i32*4)))
+  ;; (import "wasi_snapshot_preview2" "fd_write"       (func $wasi.fd_write       (type $type_wasi_i32*4)))
+  ;; (import "wasi_snapshot_preview2" "fd_close"       (func $wasi.fd_close       (type $type_wasi_i32*1)))
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; To use debugging, uncomment the import statements below then for each function in which debugging is needed:
+  ;;  * Uncomment the declaration of $debug_active
+  ;;  * Uncomment the initialization of $debug_active to 1
+  ;;  * Uncomment the calls to $log.XXXX functions
+  ;;  * If the hexdump function is also needed, uncomment the memory.copy statement and the call to $debug.hexdump
+  ;;
+  (import "env" "debug"   (memory $debug 16))
+  (import "env" "hexdump" (func $debug.hexdump (type $type_i32*3)))
+
+  (import "log" "fnEnter"        (func $log.fnEnter      (type $type_i32*2)))
+  (import "log" "fnExit"         (func $log.fnExit       (type $type_i32*2)))
+  (import "log" "fnEnterNth"     (func $log.fnEnterNth   (type $type_i32*3)))
+  (import "log" "fnExitNth"      (func $log.fnExitNth    (type $type_i32*3)))
+  (import "log" "singleI64"      (func $log.singleI64    (type $type_i32*3_i64)))
+  (import "log" "singleI32"      (func $log.singleI32    (type $type_i32*4)))
+  (import "log" "singleDec"      (func $log.singleDec    (type $type_i32*4)))
+  (import "log" "singleBigInt"   (func $log.singleBigInt (type $type_i32*3_i64)))
+  (import "log" "label"          (func $log.label        (type $type_i32*2)))
+  (import "log" "coordinatePair" (func $log.coords       (type $type_i32*5)))
+  (import "log" "mappedPair"     (func $log.mappedPair   (type $type_i32*5)))
 
   ;; Memory page   1     Internal stuff
   ;; Memory pages  2     Rate and Capacity buffers
@@ -177,6 +198,9 @@
   (global $CAPACITY_PTR (export "CAPACITY_PTR") (mut i32) (i32.const 0x00010000))  ;; Length depends on digest size
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func (export "_start"))
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $prepare_state
         (export "prepare_state")
         (param $init_mem      i32) ;; Initialise state memory?
@@ -184,10 +208,13 @@
         (param $digest_len    i32) ;; Defaults to 256
 
     ;; (local $debug_active i32)
-    ;; (local.set $debug_active (i32.const 1))
+    ;; (local $fn_id        i32)
 
-    ;; (call $log.fnEnter (local.get $debug_active) (i32.const 10))
-    ;; (call $log.singleDec (local.get $debug_active) (i32.const 10) (i32.const 2) (local.get $digest_len))
+    ;; (local.set $debug_active (i32.const 1))
+    ;; (local.set $fn_id (i32.const 10))
+
+    ;; (call $log.fnEnter   (local.get $debug_active) (local.get $fn_id))
+    ;; (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $digest_len))
 
     ;; If $digest_len is not one of 224, 256, 384 or 512, then default to 256
     (block $digest_ok
@@ -223,8 +250,8 @@
     ;; Partition the internal state for the given rate/capacity
     (global.set $CAPACITY_PTR (i32.add (global.get $STATE_PTR) (i32.shl (global.get $RATE) (i32.const 3))))
 
-    ;; (call $log.singleDec (local.get $debug_active) (i32.const 10) (i32.const 0) (global.get $RATE))
-    ;; (call $log.singleDec (local.get $debug_active) (i32.const 10) (i32.const 1) (global.get $CAPACITY))
+    ;; (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (global.get $RATE))
+    ;; (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 1) (global.get $CAPACITY))
 
     ;; XOR first input block with the rate
     (call $xor_data_with_rate (global.get $RATE))
@@ -242,7 +269,7 @@
       )
     )
 
-    ;; (call $log.fnExit (local.get $debug_active) (i32.const 10))
+    ;; (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -250,13 +277,17 @@
   ;; The data is wrtten to the rate in the order determined by the indexing convention
   (func $xor_data_with_rate
         (param $rate_words i32)
-    (local $data_idx    i32)
-    (local $rate_offset i32)
-    (local $rate_ptr    i32)
-    ;; (local $debug_active i32)
-    ;; (local.set $debug_active (i32.const 1))
 
-    ;; (call $log.fnEnter (local.get $debug_active) (i32.const 11))
+    (local $data_idx     i32)
+    (local $rate_offset  i32)
+    (local $rate_ptr     i32)
+    ;; (local $debug_active i32)
+    ;; (local $fn_id        i32)
+
+    ;; (local.set $debug_active (i32.const 1))
+    ;; (local.set $fn_id (i32.const 11))
+
+    ;; (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
 
     (loop $xor_loop
       ;; Derive the offset within the rate at which the n'th i64 in the incoming data should be written
@@ -268,7 +299,13 @@
       )
       (local.set $rate_ptr (i32.add (global.get $RATE_PTR) (local.get $rate_offset)))
 
-      ;; (call $log.mappedPair (local.get $debug_active) (i32.const 11) (i32.const 0) (local.get $data_idx) (local.get $rate_offset))
+      ;; (call $log.mappedPair
+      ;;   (local.get $debug_active)
+      ;;   (local.get $fn_id)
+      ;;   (i32.const 0)
+      ;;   (local.get $data_idx)
+      ;;   (local.get $rate_offset)
+      ;; )
 
       (i64.store
         (memory $main)
@@ -284,17 +321,21 @@
       (br_if $xor_loop)
     )
 
-    ;; (memory.copy
-    ;;   (memory $debug)                 ;; Copy to memory
-    ;;   (memory $main)                  ;; Copy from memory
-    ;;   (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-    ;;   (global.get $STATE_PTR)         ;; Copy from address
-    ;;   (i32.const 200)                 ;; Length
+    ;; (if (local.get $debug_active)
+    ;;   (then
+    ;;     (memory.copy
+    ;;       (memory $debug)                 ;; Copy to memory
+    ;;       (memory $main)                  ;; Copy from memory
+    ;;       (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+    ;;       (global.get $STATE_PTR)         ;; Copy from address
+    ;;       (i32.const 200)                 ;; Length
+    ;;     )
+    ;;     (call $log.label (local.get $debug_active) (i32.const 3))
+    ;;     (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+    ;;   )
     ;; )
-    ;; (call $log.label (local.get $debug_active) (i32.const 3))
-    ;; (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
 
-    ;; (call $log.fnExit (local.get $debug_active) (i32.const 11))
+    ;; (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -324,15 +365,16 @@
   ;; Run the absorb and squeeze phases of the sponge function
   (func (export "sponge")
         (param $digest_len i32)
-        (param $n i32)
+        (param $n          i32)
 
-    (local $round i32)
+    (local $round        i32)
     ;; (local $debug_active i32)
+    ;; (local $fn_id        i32)
 
     ;; (local.set $debug_active (i32.const 1))
+    ;; (local.set $fn_id (i32.const 13))
 
-    ;; (call $log.fnEnter (local.get $debug_active) (i32.const 13))
-
+    ;; (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
     (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
 
     (loop $next_round
@@ -377,7 +419,7 @@
     ;;     (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
     ;;   )
     ;; )
-    ;; (call $log.fnExit (local.get $debug_active) (i32.const 13))
+    ;; (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -385,9 +427,14 @@
   ;; The output lives at $CHI_RESULT_PTR because the iota function performs an in-place modification
   (func $keccak (export "keccak")
         (param $round i32)
+
     ;; (local $debug_active i32)
+    ;; (local $fn_id        i32)
+
     ;; (local.set $debug_active (i32.const 1))
-    ;; (call $log.fnEnterNth (local.get $debug_active) (i32.const 9) (local.get $round))
+    ;; (local.set $fn_id (i32.const 9))
+
+    ;; (call $log.fnEnterNth (local.get $debug_active) (local.get $fn_id) (local.get $round))
 
     ;; (if (local.get $debug_active)
     ;;   (then
@@ -409,7 +456,7 @@
     (call $chi)
     (call $iota (local.get $round))
 
-    ;; (call $log.fnExitNth (local.get $debug_active) (i32.const 9) (local.get $round))
+    ;; (call $log.fnExitNth (local.get $debug_active) (local.get $fn_id) (local.get $round))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -419,8 +466,12 @@
   ;; Writes 200 bytes to $THETA_RESULT_PTR
   (func $theta (export "theta")
     ;; (local $debug_active i32)
+    ;; (local $fn_id        i32)
+
     ;; (local.set $debug_active (i32.const 1))
-    ;; (call $log.fnEnter (local.get $debug_active) (i32.const 2))
+    ;; (local.set $fn_id (i32.const 15))
+
+    ;; (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
 
     (call $theta_c (i32.const 5))
     (call $theta_d)
@@ -439,7 +490,7 @@
     ;;     (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
     ;;   )
     ;; )
-    ;; (call $log.fnExit (local.get $debug_active) (i32.const 2))
+    ;; (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -451,11 +502,14 @@
   ;; In normal operation, this parameter is hard-coded to 5
   (func $theta_c (export "theta_c")
         (param $n i32)
-    (local $result i64)
-    (local $to_ptr i32)
+
+    (local $result       i64)
+    (local $to_ptr       i32)
     ;; (local $debug_active i32)
+    ;; (local $fn_id        i32)
+
     ;; (local.set $debug_active (i32.const 1))
-    ;; (call $log.fnEnter (local.get $debug_active) (i32.const 0))
+    ;; (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
 
     ;; (if (local.get $debug_active)
     ;;   (then
@@ -471,39 +525,41 @@
     ;;   )
     ;; )
 
+    ;; (local.set $fn_id (i32.const 1))
+
     (block $call_count
       ;; State row 0
       (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 80)))
       (local.set $result (call $theta_c_inner (local.get $to_ptr)))
-      ;; (call $log.singleI64 (local.get $debug_active) (i32.const 1) (i32.const 0) (local.get $result))
+      ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $result))
       (i64.store (memory $main) (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 1)))
 
       ;; State row 1
       (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 40)))
       (local.set $result (call $theta_c_inner (local.get $to_ptr)))
-      ;; (call $log.singleI64 (local.get $debug_active) (i32.const 1) (i32.const 1) (local.get $result))
+      ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $result))
       (i64.store (memory $main) offset=8 (global.get $THETA_C_OUT_PTR) (call $theta_c_inner (local.get $to_ptr)))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 2)))
 
       ;; State row 2
       (local.set $to_ptr (global.get $THETA_A_BLK_PTR))
       (local.set $result (call $theta_c_inner (local.get $to_ptr)))
-      ;; (call $log.singleI64 (local.get $debug_active) (i32.const 1) (i32.const 2) (local.get $result))
+      ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $result))
       (i64.store (memory $main) offset=16 (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 3)))
 
       ;; State row 3
       (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 160)))
       (local.set $result (call $theta_c_inner (local.get $to_ptr)))
-      ;; (call $log.singleI64 (local.get $debug_active) (i32.const 1) (i32.const 3) (local.get $result))
+      ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 3) (local.get $result))
       (i64.store (memory $main) offset=24 (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 4)))
 
       ;; State row 4
       (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 120)))
       (local.set $result (call $theta_c_inner (local.get $to_ptr)))
-      ;; (call $log.singleI64 (local.get $debug_active) (i32.const 1) (i32.const 4) (local.get $result))
+      ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 4) (local.get $result))
       (i64.store (memory $main) offset=32 (global.get $THETA_C_OUT_PTR) (local.get $result))
     )
 
@@ -563,13 +619,17 @@
   ;; Since the above algorithm always yields fixed offsets, these values can be hard coded, thus saving the need to
   ;; perform modulo operations inside a loop
   (func $theta_d (export "theta_d")
-    (local $w0 i32)
-    (local $w1 i32)
-    (local $w2 i32)
-    (local $w3 i32)
-    (local $w4 i32)
+    (local $w0           i32)
+    (local $w1           i32)
+    (local $w2           i32)
+    (local $w3           i32)
+    (local $w4           i32)
     ;; (local $debug_active i32)
+    ;; (local $fn_id        i32)
+
     ;; (local.set $debug_active (i32.const 1))
+    ;; (local.set $fn_id (i32.const 2))
+
     ;; (call $log.fnEnter (local.get $debug_active) (i32.const 2))
 
     (local.set $w0          (global.get $THETA_C_OUT_PTR))
@@ -598,7 +658,7 @@
     ;;   )
     ;; )
 
-    ;; (call $log.fnExit (local.get $debug_active) (i32.const 2))
+    ;; (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -608,12 +668,16 @@
         (param $w1_ptr i32)
         (result i64)
 
-    (local $w0  v128)
-    (local $w1  v128)
-    (local $res v128)
+    (local $w0           v128)
+    (local $w1           v128)
+    (local $res          v128)
     ;; (local $debug_active i32)
+    ;; (local $fn_id        i32)
+
     ;; (local.set $debug_active (i32.const 1))
-    ;; (call $log.fnEnter (local.get $debug_active) (i32.const 3))
+    ;; (local.set $fn_id (i32.const 3))
+
+    ;; (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
 
     ;; The byte order of $w1 must first be swapped to big endian before the rotate right operation can be performed
     (local.set $w0
@@ -643,7 +707,7 @@
     )
 
     (i64x2.extract_lane 0 (i8x16.swizzle (local.get $res) (global.get $SWAP_I64_ENDIANESS)))
-    ;; (call $log.fnExit (local.get $debug_active) (i32.const 3))
+    ;; (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -666,9 +730,12 @@
     (local $xor_result   i64)
     (local $result_ptr   i32)
     ;; (local $debug_active i32)
-    ;; (local.set $debug_active (i32.const 1))
+    ;; (local $fn_id        i32)
 
-    ;; (call $log.fnEnter (local.get $debug_active) (i32.const 4))
+    ;; (local.set $debug_active (i32.const 1))
+    ;; (local.set $fn_id (i32.const 4))
+
+    ;; (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
 
     ;; (if (local.get $debug_active)
     ;;   (then
@@ -701,7 +768,7 @@
       ;;
       ;; $a_blk_offset = $STATE_IDX_TAB + ($a_blk_idx * 4)
       ;; $a_blk_ptr = $THETA_A_BLK_PTR + $a_blk_offset
-      ;; (call $log.singleDec (local.get $debug_active) (i32.const 4) (i32.const 2) (local.get $a_blk_idx))
+      ;; (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $a_blk_idx))
 
       (local.set $a_blk_offset
         (i32.load
@@ -709,7 +776,7 @@
           (i32.add (global.get $STATE_IDX_TAB) (i32.shl (local.get $a_blk_idx) (i32.const 2)))
         )
       )
-      ;; (call $log.singleDec (local.get $debug_active) (i32.const 4) (i32.const 3) (local.get $a_blk_offset))
+      ;; (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 3) (local.get $a_blk_offset))
 
       ;; The offset of the input word and the result word should be the same
       (local.set $result_ptr (i32.add (global.get $THETA_RESULT_PTR) (local.get $a_blk_offset)))
@@ -717,9 +784,9 @@
       (local.set $a_blk_word (i64.load (memory $main) (local.get $a_blk_ptr)))
       (local.set $xor_result (i64.xor (local.get $d_fn_word) (local.get $a_blk_word)))
 
-      ;; (call $log.singleI64 (local.get $debug_active) (i32.const 4) (i32.const 0) (local.get $d_fn_word))
-      ;; (call $log.singleI64 (local.get $debug_active) (i32.const 4) (i32.const 1) (local.get $a_blk_word))
-      ;; (call $log.singleI64 (local.get $debug_active) (i32.const 4) (i32.const 4) (local.get $xor_result))
+      ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $d_fn_word))
+      ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $a_blk_word))
+      ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 4) (local.get $xor_result))
 
       (i64.store (memory $main) (local.get $result_ptr) (local.get $xor_result))
 
@@ -729,7 +796,7 @@
       (br_if $xor_loop (i32.lt_u (local.get $a_blk_idx) (i32.const 25)))
     )
 
-    ;; (call $log.fnExit (local.get $debug_active) (i32.const 4))
+    ;; (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -753,15 +820,18 @@
     (local $rot_amt      i64)
     (local $w0           i64)
     ;; (local $debug_active i32)
-    ;; (local.set $debug_active (i32.const 1))
+    ;; (local $fn_id        i32)
 
-    ;; (call $log.fnEnter (local.get $debug_active) (i32.const 5))
+    ;; (local.set $debug_active (i32.const 1))
+    ;; (local.set $fn_id (i32.const 5))
+
+    ;; (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
 
     (local.set $rot_ptr (global.get $RHOTATION_TABLE))
 
     (loop $rho_loop
       (local.set $rot_amt (i64.extend_i32_u (i32.load (memory $main) (local.get $rot_ptr))))
-      ;; (call $log.singleBigInt (local.get $debug_active) (i32.const 5) (i32.const 2) (local.get $rot_amt))
+      ;; (call $log.singleBigInt (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $rot_amt))
 
       ;; Transform loop index into state offset
       (local.set $theta_offset
@@ -788,7 +858,7 @@
           (local.get $rot_amt)
         )
       )
-      ;; (call $log.singleI64 (local.get $debug_active) (i32.const 5) (i32.const 1) (local.get $w0))
+      ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $w0))
 
       ;; Swizzle back to little endian byte order and store
       (i64.store
@@ -823,7 +893,7 @@
     ;;   )
     ;; )
 
-    ;; (call $log.fnExit (local.get $debug_active) (i32.const 5))
+    ;; (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -847,8 +917,12 @@
   ;; rather than calculated.
   (func $pi (export "pi")
     ;; (local $debug_active i32)
+    ;; (local $fn_id        i32)
+
     ;; (local.set $debug_active (i32.const 1))
-    ;; (call $log.fnEnter (local.get $debug_active) (i32.const 6))
+    ;; (local.set $fn_id (i32.const 6))
+
+    ;; (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
 
     ;; Row 2: offsets 160 - 192
     (i64.store (memory $main) offset=184 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=176 (global.get $RHO_RESULT_PTR)))
@@ -898,7 +972,7 @@
     ;;     (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
     ;;   )
     ;; )
-    ;; (call $log.fnExit (local.get $debug_active) (i32.const 6))
+    ;; (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -933,8 +1007,12 @@
     (local $w2            i64)
     (local $chi_result    i64)
     ;; (local $debug_active  i32)
+    ;; (local $fn_id         i32)
+
     ;; (local.set $debug_active (i32.const 1))
-    ;; (call $log.fnEnter (local.get $debug_active) (i32.const 7))
+    ;; (local.set $fn_id (i32.const 7))
+
+    ;; (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
 
     ;; Dump state before transformation
     ;; (if (local.get $debug_active)
@@ -960,9 +1038,9 @@
       (local.set $row+2 (i32.rem_u (i32.add (local.get $row) (i32.const 2)) (i32.const 5)))
 
       (loop $col_loop
-        ;; (call $log.coords (local.get $debug_active) (i32.const 7) (i32.const 0) (local.get $col) (local.get $row))
-        ;; (call $log.coords (local.get $debug_active) (i32.const 7) (i32.const 1) (local.get $col) (local.get $row+1))
-        ;; (call $log.coords (local.get $debug_active) (i32.const 7) (i32.const 2) (local.get $col) (local.get $row+2))
+        ;; (call $log.coords (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $col) (local.get $row))
+        ;; (call $log.coords (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $col) (local.get $row+1))
+        ;; (call $log.coords (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $col) (local.get $row+2))
 
         (local.tee $result_offset (call $xy_to_state_offset (local.get $row) (local.get $col)))
         (local.set $result_ptr (i32.add (global.get $CHI_RESULT_PTR)))
@@ -986,9 +1064,9 @@
           )
         )
 
-        ;; (call $log.singleI64 (local.get $debug_active) (i32.const 7) (i32.const 3) (local.get $w0))
-        ;; (call $log.singleI64 (local.get $debug_active) (i32.const 7) (i32.const 4) (local.get $w1))
-        ;; (call $log.singleI64 (local.get $debug_active) (i32.const 7) (i32.const 5) (local.get $w2))
+        ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 3) (local.get $w0))
+        ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 4) (local.get $w1))
+        ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 5) (local.get $w2))
 
         ;; $w0 XOR (NOT($w1) AND $w2)
         (local.set $chi_result
@@ -1000,7 +1078,7 @@
             )
           )
         )
-        ;; (call $log.singleI64 (local.get $debug_active) (i32.const 7) (i32.const 6) (local.get $chi_result))
+        ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 6) (local.get $chi_result))
 
         (i64.store (memory $main) (local.get $result_ptr) (local.get $chi_result))
 
@@ -1026,7 +1104,7 @@
     ;;     (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
     ;;   )
     ;; )
-    ;; (call $log.fnExit (local.get $debug_active) (i32.const 7))
+    ;; (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -1040,14 +1118,17 @@
   (func $iota (export "iota")
         (param $round i32)
 
-    (local $w0         i64)
-    (local $rnd_const  i64)
-    (local $xor_result i64)
+    (local $w0           i64)
+    (local $rnd_const    i64)
+    (local $xor_result   i64)
     ;; (local $debug_active i32)
-    ;; (local.set $debug_active (i32.const 1))
+    ;; (local $fn_id        i32)
 
-    ;; (call $log.fnEnter (local.get $debug_active) (i32.const 8))
-    ;; (call $log.singleDec (local.get $debug_active) (i32.const 8) (i32.const 0) (local.get $round))
+    ;; (local.set $debug_active (i32.const 1))
+    ;; (local.set $fn_id (i32.const 8))
+
+    ;; (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
+    ;; (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $round))
 
     ;; (if (local.get $debug_active)
     ;;   (then
@@ -1072,13 +1153,13 @@
         )
       )
     )
-    ;; (call $log.singleI64 (local.get $debug_active) (i32.const 8) (i32.const 1) (local.get $rnd_const))
+    ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $rnd_const))
 
     (local.set $w0 (i64.load (memory $main) (global.get $CHI_RESULT_PTR)))
-    ;; (call $log.singleI64 (local.get $debug_active) (i32.const 8) (i32.const 2) (local.get $w0))
+    ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $w0))
 
     (local.set $xor_result (i64.xor (local.get $rnd_const) (local.get $w0)))
-    ;; (call $log.singleI64 (local.get $debug_active) (i32.const 8) (i32.const 3) (local.get $xor_result))
+    ;; (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 3) (local.get $xor_result))
 
     (i64.store
       (memory $main)
@@ -1099,6 +1180,6 @@
     ;;     (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
     ;;   )
     ;; )
-    ;; (call $log.fnExit (local.get $debug_active) (i32.const 8))
+    ;; (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
   )
 )

@@ -69,6 +69,16 @@ export const debugMsgs = [
     fnName: "sponge",
     msgId: ["",]
   },
+  // FnId 14
+  {
+    fnName: "_start",
+    msgId: ["",]
+  },
+  // FnId 15
+  {
+    fnName: "theta",
+    msgId: ["",]
+  },
 ]
 
 export const debugLabels = [
