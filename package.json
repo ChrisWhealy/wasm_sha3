@@ -14,7 +14,8 @@
     "build": "npm run compile_sha3 && npm run compile_debug && npm run compile_tests && npm run opt_sha3 && npm run opt_debug && npm run opt_tests",
     "clean": "rm ./bin/*.wasm",
     "test": "npm run build && ./test.mjs",
-    "test-clean": "npm run clean && npm run build && ./test.mjs"
+    "test-clean": "npm run clean && npm run build && ./test.mjs",
+    "cli": "npm run build && ./testCLI.mjs"
   },
   "keywords": [
     "SHA3",

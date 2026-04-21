@@ -4,8 +4,8 @@ import { u8AsHexStr } from "./binary_utils.mjs"
 import { startTestWasm, startSha3Wasm } from "./wasi.mjs"
 
 const PAD_MARKER = 0x61
-const PAD_MARKER_START = 0x60
-const PAD_MARKER_END = 0x01
+const PAD_MARKER_START = 0x06
+const PAD_MARKER_END = 0x80
 const DEV_MODE = true
 
 // Use non-optimized binaries during testing
@@ -90,13 +90,57 @@ const uInt8ArrayDiff = (thisTest, wasmMod) => {
 const formatUInt8ArrayDiff = d =>
   `    at index ${d.idx}: expected ${u8AsHexStr(d.expected)}, got ${u8AsHexStr(d.got)}`
 
-
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Each test must run against its own isolated WASM instance
 const testWasmFn = thisTest => {
   let testName = `${thisTest.wasmTestFnName}(${thisTest.wasmTestFnArgs ? thisTest.wasmTestFnArgs.join(',') : ''})`
 
   // Test WASM function
+  test(testName,
+    async () => {
+      let wasmMod = await startSha3Wasm(sha3WasmBinPath, DEV_MODE)
+      let testMod = await startTestWasm(wasmMod)
+      let wasmMem8 = new Uint8Array(wasmMod.instance.exports.memory.buffer)
+
+      // Write test data to the locations in WASM memory given in the input data list
+      for (let idx = 0; idx < thisTest.wasmInputData.length; idx++) {
+        const wasmIn = thisTest.wasmInputData[idx]
+        const writeToPtr = wasmMod.instance.exports[wasmIn.writeToPtr].value
+
+        // Sanity check that we actually have some test data
+        if (!wasmIn.inputData || wasmIn.inputData.length === 0) {
+          throw new Error(`No test input data for ${testName} index ${idx}`)
+        }
+
+        wasmMem8.set(wasmIn.inputData, writeToPtr)
+      }
+
+      // let wasmFn = wasmMod.instance.exports[thisTest.wasmTestFnName]
+      let testFn = testMod.instance.exports[thisTest.wasmTestFnName]
+
+      if (thisTest.wasmTestFnArgs && thisTest.wasmTestFnArgs.length > 0) {
+        // wasmFn(...thisTest.wasmTestFnArgs)
+        testFn(...thisTest.wasmTestFnArgs)
+      } else {
+        // wasmFn()
+        testFn()
+      }
+
+      // The WASM functions being tested never return any values; instead, they mutate shared memory
+      let diffs = uInt8ArrayDiff(thisTest, wasmMod)
+
+      assert.equal(diffs.length, 0, `❌ UInt8Arrays differ\n${diffs.map(formatUInt8ArrayDiff).join('\n')}`)
+    }
+  )
+}
+
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Each test must run against its own isolated WASM instance
+const testWasiFn = thisTest => {
+  let testName = `${thisTest.wasmTestFnName}(${thisTest.wasmTestFnArgs ? thisTest.wasmTestFnArgs.join(',') : ''})`
+
+  // Test WASI function
   test(testName,
     async () => {
       let wasmMod = await startSha3Wasm(sha3WasmBinPath, DEV_MODE)

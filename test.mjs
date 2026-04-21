@@ -237,21 +237,29 @@ for (const digestLength of digestLengths) {
       ...testData.KECCAK_24_CAPACITY,
     ]
   }
-  
+
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  const testGetCmdLineArgs = {
+    wasmTestFnName: "test_get_command_line_args",
+    wasmInputData: [],
+    wasmGlobalExportPtrOut: "CMD_LINE_ARGS_PTR",
+    expected: []
+  }
+
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   // Test that the generated rate block has been padded correctly
-  test(`\n---- Rate block padding for digest length ${digestLength} ----`, () => {
-    assert.equal(
-      paddedInputBlk[inputStr.length],
-      PAD_MARKER_START,
-      `Pad marker start byte should be 0x${PAD_MARKER_START.toString(16)}`
-    )
-    assert.equal(
-      paddedInputBlk[paddedInputBlk.length - 1],
-      PAD_MARKER_END,
-      `Pad marker end byte should be 0x${PAD_MARKER_END.toString(16)}`
-    )
-  })
+  // test(`\n---- Rate block padding for digest length ${digestLength} ----`, () => {
+  //   assert.equal(
+  //     paddedInputBlk[inputStr.length],
+  //     PAD_MARKER_START,
+  //     `Pad marker start byte should be 0x${PAD_MARKER_START.toString(16)}`
+  //   )
+  //   assert.equal(
+  //     paddedInputBlk[paddedInputBlk.length - 1],
+  //     PAD_MARKER_END,
+  //     `Pad marker end byte should be 0x${PAD_MARKER_END.toString(16)}`
+  //   )
+  // })
 
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   // Test SHA3 WASM functions

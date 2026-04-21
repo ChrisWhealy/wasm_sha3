@@ -138,4 +138,5 @@
         (param $digest_len i32)
     (call $sha3.sponge (local.get $digest_len) (i32.const 24))
   )
+
 )
