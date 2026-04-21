@@ -85,20 +85,20 @@
   ;;  * Uncomment the calls to the various $log.XXXX functions
   ;;  * If you need to see the contents of memory, uncomment the memory.copy statement and the call to $debug.hexdump
   ;;
-  (import "debug" "memory"  (memory $debug 16))
-  (import "debug" "hexdump" (func $debug.hexdump (type $type_i32*3)))
+  ;; (import "debug" "memory"  (memory $debug 16))
+  ;; (import "debug" "hexdump" (func $debug.hexdump (type $type_i32*3)))
 
-  (import "log" "fnEnter"        (func $log.fnEnter      (type $type_i32*2)))
-  (import "log" "fnExit"         (func $log.fnExit       (type $type_i32*2)))
-  (import "log" "fnEnterNth"     (func $log.fnEnterNth   (type $type_i32*3)))
-  (import "log" "fnExitNth"      (func $log.fnExitNth    (type $type_i32*3)))
-  (import "log" "singleI64"      (func $log.singleI64    (type $type_i32*3_i64)))
-  (import "log" "singleI32"      (func $log.singleI32    (type $type_i32*4)))
-  (import "log" "singleDec"      (func $log.singleDec    (type $type_i32*4)))
-  (import "log" "singleBigInt"   (func $log.singleBigInt (type $type_i32*3_i64)))
-  (import "log" "label"          (func $log.label        (type $type_i32*2)))
-  (import "log" "coordinatePair" (func $log.coords       (type $type_i32*5)))
-  (import "log" "mappedPair"     (func $log.mappedPair   (type $type_i32*5)))
+  ;; (import "log" "fnEnter"        (func $log.fnEnter      (type $type_i32*2)))
+  ;; (import "log" "fnExit"         (func $log.fnExit       (type $type_i32*2)))
+  ;; (import "log" "fnEnterNth"     (func $log.fnEnterNth   (type $type_i32*3)))
+  ;; (import "log" "fnExitNth"      (func $log.fnExitNth    (type $type_i32*3)))
+  ;; (import "log" "singleI64"      (func $log.singleI64    (type $type_i32*3_i64)))
+  ;; (import "log" "singleI32"      (func $log.singleI32    (type $type_i32*4)))
+  ;; (import "log" "singleDec"      (func $log.singleDec    (type $type_i32*4)))
+  ;; (import "log" "singleBigInt"   (func $log.singleBigInt (type $type_i32*3_i64)))
+  ;; (import "log" "label"          (func $log.label        (type $type_i32*2)))
+  ;; (import "log" "coordinatePair" (func $log.coords       (type $type_i32*5)))
+  ;; (import "log" "mappedPair"     (func $log.mappedPair   (type $type_i32*5)))
 
   ;; Memory page   1     Internal stuff
   ;; Memory pages  2     File IO pointers and buffers
