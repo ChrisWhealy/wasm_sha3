@@ -12,10 +12,10 @@
 
   (global $IOVEC_WRITE_BUF_PTR i32 (i32.const 0x00100000))  ;; Starts at 1Mb
   (global $NREAD_PTR           i32 (i32.const 0x00100010))
-  (global $ASCII_SPACES        i32 (i32.const 0x00100020))  ;; Length = 2
+  (global $NYBBLE_TABLE        i32 (i32.const 0x00100020))  ;; Length = 16
   (global $IOVEC_WRITE_BUF     i32 (i32.const 0x00100100))
 
-  (data (i32.const 0x00100020) "  ")
+  (data (i32.const 0x00100020) "0123456789abcdef")
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Dummy start function (required when instantiating a module from WASI)
@@ -33,120 +33,114 @@
         (param $length  i32) ;; Length of data - must be a multiple of 16
 
     (local $buf_ptr    i32)
-    (local $buf_len    i32)
+    (local $asc_ptr    i32)
     (local $byte_count i32)
     (local $this_byte  i32)
 
     (local.set $buf_ptr (global.get $IOVEC_WRITE_BUF))
 
     (loop $lines
-      ;; Write memory address
+      ;; Write memory address (8 hex chars)
       (call $i32_to_hex_str (local.get $blk_ptr) (local.get $buf_ptr))
       (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 8)))
-      (local.set $buf_len (i32.add (local.get $buf_len) (i32.const 8)))
 
-      ;; Two ASCI spaces
-      (i32.store16 (local.get $buf_ptr) (i32.load16_u (global.get $ASCII_SPACES)))
+      ;; Two spaces
+      (i32.store16 (local.get $buf_ptr) (i32.const 0x2020))
       (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
-      (local.set $buf_len (i32.add (local.get $buf_len) (i32.const 2)))
 
-      ;; Write the next 16 bytes as space delimited hex character pairs
+      ;; Pre-set $asc_ptr to the ASCII section start:
+      ;; 8x3 (lo hex) + 1 (gap) + 8x3 (hi hex) + 2 (" |") = 51 bytes ahead
+      (local.set $asc_ptr (i32.add (local.get $buf_ptr) (i32.const 51)))
+
+      ;; Bytes 0-7: hex pairs + space delimiter, ASCII char written simultaneously
       (local.set $byte_count (i32.const 0))
-      (loop $hex_chars
-        ;; Fetch the next character
+      (loop $hex_chars_lo
         (local.set $this_byte (i32.load8_u (memory $memory) (local.get $blk_ptr)))
 
-        ;; Write the current byte as two ASCII characters
         (call $to_asc_pair (local.get $this_byte) (local.get $buf_ptr))
         (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
-        (local.set $buf_len (i32.add (local.get $buf_len) (i32.const 2)))
 
-        ;; Write a space delimiter
         (i32.store8 (local.get $buf_ptr) (i32.const 0x20))
         (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
-        (local.set $buf_len (i32.add (local.get $buf_len) (i32.const 1)))
-
-        (if ;; we've just written the 8th byte
-          (i32.eq (local.get $byte_count) (i32.const 7))
-          (then
-            ;; Write an extra space
-            (i32.store8 (local.get $buf_ptr) (i32.const 0x20))
-            (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
-            (local.set $buf_len (i32.add (local.get $buf_len) (i32.const 1)))
-          )
-        )
-
-        (local.set $byte_count (i32.add (local.get $byte_count) (i32.const 1)))
-        (local.set $blk_ptr    (i32.add (local.get $blk_ptr)    (i32.const 1)))
-
-        (br_if $hex_chars (i32.lt_u (local.get $byte_count) (i32.const 16)))
-      )
-
-      ;; Write " |"
-      (i32.store16 (local.get $buf_ptr) (i32.const 0x7C20)) ;; space + pipe (little endian)
-      (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
-      (local.set $buf_len (i32.add (local.get $buf_len) (i32.const 2)))
-
-      ;; Move $blk_ptr back 16 characters and output the same 16 bytes as ASCII characters
-      (local.set $blk_ptr (i32.sub (local.get $blk_ptr) (i32.const 16)))
-      (local.set $byte_count (i32.const 0))
-      (loop $ascii_chars
-        ;; Fetch the next character
-        (local.set $this_byte (i32.load8_u (memory $memory) (local.get $blk_ptr)))
 
         (i32.store8
-          (local.get $buf_ptr)
-          ;; Only print bytes in the 7-bit ASCII range (32 <= &this_byte < 127)
-          ;; ASCII 127 = DEL so exclude that character
+          (local.get $asc_ptr)
           (select
-            (i32.const 0x2E)       ;; Substitute a '.'
-            (local.get $this_byte) ;; Character is printable
+            (i32.const 0x2E)
+            (local.get $this_byte)
             (i32.or
               (i32.lt_u (local.get $this_byte) (i32.const 0x20))
               (i32.ge_u (local.get $this_byte) (i32.const 0x7F))
             )
           )
         )
+        (local.set $asc_ptr  (i32.add (local.get $asc_ptr)  (i32.const 1)))
+        (local.set $blk_ptr  (i32.add (local.get $blk_ptr)  (i32.const 1)))
 
-        ;; Bump all the counters etc
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
-        (local.set $buf_len (i32.add (local.get $buf_len) (i32.const 1)))
-        (local.set $blk_ptr (i32.add (local.get $blk_ptr) (i32.const 1)))
-
-        (br_if $ascii_chars
+        (br_if $hex_chars_lo
           (i32.lt_u
             (local.tee $byte_count (i32.add (local.get $byte_count) (i32.const 1)))
-            (i32.const 16)
+            (i32.const 8)
           )
         )
       )
 
-      ;; Write "|\n"
-      (i32.store16 (local.get $buf_ptr) (i32.const 0x0A7C)) ;; pipe + LF (little endian)
-      (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
-      (local.set $buf_len (i32.add (local.get $buf_len) (i32.const 2)))
-      (local.tee $length  (i32.sub (local.get $length)  (i32.const 16)))
+      ;; Extra gap space between the two byte groups
+      (i32.store8 (local.get $buf_ptr) (i32.const 0x20))
+      (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
 
-      (br_if $lines (i32.gt_s (i32.const 0)))
+      ;; Bytes 8-15: hex pairs + space delimiter, ASCII char written simultaneously
+      (local.set $byte_count (i32.const 0))
+      (loop $hex_chars_hi
+        (local.set $this_byte (i32.load8_u (memory $memory) (local.get $blk_ptr)))
+
+        (call $to_asc_pair (local.get $this_byte) (local.get $buf_ptr))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
+
+        (i32.store8 (local.get $buf_ptr) (i32.const 0x20))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
+
+        (i32.store8
+          (local.get $asc_ptr)
+          (select
+            (i32.const 0x2E)       ;; Substitute a '.' for non-printable chars
+            (local.get $this_byte)
+            (i32.or
+              (i32.lt_u (local.get $this_byte) (i32.const 0x20))
+              (i32.ge_u (local.get $this_byte) (i32.const 0x7F))
+            )
+          )
+        )
+        (local.set $asc_ptr  (i32.add (local.get $asc_ptr)  (i32.const 1)))
+        (local.set $blk_ptr  (i32.add (local.get $blk_ptr)  (i32.const 1)))
+
+        (br_if $hex_chars_hi
+          (i32.lt_u
+            (local.tee $byte_count (i32.add (local.get $byte_count) (i32.const 1)))
+            (i32.const 8)
+          )
+        )
+      )
+
+      ;; Write " |" — $buf_ptr has landed exactly at the ASCII section start
+      (i32.store16 (local.get $buf_ptr) (i32.const 0x7C20))
+
+      ;; Write "|\n" — $asc_ptr has advanced 16 bytes past the ASCII section start
+      (i32.store16 (local.get $asc_ptr) (i32.const 0x0A7C))
+
+      ;; Advance $buf_ptr to end of completed line
+      (local.set $buf_ptr (i32.add (local.get $asc_ptr) (i32.const 2)))
+
+      (br_if $lines
+        (i32.gt_s
+          (local.tee $length (i32.sub (local.get $length) (i32.const 16)))
+          (i32.const 0)
+        )
+      )
     )
 
-    (call $write (local.get $fd) (global.get $IOVEC_WRITE_BUF) (local.get $buf_len))
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Convert a nybble to its corresponding ASCII value
-  ;; Returns: i32
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $nybble_to_asc
-        (param $nybble i32)
-        (result i32)
-
-    (i32.add
-      (local.get $nybble)
-      ;; If nybble < 10 add 0x30 -> ASCII "0" to "9", else add 0x57 -> ASCII "a" to "f"
-      (select (i32.const 0x30) (i32.const 0x57)
-        (i32.lt_u (local.get $nybble) (i32.const 0x0A))
-      )
+    (call $write (local.get $fd) (global.get $IOVEC_WRITE_BUF)
+      (i32.sub (local.get $buf_ptr) (global.get $IOVEC_WRITE_BUF))
     )
   )
 
@@ -155,22 +149,18 @@
   ;; Returns: None
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $to_asc_pair
-        (param $byte    i32)  ;; Convert this byte
-        (param $out_ptr i32)  ;; Write ASCII character pair here
-    (i32.store8          (local.get $out_ptr) (call $nybble_to_asc (i32.shr_u (local.get $byte) (i32.const 4))))
-    (i32.store8 offset=1 (local.get $out_ptr) (call $nybble_to_asc (i32.and   (local.get $byte) (i32.const 0x0F))))
-  )
+        (param $byte    i32)
+        (param $out_ptr i32)
 
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Convert the i32 pointed to by arg1 into an 8 character ASCII hex string in network byte order
-  ;; Returns:
-  ;;   Indirect -> Writes output to specified location
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $i32_ptr_to_hex_str
-        (param $i32_ptr i32)  ;; Pointer to the i32 to be converted
-        (param $str_ptr i32)  ;; Write the ASCII characters here
+    ;; High nybble
+    (i32.store8 (local.get $out_ptr)
+      (i32.load8_u (i32.add (global.get $NYBBLE_TABLE) (i32.shr_u (local.get $byte) (i32.const 4))))
+    )
 
-    (call $i32_to_hex_str (i32.load (local.get $i32_ptr)) (local.get $str_ptr))
+    ;; Low nybble
+    (i32.store8 offset=1 (local.get $out_ptr)
+      (i32.load8_u (i32.add (global.get $NYBBLE_TABLE) (i32.and (local.get $byte) (i32.const 0x0F))))
+    )
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -213,14 +203,13 @@
     (i32.store          (global.get $IOVEC_WRITE_BUF_PTR)                (local.get $str_ptr))
     (i32.store (i32.add (global.get $IOVEC_WRITE_BUF_PTR) (i32.const 4)) (local.get $str_len))
 
-    ;; Write data to console
-    (call $wasi.fd_write
-      (local.get $fd)
-      (global.get $IOVEC_WRITE_BUF_PTR) ;; Location of string data's offset/length
-      (i32.const 1)                     ;; Number of iovec buffers to write
-      (global.get $NREAD_PTR)           ;; Bytes written
+    (drop ;; Don't care about the number of bytes written
+      (call $wasi.fd_write ;; Write data to console
+        (local.get $fd)
+        (global.get $IOVEC_WRITE_BUF_PTR) ;; Location of string data's offset/length
+        (i32.const 1)                     ;; Number of iovec buffers to write
+        (global.get $NREAD_PTR)           ;; Bytes written
+      )
     )
-
-    drop  ;; Don't care about the number of bytes written
   )
 )

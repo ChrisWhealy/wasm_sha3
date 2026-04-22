@@ -12,7 +12,7 @@
     "opt_debug": "wasm-opt ./bin/debug.wasm --enable-simd --enable-multimemory --enable-multivalue -O4 -o ./bin/debug.opt.wasm",
     "opt_tests": "wasm-opt ./bin/tests.wasm --enable-simd --enable-multimemory --enable-multivalue -O4 -o ./bin/tests.opt.wasm",
     "build": "npm run compile_sha3 && npm run compile_debug && npm run compile_tests && npm run opt_sha3 && npm run opt_debug && npm run opt_tests",
-    "clean": "rm ./bin/*.wasm",
+    "clean": "rm -f ./bin/*.wasm",
     "test": "npm run build && ./test.mjs",
     "test-clean": "npm run clean && npm run build && ./test.mjs",
     "cli": "npm run build && ./testCLI.mjs"
