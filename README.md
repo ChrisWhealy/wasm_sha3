@@ -7,6 +7,7 @@ An implementation of the SHA3 algorithm in WebAssembly Text based on the specifi
 # Overview
 
 The SHA3 algorithm can be used in two modes:
+
 * As a drop-in replacement for SHA2, or in
 * Extendable output function (XOF) mode
 
@@ -20,7 +21,7 @@ Therefore, `d` may only be one of `224`, `256`, `384`, or `512` bits.
 
 The SHA3 algorithm is fed input data that is used to manipulate its internal state.
 
-All internal operations acting on the internal state treat it as a 3-dimensional matrix having the dimensions `5 * 5 * w`, where `w = 2^l` and `l` is an integer in the range `0..6`.
+All internal operations acting on the internal state treat that state as if it were a 3-dimensional matrix having the dimensions `5 * 5 * w`, where `w = 2^l` and `l` is an integer in the range `0..6`.
 
 Thus, the size (`b`) of the internal state in bits may only be one of:
 
@@ -46,14 +47,15 @@ The internal state is subdivided into two regions known as the `rate` (of size `
 The `rate` is the region into which the input data is written and from which the output digest will be taken.
 It has this name because its size determines the rate at which the input data can be consumed.
 
-The `capacity` however is never made public.  Its purpose is to act as a hidden entropy pool into which the data bits in the `rate` are thoroughly mixed.
+The region known as the `capacity` however is never made public.
+Its purpose is to act as a hidden entropy pool into which the data bits in the `rate` are thoroughly mixed.
 
-Further to this, the size `c` of the capacity must be twice the size of the output digest length `d`, thus `c = 2d` making `r = 1600 - 2d`.
+Further to this, the size `c` of the capacity must always be twice the size of the output digest length `d`, thus `c = 2d` making `r = 1600 - 2d`.
 
-Given the constraints on the output digest size `d`, the sizes of `r` and `c` may only be one of the following pairs (in bits):
+Given this constraint, the sizes of `r` and `c` may only be one of the following pairs (in bits):
 
 | `d` | Security<br>Level | Calculation | `r` | `c`
-|--:|--:|---|--:|--:
+|---|---|---|--:|--:
 | `224` | `112` | `r = 1600 - (2 * 224)` | `1152` |  `448` |
 | `256` | `128` | `r = 1600 - (2 * 256)` | `1088` |  `512` |
 | `384` | `192` | `r = 1600 - (2 * 384)` |  `768` |  `832` |
@@ -113,15 +115,15 @@ Note that if the data is an exact integer multiple of the block size `r`, then a
 Now that the input data `X` has been organised into some integer number `t` of blocks of size `r` (the last of which has been appropriately padded), the "absorb" phase performs the following loop:
 
 ```rust
-  // Internal state starts as 200 initialised u64s
-  let mut state[u64; 200] = [0; 200];
-  // The rate size in bits is given by 1600 - (2 * digest_size)
-  // Assuming a digest size of 256 bits the rate size = 1600 - (2 * 256) = 1088
-  let rate_size = 1088 >>> 6;  // As u64 words
+// Internal state starts as 200 initialised u64s
+let mut state[u64; 200] = [0; 200];
+// The rate size in bits is given by 1600 - (2 * digest_size)
+// Assuming a digest size of 256 bits the rate size = 1600 - (2 * 256) = 1088
+let rate_size = 1088 >>> 6;  // As u64 words
 
-  for idx in X.size {
+for idx in X.size {
     state = keccak_f([state[0..rate_size] XOR X[idx], ...state[rate_size..]])
-  }
+}
 ```
 
 Each time a new block is read from the input data, it is `XOR`ed with the current rate and the resulting internal state passed to the Keccak function.
@@ -183,50 +185,130 @@ Each of the five, internal step functions is identified with a Greek letter and 
 
 ![Keccak Internals](./docs/keccak_internals.png)
 
+A sequence of calls to the Theta, Rho, Pi, Chi and Iota functions constitutes one round of the Keccak function.
+24 Keccak rounds are always performed per block of data read into the internal state.
+
 ## &theta; Theta
 
-This function performs three basic internal steps:
+Theta mixes each column of the state into every other column, ensuring that a change in any single lane eventually propagates to the entire state.
+It is performed in three sub-steps:
 
-1. Step Theta-C takes each column in the 5x5 matrix and XORs the `u64` row values together, thus collapsing a entire column down to a single `u64`.
+1. **Theta-C**: For each column `x`, XOR all five lanes in that column down to a single `u64` parity value.
 
    ```rust
-   fn theta_c(state: [[u64; 5]; 5]) -> [u64; 5] {
-       let mut result: [u64; 5] = [0; 5];
-       for x in 0..4 {
-           for y in 0..4 {
-               result[x] = result[x] ^ state[x][y];
-           }
+   fn theta_c(state: &[[u64; 5]; 5]) -> [u64; 5] {
+       let mut c = [0u64; 5];
+       for x in 0..5 {
+           c[x] = state[x][0] ^ state[x][1] ^ state[x][2] ^ state[x][3] ^ state[x][4];
        }
-
-       result
+       c
    }
    ```
-2. Step Theta-D takes the Theta-C output and for each `u64`, XORs the previous value MOD 5 with the next value MOD 5 rotated right by one bit
+
+2. **Theta-D**: For each column `x`, XOR the parity of the column to the left `(x-1) mod 5` with the parity of the column to the right `(x+1) mod 5` rotated left by one bit.
 
    ```rust
-   fn theta_d(c: [u64; 5]) -> [u64; 5] {
-       let mut result: [u64; 5] = [0; 5];
-       for i in 0..4 {
-           let prev: u64 = c[if i == 0 { 4 } else { i-1 }];
-           let next: u64 = c[i+1 % 5];
-           result[i] = prev ^ (next >> 1);
+   fn theta_d(c: &[u64; 5]) -> [u64; 5] {
+       let mut d = [0u64; 5];
+       for x in 0..5 {
+           d[x] = c[(x + 4) % 5] ^ c[(x + 1) % 5].rotate_left(1);
        }
-       result
+       d
    }
    ```
-3. The last step inside the Theta function is to XOR every column value in row `y` with the `y`'th value from the Theta-D step output
+
+3. **Theta XOR**: XOR every lane `A[x,y]` with `D[x]` — the mixing value derived from column `x`.
 
    ```rust
-   fn theta(state: [[u64; 5]; 5]) -> [[u64; 5]; 5] {
-       let mut result: [[u64; 5]; 5] = [[0; 5]; 5];
+   fn theta(state: &mut [[u64; 5]; 5]) {
        let c = theta_c(state);
-       let d = theta_d(c);
-
-       for y in 0..4 {
-           for x in 0..4 {
-               result[x][y] = state[x][y] ^ d[y];
+       let d = theta_d(&c);
+       for x in 0..5 {
+           for y in 0..5 {
+               state[x][y] ^= d[x];
            }
        }
-       result
    }
    ```
+
+## &rho; Rho
+
+Rho rotates each lane left by a fixed, position-dependent number of bits defined by FIPS 202 Table 2.
+Lane `A[0,0]` is not rotated.
+This step introduces diffusion in the bit-position dimension (`z`) of the state.
+
+```rust
+const RHO_OFFSETS: [[u32; 5]; 5] = [
+//   y=0  y=1  y=2  y=3  y=4
+    [  0,  36,   3,  41,  18 ],  // x=0
+    [  1,  44,  10,  45,   2 ],  // x=1
+    [ 62,   6,  43,  15,  61 ],  // x=2
+    [ 28,  55,  25,  21,  56 ],  // x=3
+    [ 27,  20,  39,   8,  14 ],  // x=4
+];
+
+fn rho(state: &mut [[u64; 5]; 5]) {
+    for x in 0..5 {
+        for y in 0..5 {
+            state[x][y] = state[x][y].rotate_left(RHO_OFFSETS[x][y]);
+        }
+    }
+}
+```
+
+## &pi; Pi
+
+Pi rearranges the lanes according to a fixed permutation.
+Each lane at position `(x, y)` is moved to position `(y, (2x + 3y) mod 5)`, or equivalently, the new lane at `(x, y)` is taken from the old lane at `((x + 3y) mod 5, x)`.
+This step provides long-range diffusion across the rows and columns of the state.
+
+```rust
+fn pi(state: &[[u64; 5]; 5]) -> [[u64; 5]; 5] {
+    let mut result = [[0u64; 5]; 5];
+    for x in 0..5 {
+        for y in 0..5 {
+            result[x][y] = state[(x + 3 * y) % 5][x];
+        }
+    }
+    result
+}
+```
+
+## &chi; Chi
+
+Chi is the only **non-linear** step in the Keccak round.
+For each lane, it XORs in a value derived from the bitwise complement of the next lane in the same row AND'ed with the lane after that.
+Because it operates across five lanes simultaneously and introduces non-linearity, it is the primary source of the cryptographic strength of SHA3.
+
+```rust
+fn chi(state: &mut [[u64; 5]; 5]) {
+    for y in 0..5 {
+        // Take a snapshot of the row before modifying it
+        let row = [state[0][y], state[1][y], state[2][y], state[3][y], state[4][y]];
+        for x in 0..5 {
+            state[x][y] = row[x] ^ ((!row[(x + 1) % 5]) & row[(x + 2) % 5]);
+        }
+    }
+}
+```
+
+## &iota; Iota
+
+Iota breaks the symmetry that would otherwise exist between rounds by XOR'ing a round-specific constant into lane `A[0,0]`.
+Without this step, every round would be identical and the entire 24-round permutation could be collapsed to a single round, drastically weakening the function.
+
+```rust
+const ROUND_CONSTANTS: [u64; 24] = [
+    0x0000000000000001, 0x0000000000008082, 0x800000000000808A, 0x8000000080008000,
+    0x000000000000808B, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
+    0x000000000000008A, 0x0000000000000088, 0x0000000080008009, 0x000000008000000A,
+    0x000000008000808B, 0x800000000000008B, 0x8000000000008089, 0x8000000000008003,
+    0x8000000000008002, 0x8000000000000080, 0x000000000000800A, 0x800000008000000A,
+    0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008,
+];
+
+fn iota(state: &mut [[u64; 5]; 5], round: usize) {
+    state[0][0] ^= ROUND_CONSTANTS[round];
+}
+```
+
