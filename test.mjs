@@ -11,6 +11,8 @@ import assert from 'node:assert/strict'
 import { testWasmFn, PAD_MARKER_START, PAD_MARKER_END, sha3PaddingForDigest } from "./utils/test_utils.mjs"
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const isProd = process.argv[2] === 'prod'
+
 const inputStr = "The quick brown fox jumps over the lazy dog"
 const digestLengths = [224, 256, 384, 512]
 
@@ -263,24 +265,24 @@ for (const digestLength of digestLengths) {
 
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   // Test SHA3 WASM functions
-  testWasmFn(testXorDataWithRate)
-  testWasmFn(testThetaC1)
-  testWasmFn(testThetaC2)
-  testWasmFn(testThetaC3)
-  testWasmFn(testThetaC4)
-  testWasmFn(testThetaC)
-  testWasmFn(testThetaD)
-  testWasmFn(testThetaXorLoop)
-  testWasmFn(testTheta)
-  testWasmFn(testRho)
-  testWasmFn(testPi)
-  testWasmFn(testChi)
-  testWasmFn(testIota)
-  testWasmFn(testThetaRho)
-  testWasmFn(testThetaRhoPi)
-  testWasmFn(testThetaRhoPiChi)
-  testWasmFn(testThetaRhoPiChiIota)
-  testWasmFn(testKeccak1)
-  testWasmFn(testKeccak2)
-  testWasmFn(testSponge)
+  testWasmFn(testXorDataWithRate, isProd)
+  testWasmFn(testThetaC1, isProd)
+  testWasmFn(testThetaC2, isProd)
+  testWasmFn(testThetaC3, isProd)
+  testWasmFn(testThetaC4, isProd)
+  testWasmFn(testThetaC, isProd)
+  testWasmFn(testThetaD, isProd)
+  testWasmFn(testThetaXorLoop, isProd)
+  testWasmFn(testTheta, isProd)
+  testWasmFn(testRho, isProd)
+  testWasmFn(testPi, isProd)
+  testWasmFn(testChi, isProd)
+  testWasmFn(testIota, isProd)
+  testWasmFn(testThetaRho, isProd)
+  testWasmFn(testThetaRhoPi, isProd)
+  testWasmFn(testThetaRhoPiChi, isProd)
+  testWasmFn(testThetaRhoPiChiIota, isProd)
+  testWasmFn(testKeccak1, isProd)
+  testWasmFn(testKeccak2, isProd)
+  testWasmFn(testSponge, isProd)
 }

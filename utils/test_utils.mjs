@@ -6,10 +6,10 @@ import { startTestWasm, startSha3Wasm } from "./wasi.mjs"
 const PAD_MARKER = 0x61
 const PAD_MARKER_START = 0x06
 const PAD_MARKER_END = 0x80
-const DEV_MODE = true
 
-// Use non-optimized binaries during testing
-const sha3WasmBinPath = "./bin/sha3.wasm"
+// Use non-optimized binary for testing dev
+const sha3WasmBinPathDev = "./bin/sha3.dev.wasm"
+const sha3WasmBinPathProd = "./bin/sha3.prod.opt.wasm"
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // For a given digest length, define the dimensions of the SHA3 internal state
@@ -92,13 +92,14 @@ const formatUInt8ArrayDiff = d =>
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Each test must run against its own isolated WASM instance
-const testWasmFn = thisTest => {
+const testWasmFn = (thisTest, isProd) => {
   let testName = `${thisTest.wasmTestFnName}(${thisTest.wasmTestFnArgs ? thisTest.wasmTestFnArgs.join(',') : ''})`
+  let wasmBinPath = isProd ? sha3WasmBinPathProd : sha3WasmBinPathDev
 
   // Test WASM function
   test(testName,
     async () => {
-      let wasmMod = await startSha3Wasm(sha3WasmBinPath, DEV_MODE)
+      let wasmMod = await startSha3Wasm(wasmBinPath, isProd)
       let testMod = await startTestWasm(wasmMod)
       let wasmMem8 = new Uint8Array(wasmMod.instance.exports.memory.buffer)
 
@@ -137,13 +138,14 @@ const testWasmFn = thisTest => {
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Each test must run against its own isolated WASM instance
-const testWasiFn = thisTest => {
+const testWasiFn = (thisTest, isProd) => {
   let testName = `${thisTest.wasmTestFnName}(${thisTest.wasmTestFnArgs ? thisTest.wasmTestFnArgs.join(',') : ''})`
+  let wasmBinPath = isProd ? sha3WasmBinPathProd : sha3WasmBinPathDev
 
   // Test WASI function
   test(testName,
     async () => {
-      let wasmMod = await startSha3Wasm(sha3WasmBinPath, DEV_MODE)
+      let wasmMod = await startSha3Wasm(wasmBinPath, isProd)
       let testMod = await startTestWasm(wasmMod)
       let wasmMem8 = new Uint8Array(wasmMod.instance.exports.memory.buffer)
 

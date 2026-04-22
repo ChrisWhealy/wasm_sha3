@@ -28,7 +28,7 @@ const startDebugWasm = async pathToWasmBin => {
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Instantiate the SHA3 WASM module
 const startSha3Wasm =
-  async (pathToWasmBin, devMode) => {
+  async (pathToWasmBin, isProd) => {
     // Start SHA3 module using WASI passing in debguWasi instance
     const sha3Wasi = new WASI({
       args: process.argv,
@@ -40,7 +40,7 @@ const startSha3Wasm =
       wasi_snapshot_preview2: sha3Wasi.wasiImport,
     }
 
-    if (devMode) {
+    if (!isProd) {
       const debugModule = await startDebugWasm(debugWasmBinPath)
 
       envObj["debug"] = {
