@@ -54,16 +54,13 @@
 ;; left-to-right, top-to-bottom ordering.
 ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 (module
-  ;; Function types for logging/tracing
-  (type $type_i32*1     (func (param i32)))
-  (type $type_i32*2     (func (param i32 i32)))
-  (type $type_i32*3     (func (param i32 i32 i32)))
-  (type $type_i32*4     (func (param i32 i32 i32 i32)))
-  (type $type_i32*5     (func (param i32 i32 i32 i32 i32)))
-  (type $type_i32*3_i64 (func (param i32 i32 i32 i64)))
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Function types for WASI calls
+  ;; Function types
+  (type $type_i32*1          (func (param i32)))
+  (type $type_i32*2          (func (param i32 i32)))
+  (type $type_i32*3          (func (param i32 i32 i32)))
+  (type $type_i32*4          (func (param i32 i32 i32 i32)))
+  (type $type_i32*5          (func (param i32 i32 i32 i32 i32)))
+  (type $type_i32*3_i64      (func (param i32 i32 i32 i64)))
   (type $type_wasi_path_open (func (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
   (type $type_wasi_fd_seek   (func (param i32 i64 i32 i32)                     (result i32)))
 
@@ -434,7 +431,6 @@
       ;;@debug-end
     )
 
-
     ;; Initialise the internal state?
     (if (local.get $init_mem)
       (then
@@ -645,7 +641,7 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Perform a single round of the Keccak function
-  ;; The output lives at $CHI_RESULT_PTR because the iota function performs an in-place modification
+  ;; The output lives at $CHI_RESULT_PTR because the the last step function (iota) performs an in-place modification
   (func $keccak (export "keccak")
         (param $round i32)
 

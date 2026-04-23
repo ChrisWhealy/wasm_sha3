@@ -54,16 +54,13 @@
 ;; left-to-right, top-to-bottom ordering.
 ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 (module
-  ;; Function types for logging/tracing
-  (type $type_i32*1     (func (param i32)))
-  (type $type_i32*2     (func (param i32 i32)))
-  (type $type_i32*3     (func (param i32 i32 i32)))
-  (type $type_i32*4     (func (param i32 i32 i32 i32)))
-  (type $type_i32*5     (func (param i32 i32 i32 i32 i32)))
-  (type $type_i32*3_i64 (func (param i32 i32 i32 i64)))
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Function types for WASI calls
+  ;; Function types
+  (type $type_i32*1          (func (param i32)))
+  (type $type_i32*2          (func (param i32 i32)))
+  (type $type_i32*3          (func (param i32 i32 i32)))
+  (type $type_i32*4          (func (param i32 i32 i32 i32)))
+  (type $type_i32*5          (func (param i32 i32 i32 i32 i32)))
+  (type $type_i32*3_i64      (func (param i32 i32 i32 i64)))
   (type $type_wasi_path_open (func (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
   (type $type_wasi_fd_seek   (func (param i32 i64 i32 i32)                     (result i32)))
 
@@ -78,7 +75,6 @@
   (import "wasi_snapshot_preview2" "fd_close"       (func $wasi.fd_close       (type $type_i32*1)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  
 
   ;; Memory page   1     Internal stuff
   ;; Memory pages  2     File IO pointers and buffers
@@ -311,7 +307,6 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Debug messages (can be commented out)
-  
 
   (global $STR_WRITE_BUF_PTR   i32 (i32.const 0x00002000))
 
@@ -341,8 +336,6 @@
         (param $copy_to_a_blk i32) ;; Copy state to Theta A block?
         (param $digest_len    i32) ;; Defaults to 256
 
-    
-
     ;; If $digest_len is not one of 224, 256, 384 or 512, then default to 256
     (block $digest_ok
       (br_if $digest_ok (i32.eq (local.get $digest_len) (i32.const 224)))
@@ -351,15 +344,12 @@
       (br_if $digest_ok (i32.eq (local.get $digest_len) (i32.const 512)))
 
       (local.set $digest_len (i32.const 256))
-      
     )
-
 
     ;; Initialise the internal state?
     (if (local.get $init_mem)
       (then
         (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200))
-        
       )
     )
 
@@ -377,8 +367,6 @@
     ;; Partition the internal state for the given rate/capacity
     (global.set $CAPACITY_PTR (i32.add (global.get $STATE_PTR) (i32.shl (global.get $RATE) (i32.const 3))))
 
-    
-
     ;; XOR first input block with the rate
     (call $xor_data_with_rate (global.get $RATE))
 
@@ -395,7 +383,6 @@
       )
     )
 
-    
 )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -407,15 +394,12 @@
 
     (local $data_idx     i32)
     (local $rate_ptr     i32)
-    
 
     (loop $xor_loop
       ;; FIPS 202 §3.1.2: lane(x,y) is at byte offset (5y+x)*8; absorb sequentially from lane(0,0)
       (local.set $rate_ptr
         (i32.add (global.get $RATE_PTR) (i32.shl (local.get $data_idx) (i32.const 3)))
       )
-
-      
 
       (i64.store
         (memory $main)
@@ -433,7 +417,6 @@
       )
     )
 
-    
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -466,7 +449,6 @@
         (param $n          i32)
 
     (local $round        i32)
-    
     (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
 
     (loop $next_round
@@ -498,16 +480,13 @@
       (i32.const 200)              ;; Length
     )
 
-    
 )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Perform a single round of the Keccak function
-  ;; The output lives at $CHI_RESULT_PTR because the iota function performs an in-place modification
+  ;; The output lives at $CHI_RESULT_PTR because the the last step function (iota) performs an in-place modification
   (func $keccak (export "keccak")
         (param $round i32)
-
-    
 
     (call $theta)
     (call $rho)
@@ -515,7 +494,6 @@
     (call $chi)
     (call $iota (local.get $round))
 
-    
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -527,13 +505,10 @@
     (local $debug_active i32)
     (local $fn_id        i32)
 
-    
-
     (call $theta_c (i32.const 5))
     (call $theta_d)
     (call $theta_xor_loop)
 
-    
 )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -548,45 +523,38 @@
 
     (local $result       i64)
     (local $to_ptr       i32)
-    
 
     (block $call_count
       ;; C[x=0]: XOR A[0,0..4] — column base offset 0
       (local.set $to_ptr (global.get $THETA_A_BLK_PTR))
       (local.set $result (call $theta_c_inner (local.get $to_ptr)))
-      
       (i64.store (memory $main) (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 1)))
 
       ;; C[x=1]: XOR A[1,0..4] — column base offset 8
       (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 8)))
       (local.set $result (call $theta_c_inner (local.get $to_ptr)))
-      
       (i64.store (memory $main) offset=8 (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 2)))
 
       ;; C[x=2]: XOR A[2,0..4] — column base offset 16
       (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 16)))
       (local.set $result (call $theta_c_inner (local.get $to_ptr)))
-      
       (i64.store (memory $main) offset=16 (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 3)))
 
       ;; C[x=3]: XOR A[3,0..4] — column base offset 24
       (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 24)))
       (local.set $result (call $theta_c_inner (local.get $to_ptr)))
-      
       (i64.store (memory $main) offset=24 (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 4)))
 
       ;; C[x=4]: XOR A[4,0..4] — column base offset 32
       (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 32)))
       (local.set $result (call $theta_c_inner (local.get $to_ptr)))
-      
       (i64.store (memory $main) offset=32 (global.get $THETA_C_OUT_PTR) (local.get $result))
     )
 
-    
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -633,7 +601,6 @@
     (local $w2           i32)
     (local $w3           i32)
     (local $w4           i32)
-    
 
     (local.set $w0          (global.get $THETA_C_OUT_PTR))
     (local.set $w1 (i32.add (global.get $THETA_C_OUT_PTR) (i32.const 8)))
@@ -647,7 +614,6 @@
     (i64.store (memory $main) offset=24 (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w2) (local.get $w4)))
     (i64.store (memory $main) offset=32 (global.get $THETA_D_OUT_PTR) (call $theta_d_inner (local.get $w3) (local.get $w0)))
 
-    
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -660,7 +626,6 @@
 
     (local $w0           i64)
     (local $w1           i64)
-    
 
     (local.set $w0 (i64.load (memory $main) (local.get $w0_ptr)))
     (local.set $w1 (i64.load (memory $main) (local.get $w1_ptr)))
@@ -674,7 +639,6 @@
       )
     )
 
-    
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -698,7 +662,6 @@
     (local $d_fn_word    i64)
     (local $xor_result   i64)
     (local $result_ptr   i32)
-    
 
     (loop $xor_loop
       (local.set $d_fn_word
@@ -723,7 +686,6 @@
       ;;
       ;; $a_blk_offset = $STATE_IDX_TAB + ($a_blk_idx * 4)
       ;; $a_blk_ptr = $THETA_A_BLK_PTR + $a_blk_offset
-      
 
       (local.set $a_blk_offset
         (i32.load
@@ -731,15 +693,12 @@
           (i32.add (global.get $STATE_IDX_TAB) (i32.shl (local.get $a_blk_idx) (i32.const 2)))
         )
       )
-      
 
       ;; The offset of the input word and the result word should be the same
       (local.set $result_ptr (i32.add (global.get $THETA_RESULT_PTR) (local.get $a_blk_offset)))
       (local.set $a_blk_ptr  (i32.add (global.get $THETA_A_BLK_PTR)  (local.get $a_blk_offset)))
       (local.set $a_blk_word (i64.load (memory $main) (local.get $a_blk_ptr)))
       (local.set $xor_result (i64.xor (local.get $d_fn_word) (local.get $a_blk_word)))
-
-      
 
       (i64.store (memory $main) (local.get $result_ptr) (local.get $xor_result))
 
@@ -749,7 +708,6 @@
       (br_if $xor_loop (i32.lt_u (local.get $a_blk_idx) (i32.const 25)))
     )
 
-    
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -772,13 +730,11 @@
     (local $rot_ptr      i32)
     (local $rot_amt      i64)
     (local $w0           i64)
-    
 
     (local.set $rot_ptr (global.get $RHOTATION_TABLE))
 
     (loop $rho_loop
       (local.set $rot_amt (i64.extend_i32_u (i32.load (memory $main) (local.get $rot_ptr))))
-      
 
       ;; Transform loop index into state offset
       (local.set $theta_offset
@@ -799,7 +755,6 @@
           (local.get $rot_amt)
         )
       )
-      
 
       (i64.store (memory $main) (local.get $result_ptr) (local.get $w0))
       (local.set $rot_ptr (i32.add (local.get $rot_ptr) (i32.const 4)))
@@ -813,7 +768,6 @@
       )
     )
 
-    
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -836,7 +790,6 @@
   ;; Since this algorithm results in a static reordering of the i64s, the final transformation can simply be hardcoded
   ;; rather than calculated.
   (func $pi (export "pi")
-    
 
     ;; FIPS 202 §3.2.3: A'[x,y] = A[(x+3y) mod 5, x]  offset(x,y) = y*40 + x*8
     (i64.store (memory $main) offset=0   (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=0   (global.get $RHO_RESULT_PTR))) ;; A'[0,0] <- A[0,0]
@@ -865,7 +818,6 @@
     (i64.store (memory $main) offset=184 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=120 (global.get $RHO_RESULT_PTR))) ;; A'[3,4] <- A[0,3]
     (i64.store (memory $main) offset=192 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=168 (global.get $RHO_RESULT_PTR))) ;; A'[4,4] <- A[1,4]
 
-    
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -897,7 +849,6 @@
     (local $w1            i64)
     (local $w2            i64)
     (local $chi_result    i64)
-    
 
     (loop $row_loop
       ;; Reset $col counter
@@ -907,8 +858,6 @@
         ;; Calculate the next two column indices (mod 5) for the x-axis neighbourhood
         (local.set $col+1 (i32.rem_u (i32.add (local.get $col) (i32.const 1)) (i32.const 5)))
         (local.set $col+2 (i32.rem_u (i32.add (local.get $col) (i32.const 2)) (i32.const 5)))
-
-        
 
         (local.set $result_offset (call $xy_to_state_offset (local.get $row) (local.get $col)))
         (local.set $result_ptr (i32.add (global.get $CHI_RESULT_PTR) (local.get $result_offset)))
@@ -932,8 +881,6 @@
           )
         )
 
-        
-
         ;; $w0 XOR (NOT($w1) AND $w2)
         (local.set $chi_result
           (i64.xor
@@ -944,7 +891,6 @@
             )
           )
         )
-        
 
         (i64.store (memory $main) (local.get $result_ptr) (local.get $chi_result))
 
@@ -965,7 +911,6 @@
     )
 
     ;; Dump state after transformation
-    
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -978,7 +923,6 @@
     (local $w0           i64)
     (local $rnd_const    i64)
     (local $xor_result   i64)
-    
 
     (local.set $rnd_const
       (i64.load
@@ -989,13 +933,10 @@
         )
       )
     )
-    
 
     (local.set $w0 (i64.load (memory $main) (global.get $CHI_RESULT_PTR)))
-    
 
     (local.set $xor_result (i64.xor (local.get $rnd_const) (local.get $w0)))
-    
 
     (i64.store
       (memory $main)
@@ -1003,6 +944,5 @@
       (local.get $xor_result)
     )
 
-    
   )
 )
