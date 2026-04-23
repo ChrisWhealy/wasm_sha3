@@ -193,7 +193,7 @@ A sequence of calls to the Theta, Rho, Pi, Chi and Iota functions constitutes on
 Theta mixes each column of the state into every other column, ensuring that a change in any single lane eventually propagates to the entire state.
 It is performed in three sub-steps:
 
-1. **Theta-C**: For each column `x`, XOR all five lanes in that column down to a single `u64` parity value.
+1. **Theta-C**<br>For each column `x`, XOR all five lanes in that column down to a single `u64` parity value.
 
    ```rust
    fn theta_c(state: &[[u64; 5]; 5]) -> [u64; 5] {
@@ -205,7 +205,7 @@ It is performed in three sub-steps:
    }
    ```
 
-2. **Theta-D**: For each column `x`, XOR the parity of the column to the left `(x-1) mod 5` with the parity of the column to the right `(x+1) mod 5` rotated left by one bit.
+2. **Theta-D**<br>For each column `x`, XOR the parity of the column to the left `(x-1) mod 5` with the parity of the column to the right `(x+1) mod 5` rotated left by one bit.
 
    ```rust
    fn theta_d(c: &[u64; 5]) -> [u64; 5] {
@@ -217,7 +217,7 @@ It is performed in three sub-steps:
    }
    ```
 
-3. **Theta XOR**: XOR every lane `A[x,y]` with `D[x]` — the mixing value derived from column `x`.
+3. **Theta XOR**<br>XOR every lane `A[x,y]` with `D[x]` — the mixing value derived from column `x`.
 
    ```rust
    fn theta(state: &mut [[u64; 5]; 5]) {
@@ -311,4 +311,3 @@ fn iota(state: &mut [[u64; 5]; 5], round: usize) {
     state[0][0] ^= ROUND_CONSTANTS[round];
 }
 ```
-
