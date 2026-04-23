@@ -20,7 +20,7 @@ paddedBlock.set(input)
 paddedBlock[input.length] = 0x06
 paddedBlock[RATE_BYTES - 1] = 0x80
 
-const wasmMod = await startSha3Wasm('./bin/sha3.wasm', true)
+const wasmMod = await startSha3Wasm('./bin/sha3.prod.opt.wasm', true)
 const exports = wasmMod.instance.exports
 const mem = new Uint8Array(exports.memory.buffer)
 

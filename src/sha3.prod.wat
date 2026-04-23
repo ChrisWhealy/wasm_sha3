@@ -83,82 +83,75 @@
   (global $DEBUG_IO_BUFF_PTR  i32 (i32.const 0))
   (global $FD_STDOUT          i32 (i32.const 1))
   (global $FD_STDERR          i32 (i32.const 2))
-  (global $SWAP_I64_ENDIANESS v128 (v128.const i8x16 7 6 5 4 3 2 1 0 15 14 13 12 11 10 9 8))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; $main Memory Map: Page 1
   ;;     Offset  Length   Type    Description
   ;; 0x00000000     200   i64x24  24 Keccak round constants
   ;; 0x000000C8     100   i32x25  Rotation table for Rho function
-  ;; 0x0000012C     200   i64x25  Theta A block
-  ;; 0x000001F4      40   i64x5   Theta C function output
-  ;; 0x0000021C      40   i64x5   Theta D function output
-  ;; 0x00000244     200   i64x25  Theta function output
-  ;; 0x0000030C     200   i64x25  Rho function output
-  ;; 0x000003D4     200   i64x25  Pi function output
-  ;; 0x0000049C     200   i64x25  Chi function output
-  ;; 0x00000564     100   i32x25  State index table
-  ;; 0x000005C8      56           Unused
-  ;; 0x00000600     200   i64x25  Entropy pool (fixed at 200 bytes and subdivided into rate and capacity)
-  ;; 0x000006C8           Unused
+  ;; 0x0000012C     200   i64x25  Ping-pong BUF_0 — theta input / rho output / chi+iota output  (THETA_A_BLK_PTR = RHO_RESULT_PTR = CHI_RESULT_PTR)
+  ;; 0x000001F4     200   i64x25  Ping-pong BUF_1 — theta output / pi output                   (THETA_RESULT_PTR = PI_RESULT_PTR)
+  ;; 0x000002BC      40   i64x5   Theta C function output
+  ;; 0x000002E4      40   i64x5   Theta D function output
+  ;; 0x0000030C     100   i32x25  State index table
+  ;; 0x00000370      25   i8x25   Theta XOR D offset table
+  ;; 0x00000389       3           Padding (32-bit alignment)
+  ;; 0x0000038C     200   i64x25  Entropy pool (fixed at 200 bytes, subdivided into rate and capacity)
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; File IO
-  ;; 0x00000700       4   i32     file_fd
-  ;; 0x00000708       8   i64     fd_seek file size + 9
-  ;; 0x00000710       8   i32x2   Pointer to read iovec buffer address + size
-  ;; 0x00000718       8   i32x2   Pointer to write iovec buffer address + size
-  ;; 0x00000720       8   i64     Bytes transferred by the last io operation
-  ;; 0x00000730       8   i64     File size (Little endian)
-  ;; 0x00000740       8   i64     File size (Big endian)
-  ;; 0x00000750       4   i32     Pointer to file path name
-  ;; 0x00000754       4   i32     Pointer to file path length
-  ;; 0x00000758       4   i32     Number of command line arguments
-  ;; 0x0000075C       4   i32     Command line buffer size
-  ;; 0x00000760       4   i32     Pointer to array of pointers to arguments (needs double dereferencing!)
+  ;; 0x000004E4       4   i32     file_fd
+  ;; 0x000004EC       8   i64     fd_seek file size
+  ;; 0x000004F4       8   i32x2   Pointer to read iovec buffer address + size
+  ;; 0x000004FC       8   i32x2   Pointer to write iovec buffer address + size
+  ;; 0x00000504       8   i64     Bytes transferred by the last io operation
+  ;; 0x00000514       8   i64     File size (little endian)
+  ;; 0x00000524       8   i64     File size (big endian)
+  ;; 0x00000534       4   i32     Pointer to file path name
+  ;; 0x00000538       4   i32     Pointer to file path length
+  ;; 0x0000053C       4   i32     Number of command line arguments
+  ;; 0x00000540       4   i32     Command line buffer size
+  ;; 0x00000544       4   i32     Pointer to array of argument pointers (needs double dereferencing)
   ;; Unused
-  ;; 0x00000800     256   data    Command line args buffer
-  ;; 0x00000900     256   i32x64  Constants - fractional part of cube root of first 64 primes
-  ;; 0x00000A00      32   i32x8   Constants - fractional part of square root of first 8 primes
-  ;; 0x00000A20      64   i32x8   Hash values
-  ;; 0x00000A60     512   data    Message digest
-  ;; 0x00000C60      64   data    ASCII representation of SHA value
+  ;; 0x000005E4     256   data    Command line args buffer
   ;; Unused
-  ;; 0x00000D00       2   data    Two ASCII spaces
-  ;; 0x00000D03       5   data    Error message prefix "Err: "
-  ;; 0x00000D08      26           Error message "File name argument missing"
-  ;; 0x00000D28      25           Error message "No such file or directory"
-  ;; 0x00000D48      24           Error message "Unable to read file size"
-  ;; 0x00000D60      21           Error message "File too large (>4Gb)"
-  ;; 0x00000D80      18           Error message "Error reading file"
-  ;; 0x00000DA0      48           Error message "Neither a directory nor a symlink to a directory"
-  ;; 0x00000DD0      19           Error message "Bad file descriptor"
-  ;; 0x00000DF0      26           Error message "Memory allocation failed: "
-  ;; 0x00000E10      23           Error message "Operation not permitted"
-  ;; 0x00000E30      25           Error message "Filename too long (<=256)"
-  ;; 0x00000E50       6           Debug message "argc: "
-  ;; 0x00000E60      14           Debug message "argv_buf_len: "
-  ;; 0x00000E70       6           Debug message "Step: "
-  ;; 0x00000E78      13           Debug message "Return code: "
-  ;; 0x00000E90      15           Debug message "msg_blk_count: "
-  ;; 0x00000FA0      19           Debug message "File size (bytes): "
-  ;; 0x00000FC0      28           Debug message "Bytes read by wasi.fd_read: "
-  ;; 0x00000FE0      20           Debug message "wasi.fd_read count: "
-  ;; 0x00001000      18           Debug message "Copy to new addr: "
-  ;; 0x00001020      18           Debug message "Copy length     : "
-  ;; 0x00001050      30           Debug message "Allocated extra memory pages: "
-  ;; 0x00001080      27           Debug message "No memory allocation needed"
-  ;; 0x000010A0      32           Debug message "Current memory page allocation: "
-  ;; 0x000010C0      25           Debug message "wasi.fd_read chunk size: "
-  ;; 0x000010E0      22           Debug message "Processing full buffer"
-  ;; 0x00001100      17           Debug message "Hit EOF (Partial)"
-  ;; 0x00001130      14           Debug message "Hit EOF (Zero)"
-  ;; 0x00001140      22           Debug message "Building empty msg blk"
-  ;; 0x00001160      18           Debug message "File size (bits): "
-  ;; 0x00001180      17           Debug message "Distance to EOB: "
-  ;; 0x000011A0      12           Debug message "EOD offset: "
+  ;; 0x00000A44      64   data    ASCII representation of SHA value
   ;; Unused
-  ;; 0x00002000       ?   data    Buffer for strings being written to the console
-  ;; 0x00002400       ?   data    Buffer for a 2Mb chunk of file data
+  ;; 0x00000AE4       2   data    Two ASCII spaces
+  ;; 0x00000AE7       5   data    Error message prefix "Err: "
+  ;; 0x00000AEC      43           Error message "Bad args. Expected sha256|sha224 <filename>"
+  ;; 0x00000B1C      25           Error message "No such file or directory"
+  ;; 0x00000B3C      24           Error message "Unable to read file size"
+  ;; 0x00000B54      21           Error message "File too large (>4Gb)"
+  ;; 0x00000B74      18           Error message "Error reading file"
+  ;; 0x00000B94      48           Error message "Neither a directory nor a symlink to a directory"
+  ;; 0x00000BC4      19           Error message "Bad file descriptor"
+  ;; 0x00000BE4      26           Error message "Memory allocation failed: "
+  ;; 0x00000C04      23           Error message "Operation not permitted"
+  ;; 0x00000C24      25           Error message "Filename too long (>=256)"
+  ;; Debug messages — stripped from production build by  ;; 0x00000C44       6           "argc: "
+  ;; 0x00000C54      14           "argv_buf_len: "
+  ;; 0x00000C64       6           "Step: "
+  ;; 0x00000C6C      13           "Return code: "
+  ;; 0x00000C84      15           "msg_blk_count: "
+  ;; 0x00000C94      19           "File size (bytes): "
+  ;; 0x00000CB4      28           "Bytes read by wasi.fd_read: "
+  ;; 0x00000CD4      20           "wasi.fd_read count: "
+  ;; 0x00000CF4      18           "Copy to new addr: "
+  ;; 0x00000D14      18           "Copy length     : "
+  ;; 0x00000D34      30           "Allocated extra memory pages: "
+  ;; 0x00000D64      27           "No memory allocation needed"
+  ;; 0x00000D84      32           "Current memory page allocation: "
+  ;; 0x00000DA4      25           "wasi.fd_read chunk size: "
+  ;; 0x00000DC4      22           "Processing full buffer"
+  ;; 0x00000DE4      19           "Hit EOF (Partial): "
+  ;; 0x00000E14      16           "Hit EOF (Zero): "
+  ;; 0x00000E24      22           "Building empty msg blk"
+  ;; 0x00000E44      18           "File size (bits): "
+  ;; 0x00000E64      17           "Distance to EOB: "
+  ;; 0x00000E84      12           "EOD offset: "
+  ;; 0x00000E94       9           "SHA arg: "
+  ;; Unused
+  ;; 0x00001DE4       ?   data    Buffer for strings being written to the console
   ;;
 
   (global $KECCAK_ROUND_CONSTANTS_PTR i32 (i32.const 0x00000000))
@@ -208,19 +201,18 @@
   )
 
   ;; Memory areas used by the inner Keccak functions
-  ;; These pointers point to locations in page 1 of memory $main
-  (global $THETA_A_BLK_PTR  (export "THETA_A_BLK_PTR")  i32 (i32.const 0x0000012C))  ;; Length 200
-  (global $THETA_C_OUT_PTR  (export "THETA_C_OUT_PTR")  i32 (i32.const 0x000001F4))  ;; Length 40
-  (global $THETA_D_OUT_PTR  (export "THETA_D_OUT_PTR")  i32 (i32.const 0x0000021C))  ;; Length 40
-  (global $THETA_RESULT_PTR (export "THETA_RESULT_PTR") i32 (i32.const 0x00000244))  ;; Length 200
-  (global $RHO_RESULT_PTR   (export "RHO_RESULT_PTR")   i32 (i32.const 0x0000030C))  ;; Length 200
-  (global $PI_RESULT_PTR    (export "PI_RESULT_PTR")    i32 (i32.const 0x000003D4))  ;; Length 200
-  (global $CHI_RESULT_PTR   (export "CHI_RESULT_PTR")   i32 (i32.const 0x0000049C))  ;; Length 200
+  ;; Ping-pong buffer pointers — BUF_0 and BUF_1 are adjacent; aliases share the same address
+  (global $THETA_A_BLK_PTR  (export "THETA_A_BLK_PTR")  i32 (i32.const 0x0000012C))  ;; BUF_0 — 200 bytes
+  (global $RHO_RESULT_PTR   (export "RHO_RESULT_PTR")   i32 (i32.const 0x0000012C))  ;; BUF_0 alias
+  (global $CHI_RESULT_PTR   (export "CHI_RESULT_PTR")   i32 (i32.const 0x0000012C))  ;; BUF_0 alias
+  (global $THETA_RESULT_PTR (export "THETA_RESULT_PTR") i32 (i32.const 0x000001F4))  ;; BUF_1 — 200 bytes
+  (global $PI_RESULT_PTR    (export "PI_RESULT_PTR")    i32 (i32.const 0x000001F4))  ;; BUF_1 alias
+  (global $THETA_C_OUT_PTR  (export "THETA_C_OUT_PTR")  i32 (i32.const 0x000002BC))  ;; 40 bytes
+  (global $THETA_D_OUT_PTR  (export "THETA_D_OUT_PTR")  i32 (i32.const 0x000002E4))  ;; 40 bytes
 
-  ;; The n'th i32 in this table holds the offset into the state at which the n'th i64 in the incoming data should be
-  ;; written
-  (global $STATE_IDX_TAB i32 (i32.const 0x00000564))  ;; Length 25 * i32 = 100
-  (data (memory $main) (i32.const 0x00000564)
+  ;; The n'th i32 in this table holds the byte offset into the state at which the n'th i64 in the incoming data lives
+  (global $STATE_IDX_TAB i32 (i32.const 0x0000030C))  ;; 25 * i32 = 100 bytes
+  (data (memory $main) (i32.const 0x0000030C)
     (; 96;) "\60\00\00\00" (;104;) "\68\00\00\00" (;112;) "\70\00\00\00" (; 80;) "\50\00\00\00" (; 88;) "\58\00\00\00"
     (;136;) "\88\00\00\00" (;144;) "\90\00\00\00" (;152;) "\98\00\00\00" (;120;) "\78\00\00\00" (;128;) "\80\00\00\00"
     (;176;) "\B0\00\00\00" (;184;) "\B8\00\00\00" (;192;) "\C0\00\00\00" (;160;) "\A0\00\00\00" (;168;) "\A8\00\00\00"
@@ -228,87 +220,85 @@
     (; 56;) "\38\00\00\00" (; 64;) "\40\00\00\00" (; 72;) "\48\00\00\00" (; 40;) "\28\00\00\00" (; 48;) "\30\00\00\00"
   )
 
-  (global $STATE_PTR    (export "STATE_PTR")    i32 (i32.const 0x00000600))  ;; Length fixed at 200
-  (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x000006C8))  ;; Length determined by the rate
+  ;; For each of the 25 a_blk_idx values (0-24), the byte offset into THETA_D_OUT_PTR for D[x].
+  ;; x = (a_blk_idx % 5 + 2) % 5 maps to D-offsets [16,24,32,0,8] repeating across all 5 rows.
+  (global $THETA_XOR_D_OFFSET_TAB i32 (i32.const 0x00000370))  ;; 25 bytes
+  (data (memory $main) (i32.const 0x00000370)  ;; D[2]  D[3]  D[4]  D[0]  D[1]
+    "\10\18\20\00\08"  ;; a_blk_idx  0- 4
+    "\10\18\20\00\08"  ;; a_blk_idx  5- 9
+    "\10\18\20\00\08"  ;; a_blk_idx 10-14
+    "\10\18\20\00\08"  ;; a_blk_idx 15-19
+    "\10\18\20\00\08"  ;; a_blk_idx 20-24
+  )
+  ;; 3 bytes padding at 0x389-0x38B for 32-bit alignment of STATE_PTR
+
+  (global $STATE_PTR    (export "STATE_PTR")    i32 (i32.const 0x0000038C))  ;; 200 bytes
+  (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x00000454))  ;; length = rate bytes (varies with digest size)
 
   ;; Default digest size = 256 bits, so in 64-bit words, rate = 17 and capacity = 8
   (global $RATE         (export "RATE")         (mut i32) (i32.const 17))
   (global $CAPACITY     (export "CAPACITY")     (mut i32) (i32.const 8))
-  (global $RATE_PTR     (export "RATE_PTR")          i32  (i32.const 0x00000600))
-  (global $CAPACITY_PTR (export "CAPACITY_PTR") (mut i32) (i32.const 0x00000600))  ;; Offset varies with digest size
+  (global $RATE_PTR     (export "RATE_PTR")          i32  (i32.const 0x0000038C))
+  (global $CAPACITY_PTR (export "CAPACITY_PTR") (mut i32) (i32.const 0x0000038C))  ;; set at runtime: STATE_PTR + RATE*8
 
-  (global $FD_FILE_PTR         i32 (i32.const 0x00000700))
-  (global $FILE_SIZE_PTR       i32 (i32.const 0x00000708))
-  (global $IOVEC_READ_BUF_PTR  i32 (i32.const 0x00000710))
-  (global $IOVEC_WRITE_BUF_PTR i32 (i32.const 0x00000718))
-  (global $NREAD_PTR           i32 (i32.const 0x00000720))
-  (global $FILE_SIZE_LE_PTR    i32 (i32.const 0x00000730))
-  (global $FILE_SIZE_BE_PTR    i32 (i32.const 0x00000740))
-  (global $FILE_PATH_PTR       i32 (i32.const 0x00000750))
-  (global $FILE_PATH_LEN_PTR   i32 (i32.const 0x00000754))
-  (global $ARGS_COUNT_PTR      i32 (i32.const 0x00000758))
-  (global $ARGV_BUF_LEN_PTR    i32 (i32.const 0x0000075C))
-  (global $ARGV_PTRS_PTR       i32 (i32.const 0x00000760))
+  (global $FD_FILE_PTR         i32 (i32.const 0x000004E4))
+  (global $FILE_SIZE_PTR       i32 (i32.const 0x000004EC))
+  (global $IOVEC_READ_BUF_PTR  i32 (i32.const 0x000004F4))
+  (global $IOVEC_WRITE_BUF_PTR i32 (i32.const 0x000004FC))
+  (global $NREAD_PTR           i32 (i32.const 0x00000504))
+  (global $FILE_SIZE_LE_PTR    i32 (i32.const 0x00000514))
+  (global $FILE_SIZE_BE_PTR    i32 (i32.const 0x00000524))
+  (global $FILE_PATH_PTR       i32 (i32.const 0x00000534))
+  (global $FILE_PATH_LEN_PTR   i32 (i32.const 0x00000538))
+  (global $ARGS_COUNT_PTR      i32 (i32.const 0x0000053C))
+  (global $ARGV_BUF_LEN_PTR    i32 (i32.const 0x00000540))
+  (global $ARGV_PTRS_PTR       i32 (i32.const 0x00000544))
 
-  (global $ARGV_BUF_PTR        i32 (i32.const 0x00000800))
-  (global $ASCII_HASH_PTR      i32 (i32.const 0x00000C60))
+  (global $ARGV_BUF_PTR        i32 (i32.const 0x000005E4))
+  (global $ASCII_HASH_PTR      i32 (i32.const 0x00000A44))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Error messages
-  (global $ASCII_SPACES        i32 (i32.const 0x00000D00))  ;; Length = 2
-  (data (memory $main) (i32.const 0x00000D00) "  ")
+  (global $ASCII_SPACES        i32 (i32.const 0x00000AE4))  ;; Length = 2
+  (data (memory $main) (i32.const 0x00000AE4) "  ")
 
-  (global $ERR_MSG_PREFIX      i32 (i32.const 0x00000D03))  ;; Length = 5
-  (data (memory $main) (i32.const 0x00000D03) "Err: ")
+  (global $ERR_MSG_PREFIX      i32 (i32.const 0x00000AE7))  ;; Length = 5
+  (data (memory $main) (i32.const 0x00000AE7) "Err: ")
 
-  (global $ERR_MSG_BAD_ARGS    i32 (i32.const 0x00000D08))  ;; Length = 43
-  (data (memory $main) (i32.const 0x00000D08) "Bad args. Expected sha256|sha224 <filename>")
+  (global $ERR_MSG_BAD_ARGS    i32 (i32.const 0x00000AEC))  ;; Length = 43
+  (data (memory $main) (i32.const 0x00000AEC) "Bad args. Expected sha256|sha224 <filename>")
 
-  (global $ERR_MSG_NOENT       i32 (i32.const 0x00000D38))  ;; Length = 25
-  (data (memory $main) (i32.const 0x00000D38) "No such file or directory")
+  (global $ERR_MSG_NOENT       i32 (i32.const 0x00000B1C))  ;; Length = 25
+  (data (memory $main) (i32.const 0x00000B1C) "No such file or directory")
 
-  (global $ERR_FILE_SIZE_READ  i32 (i32.const 0x00000D58))  ;; Length = 24
-  (data (memory $main) (i32.const 0x00000D58) "Unable to read file size")
+  (global $ERR_FILE_SIZE_READ  i32 (i32.const 0x00000B3C))  ;; Length = 24
+  (data (memory $main) (i32.const 0x00000B3C) "Unable to read file size")
 
-  (global $ERR_FILE_TOO_LARGE  i32 (i32.const 0x00000D70))  ;; Length = 21
-  (data (memory $main) (i32.const 0x00000D70) "File too large (>4Gb)")
+  (global $ERR_FILE_TOO_LARGE  i32 (i32.const 0x00000B54))  ;; Length = 21
+  (data (memory $main) (i32.const 0x00000B54) "File too large (>4Gb)")
 
-  (global $ERR_READING_FILE    i32 (i32.const 0x00000D90))  ;; Length = 18
-  (data (memory $main) (i32.const 0x00000D90) "Error reading file")
+  (global $ERR_READING_FILE    i32 (i32.const 0x00000B74))  ;; Length = 18
+  (data (memory $main) (i32.const 0x00000B74) "Error reading file")
 
-  (global $ERR_NOT_DIR_SYMLINK i32 (i32.const 0x00000DB0))  ;; Length = 48
-  (data (memory $main) (i32.const 0x00000DB0) "Neither a directory nor a symlink to a directory")
+  (global $ERR_NOT_DIR_SYMLINK i32 (i32.const 0x00000B94))  ;; Length = 48
+  (data (memory $main) (i32.const 0x00000B94) "Neither a directory nor a symlink to a directory")
 
-  (global $ERR_BAD_FD          i32 (i32.const 0x00000DE0))  ;; Length = 19
-  (data (memory $main) (i32.const 0x00000DE0) "Bad file descriptor")
+  (global $ERR_BAD_FD          i32 (i32.const 0x00000BC4))  ;; Length = 19
+  (data (memory $main) (i32.const 0x00000BC4) "Bad file descriptor")
 
-  (global $ERR_MEM_ALLOC       i32 (i32.const 0x00000E00))  ;; Length = 26
-  (data (memory $main) (i32.const 0x00000E00) "Memory allocation failed: ")
+  (global $ERR_MEM_ALLOC       i32 (i32.const 0x00000BE4))  ;; Length = 26
+  (data (memory $main) (i32.const 0x00000BE4) "Memory allocation failed: ")
 
-  (global $ERR_NOT_PERMITTED   i32 (i32.const 0x00000E20))  ;; Length = 23
-  (data (memory $main) (i32.const 0x00000E20) "Operation not permitted")
+  (global $ERR_NOT_PERMITTED   i32 (i32.const 0x00000C04))  ;; Length = 23
+  (data (memory $main) (i32.const 0x00000C04) "Operation not permitted")
 
-  (global $ERR_ARGV_TOO_LONG   i32 (i32.const 0x00000E40))  ;; Length = 25
-  (data (memory $main) (i32.const 0x00000E40) "Filename too long (>=256)")
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Debug messages (don't comment these out)
-  (global $DBG_MSG_ARGC        i32 (i32.const 0x00000E60))  ;; Length = 6
-  (data (memory $main) (i32.const 0x00000E60) "argc: ")
-
-  (global $DBG_MSG_ARGV_LEN    i32 (i32.const 0x00000E70))  ;; Length = 14
-  (data (memory $main) (i32.const 0x00000E70) "argv_buf_len: ")
-
-  (global $DBG_STEP            i32 (i32.const 0x00000E80))  ;; Length = 6
-  (data (memory $main) (i32.const 0x00000E80) "Step: ")
-
-  (global $DBG_RETURN_CODE     i32 (i32.const 0x00000E88))  ;; Length = 13
-  (data (memory $main) (i32.const 0x00000E88) "Return code: ")
+  (global $ERR_ARGV_TOO_LONG   i32 (i32.const 0x00000C24))  ;; Length = 25
+  (data (memory $main) (i32.const 0x00000C24) "Filename too long (>=256)")
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Debug messages (can be commented out)
+  ;; Debug messages
 
-  (global $STR_WRITE_BUF_PTR   i32 (i32.const 0x00002000))
+  (global $STR_WRITE_BUF_PTR   i32 (i32.const 0x00001DE4))
 
   ;; $main Memory Map: Pages 2-33
   (global $READ_BUFFER_PTR     i32 (i32.const 0x00010000))  ;; Start of memory page 2
@@ -451,23 +441,13 @@
     (local $round        i32)
     (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
 
+    ;; CHI_RESULT_PTR = THETA_A_BLK_PTR (ping-pong BUF_0), so each round's output lands
+    ;; directly where the next round's theta reads it — no inter-round copy needed.
     (loop $next_round
       (call $keccak (local.get $round))
       (local.set $round (i32.add (local.get $round) (i32.const 1)))
-
-      ;; If we still have more rounds to perform
-      (if (local.tee $n (i32.sub (local.get $n) (i32.const 1)))
-        (then
-          ;; Copy the output of this round at $CHI_RESULT_PTR back to $THETA_A_BLK_PTR ready to start the next round
-          (memory.copy
-            (memory $main)
-            (memory $main)
-            (global.get $THETA_A_BLK_PTR)
-            (global.get $CHI_RESULT_PTR)
-            (i32.const 200)
-          )
-          (br $next_round)
-        )
+      (br_if $next_round
+        (local.tee $n (i32.sub (local.get $n) (i32.const 1)))
       )
     )
 
@@ -502,19 +482,22 @@
   ;; Reads 200 bytes starting at $THETA_A_BLK_PTR
   ;; Writes 200 bytes to $THETA_RESULT_PTR
   (func $theta (export "theta")
-    (local $debug_active i32)
-    (local $fn_id        i32)
 
-    (call $theta_c (i32.const 5))
+    (call $theta_c_all)
     (call $theta_d)
     (call $theta_xor_loop)
 
 )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Theta C function
-  ;; For each column of the state matrix, XOR words A[x,0..4] together and write the results as successive i64s
-  ;; starting at $THETA_C_OUT_PTR, giving C[0..4].  The XOR functionality is in $theta_c_inner.
+  ;; Production entry point for Theta C — passes n=5 as a compile-time constant
+  ;; wasm-opt constant propagation will fold n=5 into $theta_c and DCE all four br_if guards
+  (func $theta_c_all
+    (call $theta_c (i32.const 5))
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; n-column Theta C function - used for testing
   ;;
   ;; The parameter $n is only needed to test a single round of $theta_c_inner.
   ;; In normal operation, this parameter is hard-coded to 5
@@ -522,36 +505,30 @@
         (param $n i32)
 
     (local $result       i64)
-    (local $to_ptr       i32)
 
     (block $call_count
       ;; C[x=0]: XOR A[0,0..4] — column base offset 0
-      (local.set $to_ptr (global.get $THETA_A_BLK_PTR))
-      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      (local.set $result (call $theta_c_inner (global.get $THETA_A_BLK_PTR)))
       (i64.store (memory $main) (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 1)))
 
       ;; C[x=1]: XOR A[1,0..4] — column base offset 8
-      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 8)))
-      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      (local.set $result (call $theta_c_inner (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 8))))
       (i64.store (memory $main) offset=8 (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 2)))
 
       ;; C[x=2]: XOR A[2,0..4] — column base offset 16
-      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 16)))
-      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      (local.set $result (call $theta_c_inner (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 16))))
       (i64.store (memory $main) offset=16 (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 3)))
 
       ;; C[x=3]: XOR A[3,0..4] — column base offset 24
-      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 24)))
-      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      (local.set $result (call $theta_c_inner (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 24))))
       (i64.store (memory $main) offset=24 (global.get $THETA_C_OUT_PTR) (local.get $result))
       (br_if $call_count (i32.eq (local.get $n) (i32.const 4)))
 
       ;; C[x=4]: XOR A[4,0..4] — column base offset 32
-      (local.set $to_ptr (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 32)))
-      (local.set $result (call $theta_c_inner (local.get $to_ptr)))
+      (local.set $result (call $theta_c_inner (i32.add (global.get $THETA_A_BLK_PTR) (i32.const 32))))
       (i64.store (memory $main) offset=32 (global.get $THETA_C_OUT_PTR) (local.get $result))
     )
 
@@ -669,13 +646,10 @@
           (memory $main)
           (i32.add
             (global.get $THETA_D_OUT_PTR)
-            ;; D[x] where x = (a_blk_idx % 5 + 2) % 5, derived from STATE_IDX_TAB x-ordering [2,3,4,0,1]
-            (i32.shl
-              (i32.rem_u
-                (i32.add (i32.rem_u (local.get $a_blk_idx) (i32.const 5)) (i32.const 2))
-                (i32.const 5)
-              )
-              (i32.const 3)
+            ;; D[x] byte offset looked up directly from THETA_XOR_D_OFFSET_TAB[a_blk_idx]
+            (i32.load8_u
+              (memory $main)
+              (i32.add (global.get $THETA_XOR_D_OFFSET_TAB) (local.get $a_blk_idx))
             )
           )
         )
