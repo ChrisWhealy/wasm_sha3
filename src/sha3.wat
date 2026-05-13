@@ -144,7 +144,7 @@
   ;; 0x00000BE4      26           Error message "Memory allocation failed: "
   ;; 0x00000C04      23           Error message "Operation not permitted"
   ;; 0x00000C24      25           Error message "Filename too long (>=256)"
-  ;; Debug messages — stripped from production build by ;;@debug-start/;;@debug-end markers
+  ;; Debug messages — will be stripped from production build by ;;@debug-start/end markers
   ;; 0x00000C44       6           "argc: "
   ;; 0x00000C54      14           "argv_buf_len: "
   ;; 0x00000C64       6           "Step: "
@@ -312,9 +312,9 @@
   (global $ERR_ARGV_TOO_LONG   i32 (i32.const 0x00000C24))  ;; Length = 25
   (data (memory $main) (i32.const 0x00000C24) "Filename too long (>=256)")
 
+  ;;@debug-start
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Debug messages
-  ;;@debug-start
   (global $DBG_MSG_ARGC        i32 (i32.const 0x00000C44))  ;; Length = 6
   (data (memory $main) (i32.const 0x00000C44) "argc: ")
 
