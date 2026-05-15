@@ -89,7 +89,7 @@ $ wasmer run . --mapdir /::./test_data --command-name=224 -- war_and_peace.txt
 ```
 
 ***IMPORTANT***<br>
-You cannot specify shortcuts such `.` or `~` as these values are only replaced by the shell, not `wasmer`.
+You cannot specify shortcuts such as `.` or `~` as these values are only replaced by the shell, not `wasmer`.
 
 Since `<guest_dir>` identifies the name of the WebAssembly module's virtual root directory, you would typically identify this as `/`.
 
