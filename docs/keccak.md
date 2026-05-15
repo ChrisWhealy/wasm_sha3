@@ -13,7 +13,7 @@ rate = 1600 - 2 * d
 1. To start with, the Keccak function's internal state is initialised to 200 bytes of `0x00`.
 
 2. Consume `rate` bits from the input file/stream.
-   If the input supplies less than `rate` bits, then pad the input data such that it fills a complete rate block as described above.
+   If the input supplies less than `rate` bits, then pad the input data such that it fills a complete rate block as previously described.
 
 3. XOR the input data with the data already present in the rate region of the internal state.
 
@@ -27,7 +27,7 @@ rate = 1600 - 2 * d
 
 ## Indexing Convention within the Internal State Matrix
 
-This module follows the state array indexing convention described in section 3.1.4 of the above document
+This module follows the state array indexing convention described in section 3.1.4 of the NIST document.
 
 ![Indexing convention of internal state matrix](./indexing_convention.png)
 
@@ -45,7 +45,7 @@ Each of the five, internal step functions is identified with a Greek letter and 
 * &chi; Chi
 * &iota; Iota
 
-![Keccak Internals](./docs/keccak_internals.png)
+![Keccak Internals](./keccak_internals.png)
 
 A sequence of calls to the Theta, Rho, Pi, Chi and Iota functions constitutes one round of the Keccak function.
 24 Keccak rounds are always performed per block of data read into the internal state.
