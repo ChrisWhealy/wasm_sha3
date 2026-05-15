@@ -1,6 +1,6 @@
 [package]
 name = "chriswhealy/sha3"
-version = "1.0.0"
+version = "1.1.0"
 license = "MIT"
 description = "Use the SHA3 algorithm to calculate a 224, 256, 384 or 512 bit digest of a local file"
 repository = "https://github.com/ChrisWhealy/wasm_sha3"
