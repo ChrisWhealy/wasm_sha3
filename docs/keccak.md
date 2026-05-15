@@ -1,6 +1,6 @@
 # How the Keccak Function Works Internally
 
-Since trhis implementation is using SHA3 as a drop-in replacement for SHA2, the internal state is always 1600 bits, and the required digest output size `d` is one of `224`, `256`, `384` or `512` bits.
+Since this implementation is using SHA3 as a drop-in replacement for SHA2, the internal state is always 1600 bits, and the required digest output size `d` is one of `224`, `256`, `384` or `512` bits.
 
 This example will use `d = 256`; therefore, the rate will be:
 
