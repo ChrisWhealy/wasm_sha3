@@ -5,7 +5,7 @@ These functions are entirely deterministic; that is, for the same input, they wi
 
 This name has been chosen because, like a physical sponge, it first "absorbs" some quantity of data into its internal state, then "squeezes" out a result.
 
-These phase are strictly sequential: until the absorb phase has run to completion, the squeeze phase is unable to produce any meaningful output.
+The absorb and squeeze phases are strictly sequential: until the absorb phase has run to completion, the squeeze phase is unable to produce any meaningful output.
 
 
 What makes the SHA3 function fundamentally different from the earlier SHA1 or SHA2 functions, is that the "squeeze" operation can be performed an unlimited number of times; hence, when used in Extendible Output Function (XOF) mode, the SHA3 function can act as a psuedo-random number generator.
