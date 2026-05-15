@@ -142,14 +142,4 @@ At this point you may take as output any number of bits from the rate (up to the
 This process is entirely deterministic.
 For the same input followed by the same number of squeeze rounds, the same output data will always be generated.
 
-[This document](./keccak.md) provides a description of how the Keccak function works internally.
-
-## Indexing Convention within the Internal State Matrix
-
-This module follows the state array indexing convention described in section 3.1.4 of the above document
-
-![Indexing convention of internal state matrix](./docs/indexing_convention.png)
-
-The linear order of the data in expected test results starts in the bottom left corner `(3,3)` of the above matrix.
-
-The array data then follows the order `(3,3), (4,3), (0,3), (1,3), (2,3)` followed by `(3,4), (4,4), (0,4), (1,4), (2,4)`, then `(3,0), (4,0), (0,0), (1,0), (2,0)` etc.
+[This page](./keccak.md) provides a description of how the Keccak function works internally.

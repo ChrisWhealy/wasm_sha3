@@ -23,6 +23,16 @@ rate = 1600 - 2 * d
 
 6. We're done - the required digest is the first `d` bits in the rate region of the internal state.
 
+## Indexing Convention within the Internal State Matrix
+
+This module follows the state array indexing convention described in section 3.1.4 of the above document
+
+![Indexing convention of internal state matrix](./indexing_convention.png)
+
+The linear order of the data in expected test results starts in the bottom left corner `(3,3)` of the above matrix.
+
+The array data then follows the order `(3,3), (4,3), (0,3), (1,3), (2,3)` followed by `(3,4), (4,4), (0,4), (1,4), (2,4)`, then `(3,0), (4,0), (0,0), (1,0), (2,0)` etc.
+
 ## Internal Step Functions
 
 Each of the five, internal step functions is identified with a Greek letter and they are always executed in the following order:
