@@ -52,7 +52,16 @@ $ npm run build:prod
 > wasm-opt ./bin/tests.wasm --enable-simd --enable-multimemory --enable-multivalue -O4 -o ./bin/tests.opt.wasm
 ```
 
-### NodeJS
+## WASM File System Access
+
+A WASM module only has access to the files or directories preopened for it by the host environment.
+This means that when invoking the WASM module, we must instruct the host environment to open the files or directories to which the WASM module needs access.
+
+The syntax for specifying such preopened resources varies between the different runtimes.
+
+---
+
+## Using NodeJS
 
 The JavaScript module invoked by NodeJS does not use very sophisticated logic for determining the location of the target file.
 Instead, it assumes the current working directory is the one containing `sha3sum.mjs` and the `WASI` instance then preopens `process.cwd()`.
@@ -73,7 +82,7 @@ $ ./sha3sum.mjs 384 ./tests/war_and_peace.txt
 9baecef1c5bd0d3358483274277d06e74598dcbfad6f837c8898fe790a5d0d17e9a6f04a50bf5b05bbe1f34ffe45d7f4  ./test_data/war_and_peace.txt
 ```
 
-## Wasmer
+## Using Wasmer
 
 If present in the CWD, `wasmer` will read `wasmer.toml` to discover which WASM module is to be run.
 In such cases, you need only specify `wasmer run .` where the meaning of `.` will be derived from the contents of `wasmer.toml`.
@@ -103,43 +112,25 @@ Since `./test_data` becomes WASM's virtual root directory, the file name `war_an
 In this case, the `wasmer.toml` file contains definitions for commands called `224`, `256`, `384` and `512`.
 Within these command definitions, the corresponding hash length argument has been hard-coded, so there is no need for you to specify it explicitly.
 
-## Wasmtime
+## Using Wasmtime
 
 The same logic used by `wasmer` applies when `wasmtime` creates WASM's virtual root directory.
 
-In this example, the `--dir <host_dir>` argument uses `./tests` as the virtual root and from within WASM, `/` is implied.
-
-***256-bit Hash***
+In this example, the `--dir <host_dir>` argument uses `./test_data` as the virtual root and from within WASM, `/` is implied.
 
 ```bash
 $ wasmtime --dir ./test_data ./bin/sha3.prod.opt.wasm -- 256 war_and_peace.txt
 11a5e2565ce9b182b980aff48ed1bb33d1278bbd77ee4f506729d0272cc7c6f7  war_and_peace.txt
 ```
 
-## Wazero
+## Using Wazero
 
 When using `wazero`, the `--mount` argument uses a syntax similar to `wasmer`'s `--mapdir` argument.
 
 ```bash
 $ wazero run -mount=.:. ./bin/sha3.prod.opt.wasm 512 ./test_data/war_and_peace.txt
-11a5e2565ce9b182b980aff48ed1bb33d1278bbd77ee4f506729d0272cc7c6f7  ./test_data/war_and_peace.txt
-```
-
-***224-bit Hash***
-
-```bash
-$ wazero run -mount=.:. ./bin/sha256.prod.opt.wasm sha224 ./tests/war_and_peace.txt
 6bff6edfba3c35ae470578a5a16bfd2ff3dc00ddd33de983e1d1c35d4ca0f0be2ff821987c8d646f956ea28809f976a3ad454de9104b53dc22370a671161fef5  ./test_data/war_and_peace.txt
 ```
-
----
-
-## WASM File System Access
-
-A WASM module only has access to the files or directories preopened for it by the host environment.
-This means that when invoking the WASM module, we must instruct the host environment to open the files or directories to which the WASM module needs access.
-
-The syntax for specifying such preopened resources varies between the different runtimes.
 
 ---
 
@@ -147,16 +138,17 @@ The syntax for specifying such preopened resources varies between the different 
 
 If you wish to run this program with the debug trace statements switched on, then do the following:
 
-1. Set the global flag `$DEBUG_ACTIVE` to `1`.
-   This will cause nothing more than the step number and its return code to be printed.
-2. If you wish to see the trace information for one or more of the Keccak step functions, then within the appropriate function, set the local `$debug_active` flag to `1`.
-   Be careful here - this might produce a huge quantity of trace output!
+1. In `sha3.wat`, set the global flag `$DEBUG_ACTIVE` to `1`.
+   This will cause nothing more than the execution step numbers and their return codes to be printed.
+2. If you wish to see a trace of the internal data processed by the Keccak step functions, then within the appropriate function, set its local `$debug_active` flag to `1`.<br>
+   Be careful - this might produce a huge quantity of trace output!
 3. Build the module using the command `npm run build:dev`.
 4. In `sha3sum.mjs`, set the Boolean flag `isProd` to `false`
+5. Run the WASM module using NodeJS
 
 ## Stripping Out Debug Coding
 
-Any statements used only for debug tracing (such as calls to functions `$hexdump`, `$write_msg` or `$write_step` etc) are delimited by the preprocessor markers `;;@debug-start` and `;;@debug-end`.
+Any statements used only for debug tracing (such as calls to functions `$hexdump`, `$write_msg` or `$write_step` etc) are delimited by preprocessor markers `;;@debug-start` and `;;@debug-end`.
 
 To compile for production, such function calls can be removed from the source code by first running `./utils/strip-debug.mjs`.
 
