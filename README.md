@@ -83,6 +83,11 @@ See [here](https://github.com/ChrisWhealy/wasm_sha256#wasmer-update) for why thi
 
 The value passed to the `--mapdir` argument is in the form `<guest_dir>::<host_dir>`.
 
+```bash
+$ wasmer run . --mapdir /::./test_data --command-name=224 -- war_and_peace.txt
+1b74a9be309c26072ad2903b3ab16eda117414736d32df43df562bb1  war_and_peace.txt
+```
+
 ***IMPORTANT***<br>
 You cannot specify shortcuts such `.` or `~` as these values are only replaced by the shell, not `wasmer`.
 
@@ -91,11 +96,6 @@ Since `<guest_dir>` identifies the name of the WebAssembly module's virtual root
 For the `<host_dir>`, `wasmer` cannot evaluate the shell shortcut `~` for your home directory.
 Instead, you must use the fully qualifiied path name.
 E.G. `/Users/chris/`.
-
-```bash
-$ wasmer run . --mapdir /::./test_data --command-name=224 -- war_and_peace.txt
-1b74a9be309c26072ad2903b3ab16eda117414736d32df43df562bb1  war_and_peace.txt
-```
 
 In the above example, the CWD contains the directory `./test_data` which then contains the text file `war_and_peace.txt`.
 Since `./test_data` becomes WASM's virtual root directory, the file name `war_and_peace.txt` does not need to be prefixed with the directory name.
