@@ -1,6 +1,6 @@
 # SHA3 Implementation in WebAssembly Text
 
-An implementation of the SHA3 algorithm in WebAssembly Text based on the specification published as NIST FIPS 202 https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
+An implementation of the SHA3 algorithm in WebAssembly Text based on the specification published as [NIST FIPS 202](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf).
 
 # Overview
 
