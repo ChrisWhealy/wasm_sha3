@@ -255,7 +255,6 @@
   (global $ARGS_COUNT_PTR      i32 (i32.const 0x00000510))
   (global $ARGV_BUF_LEN_PTR    i32 (i32.const 0x00000514))
   (global $ARGV_PTRS_PTR       i32 (i32.const 0x00000518))
-
   (global $ARGV_BUF_PTR        i32 (i32.const 0x000005E4))
   (global $ASCII_HASH_PTR      i32 (i32.const 0x00000A44))  ;; Up to 128 bytes (SHA3-512 = 128 hex chars)
 
@@ -478,7 +477,7 @@
         (global.get $READ_BUFFER_SIZE)
       )
 
-      (block $done_reading
+      (block $eof
         (loop $read_chunk
           (local.tee $return_code
             (call $wasi.fd_read
@@ -499,7 +498,7 @@
           (if ;; fd_read returned 0 bytes, we're done
             (i32.eqz (local.tee $bytes_read (i32.load (memory $main) (global.get $NREAD_PTR))))
             (then
-              (br $done_reading)
+              (br $eof)
             )
           )
 
@@ -1053,36 +1052,6 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Run the absorb and squeeze phases of the sponge function
-  (func (export "sponge")
-        (param $digest_len i32)
-        (param $n          i32)
-
-    (local $round        i32)
-    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
-
-    ;; CHI_RESULT_PTR = THETA_A_BLK_PTR (ping-pong BUF_0), so each round's output lands
-    ;; directly where the next round's theta reads it — no inter-round copy needed.
-    (loop $next_round
-      (call $keccak (local.get $round))
-      (local.set $round (i32.add (local.get $round) (i32.const 1)))
-      (br_if $next_round
-        (local.tee $n (i32.sub (local.get $n) (i32.const 1)))
-      )
-    )
-
-    ;; The output of the last Keccack round becomes the new Capacity and Rate
-    (memory.copy
-      (memory $main)               ;; Copy to memory
-      (memory $main)               ;; Copy from memory
-      (global.get $STATE_PTR)      ;; Copy to address
-      (global.get $CHI_RESULT_PTR) ;; Copy from address
-      (i32.const 200)              ;; Length
-    )
-
-)
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Perform a single round of the Keccak function
   ;; The output lives at $CHI_RESULT_PTR because the the last step function (iota) performs an in-place modification
   (func $keccak (export "keccak")
@@ -1120,7 +1089,8 @@
   ;;
   ;; The parameter $n is only needed to test a single round of $theta_c_inner.
   ;; In normal operation, this parameter is hard-coded to 5
-  (func $theta_c (export "theta_c")
+  (func $theta_c
+        (export "theta_c")
         (param $n i32)
 
     (local $result       i64)

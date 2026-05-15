@@ -1296,61 +1296,6 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Run the absorb and squeeze phases of the sponge function
-  (func (export "sponge")
-        (param $digest_len i32)
-        (param $n          i32)
-
-    (local $round        i32)
-    ;;@debug-start
-    (local $debug_active i32)
-    (local $fn_id        i32)
-
-    (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 13))
-
-    (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
-    ;;@debug-end
-    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
-
-    ;; CHI_RESULT_PTR = THETA_A_BLK_PTR (ping-pong BUF_0), so each round's output lands
-    ;; directly where the next round's theta reads it — no inter-round copy needed.
-    (loop $next_round
-      (call $keccak (local.get $round))
-      (local.set $round (i32.add (local.get $round) (i32.const 1)))
-      (br_if $next_round
-        (local.tee $n (i32.sub (local.get $n) (i32.const 1)))
-      )
-    )
-
-    ;; The output of the last Keccack round becomes the new Capacity and Rate
-    (memory.copy
-      (memory $main)               ;; Copy to memory
-      (memory $main)               ;; Copy from memory
-      (global.get $STATE_PTR)      ;; Copy to address
-      (global.get $CHI_RESULT_PTR) ;; Copy from address
-      (i32.const 200)              ;; Length
-    )
-
-    ;;@debug-start
-    (if (local.get $debug_active)
-      (then
-        (memory.copy
-          (memory $debug)                 ;; Copy to memory
-          (memory $main)                  ;; Copy from memory
-          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-          (global.get $STATE_PTR)         ;; Copy from address
-          (i32.const 200)                 ;; Length
-        )
-        (call $log.label (local.get $debug_active) (i32.const 5))
-        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-      )
-    )
-    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
-    ;;@debug-end
-)
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Perform a single round of the Keccak function
   ;; The output lives at $CHI_RESULT_PTR because the the last step function (iota) performs an in-place modification
   (func $keccak (export "keccak")
@@ -2153,7 +2098,59 @@
   )
 
   ;;@debug-start
-    ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Run the absorb and squeeze phases of the sponge function
+  ;; Used as a helper for testing a variable number of rounds of the Keccak
+  (func (export "sponge")
+        (param $digest_len i32)
+        (param $n          i32)
+
+    (local $round        i32)
+    (local $debug_active i32)
+    (local $fn_id        i32)
+
+    (local.set $debug_active (i32.const 0))
+    (local.set $fn_id (i32.const 13))
+
+    (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
+    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
+
+    ;; CHI_RESULT_PTR = THETA_A_BLK_PTR (ping-pong BUF_0), so each round's output lands
+    ;; directly where the next round's theta reads it — no inter-round copy needed.
+    (loop $next_round
+      (call $keccak (local.get $round))
+      (local.set $round (i32.add (local.get $round) (i32.const 1)))
+      (br_if $next_round
+        (local.tee $n (i32.sub (local.get $n) (i32.const 1)))
+      )
+    )
+
+    ;; The output of the last Keccack round becomes the new Capacity and Rate
+    (memory.copy
+      (memory $main)               ;; Copy to memory
+      (memory $main)               ;; Copy from memory
+      (global.get $STATE_PTR)      ;; Copy to address
+      (global.get $CHI_RESULT_PTR) ;; Copy from address
+      (i32.const 200)              ;; Length
+    )
+
+    (if (local.get $debug_active)
+      (then
+        (memory.copy
+          (memory $debug)                 ;; Copy to memory
+          (memory $main)                  ;; Copy from memory
+          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
+          (global.get $STATE_PTR)         ;; Copy from address
+          (i32.const 200)                 ;; Length
+        )
+        (call $log.label (local.get $debug_active) (i32.const 5))
+        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
+      )
+    )
+    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; This function does nothing unless either $DEBUG_ACTIVE is true or we're writing to stderr
   ;; Write a debug/trace message to the specified fd
   ;; Returns: None
