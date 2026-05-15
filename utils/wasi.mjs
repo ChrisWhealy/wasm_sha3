@@ -13,7 +13,7 @@ const startDebugWasm = async pathToWasmBin => {
     const debugWasi = new WASI({
       version: "unstable",
     })
-    const debugWasiImportObj = { wasi_snapshot_preview2: debugWasi.wasiImport }
+    const debugWasiImportObj = { wasi_snapshot_preview1: debugWasi.wasiImport }
 
     let debugModule = await WebAssembly.instantiate(
       new Uint8Array(readFileSync(pathToWasmBin)),
@@ -29,7 +29,7 @@ const startDebugWasm = async pathToWasmBin => {
 // Instantiate the SHA3 WASM module
 const startSha3Wasm =
   async (pathToWasmBin, isProd) => {
-    // Start SHA3 module using WASI passing in debguWasi instance
+    // Start SHA3 module using WASI passing in debugWasi instance
     const sha3Wasi = new WASI({
       args: process.argv,
       version: "unstable",
@@ -37,7 +37,7 @@ const startSha3Wasm =
     })
 
     let envObj = {
-      wasi_snapshot_preview2: sha3Wasi.wasiImport,
+      wasi_snapshot_preview1: sha3Wasi.wasiImport,
     }
 
     if (!isProd) {

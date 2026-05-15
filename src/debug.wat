@@ -4,8 +4,8 @@
   (type $type_wasi_fd_io (func (param i32 i32 i32 i32) (result i32)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Import OS system calls via WASI preview 2
-  (import "wasi_snapshot_preview2" "fd_write" (func $wasi.fd_write (type $type_wasi_fd_io)))
+  ;; Import OS system calls via WASI preview 1
+  (import "wasi_snapshot_preview1" "fd_write" (func $wasi.fd_write (type $type_wasi_fd_io)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (memory $memory (export "memory") 32)  ;; Incoming data should be written at offset 0

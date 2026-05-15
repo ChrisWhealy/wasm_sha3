@@ -1,0 +1,151 @@
+# Sponge Functions
+
+The hash function used by SHA3 belongs to a family of functions known as "sponge" functions.
+
+This name has been chosen because like a physical sponge, the function first "absorbs" any amount of data into its internal state, then "squeezes" out a result.
+
+These phase are strictly sequential: until the absorb phase has run to completion, the squeeze phase is unable to produce any meaning output.
+
+Sponge functions are entirely deterministic; that is, for the same input, they will always yield the same output.
+
+What makes the SHA3 function fundamentally different from the earlier SHA1 or SHA2 functions, is that the "squeeze" operation can be performed an unlimited number of times; hence, when used in Extendible Output Function (XOF) mode, the SHA3 function can act as a psuedo-random number generator.
+
+## Absorb Phase
+
+During the absorb phase, the SHA3 algorithm takes in data much like a sponge absorbs water.
+This phase runs until all the input data has been consumed, at which point, the SHA3 function's internal state is ready to output data.
+
+Now, one or more iterations of the squeeze phase can take place.
+
+## Squeeze Phase
+
+If the squeeze phase runs just once, then the output value acts as a drop-in replcement for the SHA2 function.
+However, by running the squeeze phase multiple times, you have at your disposal, a psuedo-random number generator.
+
+# SHA3 Internal State
+
+The SHA3 algorithm is fed input data that is used to manipulate its internal state.
+
+All internal operations acting on the internal state treat that state as if it were a 3-dimensional matrix having the dimensions `5 * 5 * w`, where `w = 2^l` and `l` is an integer in the range `0..6`.
+
+Thus, the size (`b`) of the internal state in bits may only be one of:
+
+| `l` | Formula | Internal<br>State Size
+|---|---|--:
+| `0` | `5 * 5 * 2^0` | `25`
+| `1` | `5 * 5 * 2^1` | `50`
+| `2` | `5 * 5 * 2^2` | `100`
+| `3` | `5 * 5 * 2^3` | `200`
+| `4` | `5 * 5 * 2^4` | `400`
+| `5` | `5 * 5 * 2^5` | `800`
+| `6` | `5 * 5 * 2^6` | `1600`
+
+Choosing values of `l < 3` gives state sizes that are only of use when analyzing the algorithm's behaviour.
+Such values should not be used in practice.
+
+However, implementing SHA3 as a SHA2 replacement requires `l` to be fixed at `6`, meaning that the internal state will always be `1600` bits.
+
+## Partitioning the Internal State
+
+The internal state is subdivided into two regions known as the `rate` (of size `r`) and the `capacity` (of size `c`) such that `r + c = b`.  Therefore in our case, `r + c = 1600`.
+
+The `rate` is the region into which the input data is written and from which the output digest will be taken.
+It has this name because its size determines the rate at which the input data can be consumed.
+
+The region known as the `capacity` however is never made public.
+Its purpose is to act as a hidden entropy pool into which the data bits in the `rate` are thoroughly mixed.
+
+Further to this, the size `c` of the capacity must always be twice the size of the output digest length `d`, thus `c = 2d` making `r = 1600 - 2d`.
+
+Given this constraint, the sizes of `r` and `c` may only be one of the following pairs (in bits):
+
+| `d` | Security<br>Level | Calculation | `r` | `c`
+|---|---|---|--:|--:
+| `224` | `112` | `r = 1600 - (2 * 224)` | `1152` |  `448` |
+| `256` | `128` | `r = 1600 - (2 * 256)` | `1088` |  `512` |
+| `384` | `192` | `r = 1600 - (2 * 384)` |  `768` |  `832` |
+| `512` | `256` | `r = 1600 - (2 * 512)` |  `576` | `1024` |
+
+
+## The "Keccak" Function
+
+SHA3 manipulates the input data using a function that has been given the made up name of "Keccak" (pronounced "ket chak").
+
+## Input Block Padding
+
+The input data is divided into some number (`t`) of blocks of the same size as the rate where `t` is given by:
+
+```javascript
+let t = Math.floor(file_size_in_bits / rate) + (file_size_in_bits mod rate < 4 ? 1 : 0)
+```
+
+The last block must be padded so that the data being processed fills an integer number of blocks.
+
+The padding rules depend on whether SHA3 is being used in SHA2-replacement mode, or XOF mode.
+In our case, we are only concerned with SHA2-replacement mode, so the padding rules are as follows:
+
+* The data must be suffixed with the two padding marker bits `01`
+* The padding marker must be followed by a variable length bit sequence that:
+   * Starts and ends with bit `1`
+   * Between the start and end `1`s there must be zero or more bit `0`s
+
+Thus, if the size of data `n` in the last block is 4 or more bits smaller than the rate `r`, the last block will be padded as follows:
+
+| Size of data<br> in last block | Padding<br>marker | Padding<br>bit sequence | Complete<br>bit string
+|---|---|---|---
+| `r-4` | `01` | `11` | `0111`
+| `r-5` | `01` | `101` | `01101`
+| `r-6` | `01` | `1001` | `011001`
+| `r-7` | `01` | `10001` | `0110001`
+| `r-n` | `01` | `1[n-4 * 0]1` | `0110...01`
+
+In the event that the block size is 3 or fewer bits smaller than the rate `r`, then the remaining bits are padded using the same scheme as above, but the padding string spills over into a new block:
+
+| Size of data<br>in last block | Padding bit<br>sequence in<br>last block | Padding bits<br>in extra block
+|---|---|---
+| `r-3` | `011` | `[r-1 * 0]1`
+| `r-2` | `01` | `1[r-2 * 0]1`
+| `r-1` | `0` | `11[r-3 * 0]1`
+| `r` | | `011[r-4 * 0]1`
+
+Note that if the data is an exact integer multiple of the block size `r`, then an extra block containing only the padding string is always added.
+
+## Keccak-f Input Processing
+
+Now that the input data `X` has been organised into some integer number `t` of blocks of size `r` (the last of which has been appropriately padded), the "absorb" phase performs the following loop:
+
+```rust
+// Internal state starts as 200 initialised u64s
+let mut state[u64; 200] = [0; 200];
+// The rate size in bits is given by 1600 - (2 * digest_size)
+// Assuming a digest size of 256 bits the rate size = 1600 - (2 * 256) = 1088
+let rate_size = 1088 >>> 6;  // As u64 words
+
+for idx in X.size {
+    state = keccak_f([state[0..rate_size] XOR X[idx], ...state[rate_size..]])
+}
+```
+
+Each time a new block is read from the input data, it is `XOR`ed with the current rate and the resulting internal state passed to the Keccak function.
+This process is performed as many times as needed to fully "absorb" the input data.
+
+![Sponge function](./docs/sponge.png)
+
+When SHA3 is being used in SHA2 replacement mode, after the absorb phase has completed, the required hash value is obtained simply by taking the required number of bits from the rate at `Y(0)`.
+However, when SHA3 is being used in XOF mode, at least one further round of the squeeze phase is performed, yielding `Y(1)`.
+At this point you may take as output any number of bits from the rate (up to the full size of the rate), and then perform any number of further squeeze rounds to continue generating psuedo-random data.
+
+This process is entirely deterministic.
+For the same input followed by the same number of squeeze rounds, the same output data will always be generated.
+
+[This document](./keccak.md) provides a description of how the Keccak function works internally.
+
+## Indexing Convention within the Internal State Matrix
+
+This module follows the state array indexing convention described in section 3.1.4 of the above document
+
+![Indexing convention of internal state matrix](./docs/indexing_convention.png)
+
+The linear order of the data in expected test results starts in the bottom left corner `(3,3)` of the above matrix.
+
+The array data then follows the order `(3,3), (4,3), (0,3), (1,3), (2,3)` followed by `(3,4), (4,4), (0,4), (1,4), (2,4)`, then `(3,0), (4,0), (0,0), (1,0), (2,0)` etc.

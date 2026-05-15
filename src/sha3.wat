@@ -61,18 +61,21 @@
   (type $type_i32*4          (func (param i32 i32 i32 i32)))
   (type $type_i32*5          (func (param i32 i32 i32 i32 i32)))
   (type $type_i32*3_i64      (func (param i32 i32 i32 i64)))
+  (type $type_wasi_fd_close  (func (param i32)                                 (result i32)))
+  (type $type_wasi_args      (func (param i32 i32)                             (result i32)))
   (type $type_wasi_path_open (func (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
   (type $type_wasi_fd_seek   (func (param i32 i64 i32 i32)                     (result i32)))
+  (type $type_wasi_fd_io     (func (param i32 i32 i32 i32)                     (result i32)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Import WASI preview 2 OS system calls
-  (import "wasi_snapshot_preview2" "args_sizes_get" (func $wasi.args_sizes_get (type $type_i32*2)))
-  (import "wasi_snapshot_preview2" "args_get"       (func $wasi.args_get       (type $type_i32*2)))
-  (import "wasi_snapshot_preview2" "path_open"      (func $wasi.path_open      (type $type_wasi_path_open)))
-  (import "wasi_snapshot_preview2" "fd_seek"        (func $wasi.fd_seek        (type $type_wasi_fd_seek)))
-  (import "wasi_snapshot_preview2" "fd_read"        (func $wasi.fd_read        (type $type_i32*4)))
-  (import "wasi_snapshot_preview2" "fd_write"       (func $wasi.fd_write       (type $type_i32*4)))
-  (import "wasi_snapshot_preview2" "fd_close"       (func $wasi.fd_close       (type $type_i32*1)))
+  ;; Import WASI preview 1 OS system calls
+  (import "wasi_snapshot_preview1" "args_sizes_get" (func $wasi.args_sizes_get (type $type_wasi_args)))
+  (import "wasi_snapshot_preview1" "args_get"       (func $wasi.args_get       (type $type_wasi_args)))
+  (import "wasi_snapshot_preview1" "path_open"      (func $wasi.path_open      (type $type_wasi_path_open)))
+  (import "wasi_snapshot_preview1" "fd_seek"        (func $wasi.fd_seek        (type $type_wasi_fd_seek)))
+  (import "wasi_snapshot_preview1" "fd_read"        (func $wasi.fd_read        (type $type_wasi_fd_io)))
+  (import "wasi_snapshot_preview1" "fd_write"       (func $wasi.fd_write       (type $type_wasi_fd_io)))
+  (import "wasi_snapshot_preview1" "fd_close"       (func $wasi.fd_close       (type $type_wasi_fd_close)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;;@debug-start
@@ -96,6 +99,10 @@
   ;; Memory pages  2     File IO pointers and buffers
   (memory $main (export "memory") 33)
 
+  ;;@debug-start
+  (global $DEBUG_ACTIVE       i32 (i32.const 1))
+  ;;@debug-end
+
   (global $DEBUG_IO_BUFF_PTR  i32 (i32.const 0))
   (global $FD_STDOUT          i32 (i32.const 1))
   (global $FD_STDERR          i32 (i32.const 2))
@@ -106,7 +113,7 @@
   ;; 0x00000000     200   i64x24  24 Keccak round constants
   ;; 0x000000C8     100   i32x25  Rotation table for Rho function
   ;; 0x0000012C     200   i64x25  Ping-pong BUF_0 — theta input / rho output / chi+iota output  (THETA_A_BLK_PTR = RHO_RESULT_PTR = CHI_RESULT_PTR)
-  ;; 0x000001F4     200   i64x25  Ping-pong BUF_1 — theta output / pi output                   (THETA_RESULT_PTR = PI_RESULT_PTR)
+  ;; 0x000001F4     200   i64x25  Ping-pong BUF_1 — theta output / pi output                    (THETA_RESULT_PTR = PI_RESULT_PTR)
   ;; 0x000002BC      40   i64x5   Theta C function output
   ;; 0x000002E4      40   i64x5   Theta D function output
   ;; 0x0000030C     100   i32x25  State index table
@@ -114,59 +121,60 @@
   ;; 0x00000389       3           Padding (32-bit alignment)
   ;; 0x0000038C     200   i64x25  Entropy pool (fixed at 200 bytes, subdivided into rate and capacity)
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; File IO
+  ;; File IO  (all i64 output pointers must be 8-byte aligned otherwise wasmtime throws its toys out of the pram)
   ;; 0x000004E4       4   i32     file_fd
-  ;; 0x000004EC       8   i64     fd_seek file size
-  ;; 0x000004F4       8   i32x2   Pointer to read iovec buffer address + size
-  ;; 0x000004FC       8   i32x2   Pointer to write iovec buffer address + size
-  ;; 0x00000504       8   i64     Bytes transferred by the last io operation
-  ;; 0x00000514       8   i64     File size (little endian)
-  ;; 0x00000524       8   i64     File size (big endian)
-  ;; 0x00000534       4   i32     Pointer to file path name
-  ;; 0x00000538       4   i32     Pointer to file path length
-  ;; 0x0000053C       4   i32     Number of command line arguments
-  ;; 0x00000540       4   i32     Command line buffer size
-  ;; 0x00000544       4   i32     Pointer to array of argument pointers (needs double dereferencing)
+  ;; 0x000004E8       8   i64     fd_seek file size          [8-byte aligned]
+  ;; 0x000004F0       8   i64     Bytes transferred / seek   [8-byte aligned]
+  ;; 0x000004F8       8   i32x2   Read  iovec (ptr + len)
+  ;; 0x00000500       8   i32x2   Write iovec (ptr + len)
+  ;; 0x00000508       4   i32     Pointer to file path name
+  ;; 0x0000050C       4   i32     Pointer to file path length
+  ;; 0x00000510       4   i32     Number of command line arguments
+  ;; 0x00000514       4   i32     Command line buffer size
+  ;; 0x00000518       ?   i32[]   Array of argument pointers (needs double dereferencing)
   ;; Unused
   ;; 0x000005E4     256   data    Command line args buffer
   ;; Unused
-  ;; 0x00000A44      64   data    ASCII representation of SHA value
-  ;; Unused
+  ;; 0x00000A44     128   data    ASCII representation of SHA value (up to 512 bits = 128 hex chars)
+  ;; 0x00000AC4      16   data    Nybble-to-ASCII lookup table
   ;; 0x00000AE4       2   data    Two ASCII spaces
   ;; 0x00000AE7       5   data    Error message prefix "Err: "
-  ;; 0x00000AEC      43           Error message "Bad args. Expected sha256|sha224 <filename>"
-  ;; 0x00000B1C      25           Error message "No such file or directory"
-  ;; 0x00000B3C      24           Error message "Unable to read file size"
-  ;; 0x00000B54      21           Error message "File too large (>4Gb)"
-  ;; 0x00000B74      18           Error message "Error reading file"
-  ;; 0x00000B94      48           Error message "Neither a directory nor a symlink to a directory"
-  ;; 0x00000BC4      19           Error message "Bad file descriptor"
-  ;; 0x00000BE4      26           Error message "Memory allocation failed: "
-  ;; 0x00000C04      23           Error message "Operation not permitted"
-  ;; 0x00000C24      25           Error message "Filename too long (>=256)"
-  ;; Debug messages — will be stripped from production build by ;;@debug-start/end markers
-  ;; 0x00000C44       6           "argc: "
-  ;; 0x00000C54      14           "argv_buf_len: "
-  ;; 0x00000C64       6           "Step: "
-  ;; 0x00000C6C      13           "Return code: "
-  ;; 0x00000C84      15           "msg_blk_count: "
-  ;; 0x00000C94      19           "File size (bytes): "
-  ;; 0x00000CB4      28           "Bytes read by wasi.fd_read: "
-  ;; 0x00000CD4      20           "wasi.fd_read count: "
-  ;; 0x00000CF4      18           "Copy to new addr: "
-  ;; 0x00000D14      18           "Copy length     : "
-  ;; 0x00000D34      30           "Allocated extra memory pages: "
-  ;; 0x00000D64      27           "No memory allocation needed"
-  ;; 0x00000D84      32           "Current memory page allocation: "
-  ;; 0x00000DA4      25           "wasi.fd_read chunk size: "
-  ;; 0x00000DC4      22           "Processing full buffer"
-  ;; 0x00000DE4      19           "Hit EOF (Partial): "
-  ;; 0x00000E14      16           "Hit EOF (Zero): "
-  ;; 0x00000E24      22           "Building empty msg blk"
-  ;; 0x00000E44      18           "File size (bits): "
-  ;; 0x00000E64      17           "Distance to EOB: "
-  ;; 0x00000E84      12           "EOD offset: "
-  ;; 0x00000E94       9           "SHA arg: "
+  ;; 0x00000AEC      63           Error message "Bad args. Expected one of 224, 256, 384, or 512 plus <filename>"
+  ;; 0x00000B30      25           Error message "No such file or directory"
+  ;; 0x00000B50      24           Error message "Unable to read file size"
+  ;; 0x00000B68      21           Error message "File too large (>4Gb)"
+  ;; 0x00000B88      18           Error message "Error reading file"
+  ;; 0x00000BA8      48           Error message "Neither a directory nor a symlink to a directory"
+  ;; 0x00000BD8      19           Error message "Bad file descriptor"
+  ;; 0x00000BF8      26           Error message "Memory allocation failed: "
+  ;; 0x00000C18      23           Error message "Operation not permitted"
+  ;; 0x00000C38      25           Error message "Filename too long (>=256)"
+  ;; 0x00000C58      17           Error message "Permission denied"
+  ;; 0x00000C78      21           Error message "IO error opening file"
+  ;; The following debug messages are declared within debug start/end comment markers
+  ;; These are stripped from the production build
+  ;; 0x00000C90       6           "argc: "
+  ;; 0x00000CA0      14           "argv_buf_len: "
+  ;; 0x00000CB0       6           "Step: "
+  ;; 0x00000CB8      13           "Return code: "
+  ;; 0x00000CD0      15           "msg_blk_count: "
+  ;; 0x00000CE0      19           "File size (bytes): "
+  ;; 0x00000D00      28           "Bytes read by wasi.fd_read: "
+  ;; 0x00000D20      20           "wasi.fd_read count: "
+  ;; 0x00000D40      18           "Copy to new addr: "
+  ;; 0x00000D60      18           "Copy length     : "
+  ;; 0x00000D80      30           "Allocated extra memory pages: "
+  ;; 0x00000DB0      27           "No memory allocation needed"
+  ;; 0x00000DD0      32           "Current memory page allocation: "
+  ;; 0x00000DF0      25           "wasi.fd_read chunk size: "
+  ;; 0x00000E10      22           "Processing full buffer"
+  ;; 0x00000E30      19           "Hit EOF (Partial): "
+  ;; 0x00000E60      16           "Hit EOF (Zero): "
+  ;; 0x00000E70      22           "Building empty msg blk"
+  ;; 0x00000E90      18           "File size (bits): "
+  ;; 0x00000EB0      17           "Distance to EOB: "
+  ;; 0x00000ED0      12           "EOD offset: "
+  ;; 0x00000EE0       9           "SHA arg: "
   ;; Unused
   ;; 0x00001DE4       ?   data    Buffer for strings being written to the console
   ;;
@@ -259,20 +267,22 @@
   (global $CAPACITY_PTR (export "CAPACITY_PTR") (mut i32) (i32.const 0x0000038C))  ;; set at runtime: STATE_PTR + RATE*8
 
   (global $FD_FILE_PTR         i32 (i32.const 0x000004E4))
-  (global $FILE_SIZE_PTR       i32 (i32.const 0x000004EC))
-  (global $IOVEC_READ_BUF_PTR  i32 (i32.const 0x000004F4))
-  (global $IOVEC_WRITE_BUF_PTR i32 (i32.const 0x000004FC))
-  (global $NREAD_PTR           i32 (i32.const 0x00000504))
-  (global $FILE_SIZE_LE_PTR    i32 (i32.const 0x00000514))
-  (global $FILE_SIZE_BE_PTR    i32 (i32.const 0x00000524))
-  (global $FILE_PATH_PTR       i32 (i32.const 0x00000534))
-  (global $FILE_PATH_LEN_PTR   i32 (i32.const 0x00000538))
-  (global $ARGS_COUNT_PTR      i32 (i32.const 0x0000053C))
-  (global $ARGV_BUF_LEN_PTR    i32 (i32.const 0x00000540))
-  (global $ARGV_PTRS_PTR       i32 (i32.const 0x00000544))
-
+  (global $FILE_SIZE_PTR       i32 (i32.const 0x000004E8))  ;; 8-byte aligned for fd_seek i64 output
+  (global $NREAD_PTR           i32 (i32.const 0x000004F0))  ;; 8-byte aligned for fd_seek i64 output
+  (global $IOVEC_READ_BUF_PTR  i32 (i32.const 0x000004F8))
+  (global $IOVEC_WRITE_BUF_PTR i32 (i32.const 0x00000500))
+  (global $FILE_PATH_PTR       i32 (i32.const 0x00000508))
+  (global $FILE_PATH_LEN_PTR   i32 (i32.const 0x0000050C))
+  (global $ARGS_COUNT_PTR      i32 (i32.const 0x00000510))
+  (global $ARGV_BUF_LEN_PTR    i32 (i32.const 0x00000514))
+  (global $ARGV_PTRS_PTR       i32 (i32.const 0x00000518))
   (global $ARGV_BUF_PTR        i32 (i32.const 0x000005E4))
-  (global $ASCII_HASH_PTR      i32 (i32.const 0x00000A44))
+  (global $ASCII_HASH_PTR      i32 (i32.const 0x00000A44))  ;; Up to 128 bytes (SHA3-512 = 128 hex chars)
+
+  (global $NYBBLE_TABLE        i32 (i32.const 0x00000AC4))  ;; Length = 16
+  (data (memory $main) (i32.const 0x00000AC4) "0123456789abcdef")
+
+  (global $DIGEST_LEN     (mut i32) (i32.const 256))  ;; Set by _start; default 256
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Error messages
@@ -282,104 +292,110 @@
   (global $ERR_MSG_PREFIX      i32 (i32.const 0x00000AE7))  ;; Length = 5
   (data (memory $main) (i32.const 0x00000AE7) "Err: ")
 
-  (global $ERR_MSG_BAD_ARGS    i32 (i32.const 0x00000AEC))  ;; Length = 43
-  (data (memory $main) (i32.const 0x00000AEC) "Bad args. Expected sha256|sha224 <filename>")
+  (global $ERR_MSG_BAD_ARGS    i32 (i32.const 0x00000AEC))  ;; Length = 63
+  (data (memory $main) (i32.const 0x00000AEC) "Bad args. Expected one of 224, 256, 384, or 512 plus <filename>")
 
-  (global $ERR_MSG_NOENT       i32 (i32.const 0x00000B1C))  ;; Length = 25
-  (data (memory $main) (i32.const 0x00000B1C) "No such file or directory")
+  (global $ERR_MSG_NOENT       i32 (i32.const 0x00000B30))  ;; Length = 25
+  (data (memory $main) (i32.const 0x00000B30) "No such file or directory")
 
-  (global $ERR_FILE_SIZE_READ  i32 (i32.const 0x00000B3C))  ;; Length = 24
-  (data (memory $main) (i32.const 0x00000B3C) "Unable to read file size")
+  (global $ERR_FILE_SIZE_READ  i32 (i32.const 0x00000B50))  ;; Length = 24
+  (data (memory $main) (i32.const 0x00000B50) "Unable to read file size")
 
-  (global $ERR_FILE_TOO_LARGE  i32 (i32.const 0x00000B54))  ;; Length = 21
-  (data (memory $main) (i32.const 0x00000B54) "File too large (>4Gb)")
+  (global $ERR_FILE_TOO_LARGE  i32 (i32.const 0x00000B68))  ;; Length = 21
+  (data (memory $main) (i32.const 0x00000B68) "File too large (>4Gb)")
 
-  (global $ERR_READING_FILE    i32 (i32.const 0x00000B74))  ;; Length = 18
-  (data (memory $main) (i32.const 0x00000B74) "Error reading file")
+  (global $ERR_READING_FILE    i32 (i32.const 0x00000B88))  ;; Length = 18
+  (data (memory $main) (i32.const 0x00000B88) "Error reading file")
 
-  (global $ERR_NOT_DIR_SYMLINK i32 (i32.const 0x00000B94))  ;; Length = 48
-  (data (memory $main) (i32.const 0x00000B94) "Neither a directory nor a symlink to a directory")
+  (global $ERR_NOT_DIR_SYMLINK i32 (i32.const 0x00000BA8))  ;; Length = 48
+  (data (memory $main) (i32.const 0x00000BA8) "Neither a directory nor a symlink to a directory")
 
-  (global $ERR_BAD_FD          i32 (i32.const 0x00000BC4))  ;; Length = 19
-  (data (memory $main) (i32.const 0x00000BC4) "Bad file descriptor")
+  (global $ERR_BAD_FD          i32 (i32.const 0x00000BD8))  ;; Length = 19
+  (data (memory $main) (i32.const 0x00000BD8) "Bad file descriptor")
 
-  (global $ERR_MEM_ALLOC       i32 (i32.const 0x00000BE4))  ;; Length = 26
-  (data (memory $main) (i32.const 0x00000BE4) "Memory allocation failed: ")
+  (global $ERR_MEM_ALLOC       i32 (i32.const 0x00000BF8))  ;; Length = 26
+  (data (memory $main) (i32.const 0x00000BF8) "Memory allocation failed: ")
 
-  (global $ERR_NOT_PERMITTED   i32 (i32.const 0x00000C04))  ;; Length = 23
-  (data (memory $main) (i32.const 0x00000C04) "Operation not permitted")
+  (global $ERR_NOT_PERMITTED   i32 (i32.const 0x00000C18))  ;; Length = 23
+  (data (memory $main) (i32.const 0x00000C18) "Operation not permitted")
 
-  (global $ERR_ARGV_TOO_LONG   i32 (i32.const 0x00000C24))  ;; Length = 25
-  (data (memory $main) (i32.const 0x00000C24) "Filename too long (>=256)")
+  (global $ERR_ARGV_TOO_LONG   i32 (i32.const 0x00000C38))  ;; Length = 25
+  (data (memory $main) (i32.const 0x00000C38) "Filename too long (>=256)")
+
+  (global $ERR_ACCESS          i32 (i32.const 0x00000C58))  ;; Length = 17
+  (data (memory $main) (i32.const 0x00000C58) "Permission denied")
+
+  (global $ERR_GEN_IO          i32 (i32.const 0x00000C78))  ;; Length = 21
+  (data (memory $main) (i32.const 0x00000C78) "IO error opening file")
 
   ;;@debug-start
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Debug messages
-  (global $DBG_MSG_ARGC        i32 (i32.const 0x00000C44))  ;; Length = 6
-  (data (memory $main) (i32.const 0x00000C44) "argc: ")
+  (global $DBG_MSG_ARGC        i32 (i32.const 0x00000C90))  ;; Length = 6
+  (data (memory $main) (i32.const 0x00000C90) "argc: ")
 
-  (global $DBG_MSG_ARGV_LEN    i32 (i32.const 0x00000C54))  ;; Length = 14
-  (data (memory $main) (i32.const 0x00000C54) "argv_buf_len: ")
+  (global $DBG_MSG_ARGV_LEN    i32 (i32.const 0x00000CA0))  ;; Length = 14
+  (data (memory $main) (i32.const 0x00000CA0) "argv_buf_len: ")
 
-  (global $DBG_STEP            i32 (i32.const 0x00000C64))  ;; Length = 6
-  (data (memory $main) (i32.const 0x00000C64) "Step: ")
+  (global $DBG_STEP            i32 (i32.const 0x00000CB0))  ;; Length = 6
+  (data (memory $main) (i32.const 0x00000CB0) "Step: ")
 
-  (global $DBG_RETURN_CODE     i32 (i32.const 0x00000C6C))  ;; Length = 13
-  (data (memory $main) (i32.const 0x00000C6C) "Return code: ")
+  (global $DBG_RETURN_CODE     i32 (i32.const 0x00000CB8))  ;; Length = 13
+  (data (memory $main) (i32.const 0x00000CB8) "Return code: ")
 
-  (global $DBG_MSG_BLK_COUNT   i32 (i32.const 0x00000C84))  ;; Length = 15
-  (data (memory $main) (i32.const 0x00000C84) "msg_blk_count: ")
+  (global $DBG_MSG_BLK_COUNT   i32 (i32.const 0x00000CD0))  ;; Length = 15
+  (data (memory $main) (i32.const 0x00000CD0) "msg_blk_count: ")
 
-  (global $DBG_FILE_SIZE       i32 (i32.const 0x00000C94))  ;; Length = 19
-  (data (memory $main) (i32.const 0x00000C94) "File size (bytes): ")
+  (global $DBG_FILE_SIZE       i32 (i32.const 0x00000CE0))  ;; Length = 19
+  (data (memory $main) (i32.const 0x00000CE0) "File size (bytes): ")
 
-  (global $DBG_BYTES_READ      i32 (i32.const 0x00000CB4))  ;; Length = 28
-  (data (memory $main) (i32.const 0x00000CB4) "Bytes read by wasi.fd_read: ")
+  (global $DBG_BYTES_READ      i32 (i32.const 0x00000D00))  ;; Length = 28
+  (data (memory $main) (i32.const 0x00000D00) "Bytes read by wasi.fd_read: ")
 
-  (global $DBG_READ_COUNT      i32 (i32.const 0x00000CD4))  ;; Length = 20
-  (data (memory $main) (i32.const 0x00000CD4) "wasi.fd_read count: ")
+  (global $DBG_READ_COUNT      i32 (i32.const 0x00000D20))  ;; Length = 20
+  (data (memory $main) (i32.const 0x00000D20) "wasi.fd_read count: ")
 
-  (global $DBG_COPY_MEM_TO     i32 (i32.const 0x00000CF4))  ;; Length = 18
-  (data (memory $main) (i32.const 0x00000CF4) "Copy to new addr: ")
+  (global $DBG_COPY_MEM_TO     i32 (i32.const 0x00000D40))  ;; Length = 18
+  (data (memory $main) (i32.const 0x00000D40) "Copy to new addr: ")
 
-  (global $DBG_COPY_MEM_LEN    i32 (i32.const 0x00000D14))  ;; Length = 18
-  (data (memory $main) (i32.const 0x00000D14) "Copy length     : ")
+  (global $DBG_COPY_MEM_LEN    i32 (i32.const 0x00000D60))  ;; Length = 18
+  (data (memory $main) (i32.const 0x00000D60) "Copy length     : ")
 
-  (global $DBG_MEM_GROWN       i32 (i32.const 0x00000D34))  ;; Length = 30
-  (data (memory $main) (i32.const 0x00000D34) "Allocated extra memory pages: ")
+  (global $DBG_MEM_GROWN       i32 (i32.const 0x00000D80))  ;; Length = 30
+  (data (memory $main) (i32.const 0x00000D80) "Allocated extra memory pages: ")
 
-  (global $DBG_NO_MEM_ALLOC    i32 (i32.const 0x00000D64))  ;; Length = 27
-  (data (memory $main) (i32.const 0x00000D64) "No memory allocation needed")
+  (global $DBG_NO_MEM_ALLOC    i32 (i32.const 0x00000DB0))  ;; Length = 27
+  (data (memory $main) (i32.const 0x00000DB0) "No memory allocation needed")
 
-  (global $DBG_MEM_SIZE        i32 (i32.const 0x00000D84))  ;; Length = 32
-  (data (memory $main) (i32.const 0x00000D84) "Current memory page allocation: ")
+  (global $DBG_MEM_SIZE        i32 (i32.const 0x00000DD0))  ;; Length = 32
+  (data (memory $main) (i32.const 0x00000DD0) "Current memory page allocation: ")
 
-  (global $DBG_CHUNK_SIZE      i32 (i32.const 0x00000DA4))  ;; Length = 25
-  (data (memory $main) (i32.const 0x00000DA4) "wasi.fd_read chunk size: ")
+  (global $DBG_CHUNK_SIZE      i32 (i32.const 0x00000DF0))  ;; Length = 25
+  (data (memory $main) (i32.const 0x00000DF0) "wasi.fd_read chunk size: ")
 
-  (global $DBG_FULL_BUFFER     i32 (i32.const 0x00000DC4))  ;; Length = 22
-  (data (memory $main) (i32.const 0x00000DC4) "Processing full buffer")
+  (global $DBG_FULL_BUFFER     i32 (i32.const 0x00000E10))  ;; Length = 22
+  (data (memory $main) (i32.const 0x00000E10) "Processing full buffer")
 
-  (global $DBG_EOF_PARTIAL     i32 (i32.const 0x00000DE4))  ;; Length = 19
-  (data (memory $main) (i32.const 0x00000DE4) "Hit EOF (Partial): ")
+  (global $DBG_EOF_PARTIAL     i32 (i32.const 0x00000E30))  ;; Length = 19
+  (data (memory $main) (i32.const 0x00000E30) "Hit EOF (Partial): ")
 
-  (global $DBG_EOF_ZERO        i32 (i32.const 0x00000E14))  ;; Length = 16
-  (data (memory $main) (i32.const 0x00000E14) "Hit EOF (Zero): ")
+  (global $DBG_EOF_ZERO        i32 (i32.const 0x00000E60))  ;; Length = 16
+  (data (memory $main) (i32.const 0x00000E60) "Hit EOF (Zero): ")
 
-  (global $DBG_EMPTY_MSG_BLK   i32 (i32.const 0x00000E24))  ;; Length = 22
-  (data (memory $main) (i32.const 0x00000E24) "Building empty msg blk")
+  (global $DBG_EMPTY_MSG_BLK   i32 (i32.const 0x00000E70))  ;; Length = 22
+  (data (memory $main) (i32.const 0x00000E70) "Building empty msg blk")
 
-  (global $DBG_FILE_SIZE_BITS  i32 (i32.const 0x00000E44))  ;; Length = 18
-  (data (memory $main) (i32.const 0x00000E44) "File size (bits): ")
+  (global $DBG_FILE_SIZE_BITS  i32 (i32.const 0x00000E90))  ;; Length = 18
+  (data (memory $main) (i32.const 0x00000E90) "File size (bits): ")
 
-  (global $DBG_EOB_DISTANCE    i32 (i32.const 0x00000E64))  ;; Length = 17
-  (data (memory $main) (i32.const 0x00000E64) "Distance to EOB: ")
+  (global $DBG_EOB_DISTANCE    i32 (i32.const 0x00000EB0))  ;; Length = 17
+  (data (memory $main) (i32.const 0x00000EB0) "Distance to EOB: ")
 
-  (global $DBG_EOD_OFFSET      i32 (i32.const 0x00000E84))  ;; Length = 12
-  (data (memory $main) (i32.const 0x00000E84) "EOD offset: ")
+  (global $DBG_EOD_OFFSET      i32 (i32.const 0x00000ED0))  ;; Length = 12
+  (data (memory $main) (i32.const 0x00000ED0) "EOD offset: ")
 
-  (global $DBG_SHA_ARG         i32 (i32.const 0x00000E94))  ;; Length = 9
-  (data (memory $main) (i32.const 0x00000E94) "SHA arg: ")
+  (global $DBG_SHA_ARG         i32 (i32.const 0x00000EE0))  ;; Length = 9
+  (data (memory $main) (i32.const 0x00000EE0) "SHA arg: ")
   ;;@debug-end
 
   (global $STR_WRITE_BUF_PTR   i32 (i32.const 0x00001DE4))
@@ -392,15 +408,717 @@
   (global $MSG_BLKS_PER_BUFFER i32 (i32.const 0x00008000))  ;; $READ_BUFFER_SIZE / 64
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "_start"))
+  ;; Entry point.  Called automatically by the WASI runtime.
+  ;;
+  ;; Expects two command line arguments:
+  ;;   <digest-bits>  one of 224, 256, 384, or 512
+  ;;   <file>         path to the file to hash
+  ;;
+  ;; Reads the file in 2 MB chunks, absorbs each rate-sized block into the Keccak state, applies SHA3
+  ;; padding (FIPS 202 §B.2), squeezes the first digest_bytes bytes from the state, and writes the
+  ;; result as "<hex>  <filename>\n" to stdout.
+  (func (export "_start")
+    (local $argc            i32)
+    (local $argv_buf_len    i32)
+    (local $hash_len_ptr    i32)
+    (local $hash_len_val    i32)  ;; 4-byte LE load of the digest-bits argument
+    (local $digest_len      i32)  ;; 224 | 256 | 384 | 512
+    (local $digest_bytes    i32)  ;; digest_len / 8
+    (local $rate_bytes      i32)  ;; RATE * 8
+    (local $filename_ptr    i32)
+    (local $filename_len    i32)
+    (local $file_fd         i32)
+    (local $return_code     i32)
+    (local $bytes_read      i32)
+    (local $file_size_bytes i32)
+    (local $src_ptr         i32)
+    (local $partial_bytes   i32)  ;; bytes accumulated in DATA_PTR for the current partial block
+    (local $fill_amount     i32)
+    (local $byte_offset     i32)
+    ;;@debug-start
+    (local $step            i32)
+    ;;@debug-end
+
+    (block $exit
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 0: Fetch argument count and total buffer size
+      ;;@debug-start
+      (local.set $step (i32.add (local.get $step) (i32.const 1)))
+      ;;@debug-end
+      (drop
+        (call $wasi.args_sizes_get (global.get $ARGS_COUNT_PTR) (global.get $ARGV_BUF_LEN_PTR))
+      )
+
+      (local.set $argc         (i32.load (memory $main) (global.get $ARGS_COUNT_PTR)))
+      (local.set $argv_buf_len (i32.load (memory $main) (global.get $ARGV_BUF_LEN_PTR)))
+
+      ;; Avoid buffer overrun
+      (if (i32.gt_u (local.get $argv_buf_len) (i32.const 256))
+        (then
+          ;;@debug-start
+          (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
+          ;;@debug-end
+          (call $writeln (i32.const 2) (global.get $ERR_ARGV_TOO_LONG) (i32.const 25))
+          (br $exit)
+        )
+      )
+
+      ;; Must be at least 2 arguments: digest-bits and filename
+      (if (i32.lt_u (local.get $argc) (i32.const 2))
+        (then
+          ;;@debug-start
+          (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
+          ;;@debug-end
+          (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 63))
+          (br $exit)
+        )
+      )
+
+      ;;@debug-start
+      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
+      ;;@debug-end
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 1: Parse and validate the digest-bits argument (second-to-last)
+      ;;@debug-start
+      (local.set $step (i32.add (local.get $step) (i32.const 1)))
+      ;;@debug-end
+      (drop
+        (call $wasi.args_get (global.get $ARGV_PTRS_PTR) (global.get $ARGV_BUF_PTR))
+      )
+
+      ;;@debug-start
+      (call $write_args)
+      ;;@debug-end
+
+      (drop ;; Don't care about the returned length
+        (local.set $hash_len_ptr (call $fetch_arg_n (i32.sub (local.get $argc) (i32.const 1))))
+      )
+
+      ;; Load 4 bytes so the null terminator is included; compare as a little-endian i32
+      (local.set $hash_len_val (i32.load (memory $main) (local.get $hash_len_ptr)))
+
+      (block $algo_ok
+        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00343232)) ;; ASCII "224\0"
+          (then (local.set $digest_len (i32.const 224)) (br $algo_ok))
+        )
+        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00363532)) ;; ASCII "256\0"
+          (then (local.set $digest_len (i32.const 256)) (br $algo_ok))
+        )
+        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00343833)) ;; ASCII "384\0"
+          (then (local.set $digest_len (i32.const 384)) (br $algo_ok))
+        )
+        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00323135)) ;; ASCII "512\0"
+          (then (local.set $digest_len (i32.const 512)) (br $algo_ok))
+        )
+        ;;@debug-start
+        (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
+        ;;@debug-end
+        (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 63))
+        (br $exit)
+      )
+
+      ;;@debug-start
+      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
+      ;;@debug-end
+
+      (global.set $DIGEST_LEN  (local.get $digest_len))
+      (local.set $digest_bytes (i32.shr_u (local.get $digest_len) (i32.const 3)))
+
+      ;; rate_words = (1600 - digest_len * 2) / 64
+      (global.set $RATE
+        (i32.shr_u
+          (i32.sub (i32.const 1600) (i32.shl (local.get $digest_len) (i32.const 1)))
+          (i32.const 6)
+        )
+      )
+      ;; rate_bytes = rate_words * 8
+      (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 2: Extract filename (last arg) and open the file
+      ;;@debug-start
+      (local.set $step (i32.add (local.get $step) (i32.const 1)))
+      ;;@debug-end
+      ;; fetch_arg_n leaves two values on the stack
+      (local.set $filename_len
+        (local.set $filename_ptr
+          (call $fetch_arg_n (local.get $argc))
+        )
+      )
+
+      (i32.store (memory $main) (global.get $FILE_PATH_PTR)     (local.get $filename_ptr))
+      (i32.store (memory $main) (global.get $FILE_PATH_LEN_PTR) (local.get $filename_len))
+
+      (local.tee $return_code
+        (local.set $file_fd
+          (call $file_open
+            (i32.const 3)              ;; preopened fd for the directory
+            (local.get $filename_ptr)
+            (local.get $filename_len)
+          )
+        )
+      )
+
+      (if
+        (then
+          ;;@debug-start
+          (call $write_step (i32.const 1) (local.get $step) (local.get $return_code))
+          ;;@debug-end
+          (br $exit)
+        )
+      )
+
+      ;;@debug-start
+      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
+      ;;@debug-end
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 3: Get file size
+      ;;@debug-start
+      (local.set $step (i32.add (local.get $step) (i32.const 1)))
+      ;;@debug-end
+      (local.set $return_code (call $file_size_get (local.get $file_fd)))
+
+      (if (local.get $return_code)
+        (then
+          ;;@debug-start
+          (call $write_step (i32.const 1) (local.get $step) (local.get $return_code))
+          ;;@debug-end
+          (call $writeln (i32.const 2) (global.get $ERR_FILE_SIZE_READ) (i32.const 24))
+          (br $exit)
+        )
+      )
+
+      (if
+        (i64.ge_u (i64.load (memory $main) (global.get $FILE_SIZE_PTR)) (i64.const 4294967296))
+        (then
+          ;;@debug-start
+          (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
+          ;;@debug-end
+          (call $writeln (i32.const 2) (global.get $ERR_FILE_TOO_LARGE) (i32.const 21))
+          (br $exit)
+        )
+      )
+
+      ;;@debug-start
+      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
+      ;;@debug-end
+      (local.set $file_size_bytes (i32.wrap_i64 (i64.load (memory $main) (global.get $FILE_SIZE_PTR))))
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 4: Initialise Keccak state
+      ;;@debug-start
+      (local.set $step (i32.add (local.get $step) (i32.const 1)))
+      ;;@debug-end
+      (global.set $CAPACITY     (i32.sub (i32.const 25) (global.get $RATE)))
+      (global.set $CAPACITY_PTR (i32.add (global.get $STATE_PTR) (i32.shl (global.get $RATE) (i32.const 3))))
+
+      (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200))
+
+      ;;@debug-start
+      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
+      ;;@debug-end
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 5: Read file in 2 MB chunks and absorb into the sponge
+      ;;@debug-start
+      (local.set $step (i32.add (local.get $step) (i32.const 1)))
+      ;;@debug-end
+      (i32.store (memory $main) (global.get $IOVEC_READ_BUF_PTR) (global.get $READ_BUFFER_PTR))
+      (i32.store (memory $main)
+        (i32.add (global.get $IOVEC_READ_BUF_PTR) (i32.const 4))
+        (global.get $READ_BUFFER_SIZE)
+      )
+
+      (block $eof
+        (loop $read_chunk
+          (local.tee $return_code
+            (call $wasi.fd_read
+              (local.get $file_fd)
+              (global.get $IOVEC_READ_BUF_PTR)
+              (i32.const 1)
+              (global.get $NREAD_PTR)
+            )
+          )
+
+          (if ;; $return_code > 0
+            (then
+              ;;@debug-start
+              (call $write_step (i32.const 1) (local.get $step) (local.get $return_code))
+              ;;@debug-end
+              (call $writeln (i32.const 2) (global.get $ERR_READING_FILE) (i32.const 18))
+              (br $exit)
+            )
+          )
+
+          (if ;; fd_read returned 0 bytes, we're done
+            (i32.eqz (local.tee $bytes_read (i32.load (memory $main) (global.get $NREAD_PTR))))
+            (then
+              (br $eof)
+            )
+          )
+
+          (local.set $src_ptr (global.get $READ_BUFFER_PTR))
+
+          ;; Complete any partial rate-block left over from the previous iteration
+          (if (local.get $partial_bytes)
+            (then
+              (local.set $fill_amount (i32.sub (local.get $rate_bytes) (local.get $partial_bytes)))
+              (if (i32.gt_u (local.get $fill_amount) (local.get $bytes_read))
+                (then (local.set $fill_amount (local.get $bytes_read)))
+              )
+              (memory.copy (memory $main) (memory $main)
+                (i32.add (global.get $DATA_PTR) (local.get $partial_bytes))
+                (local.get $src_ptr)
+                (local.get $fill_amount)
+              )
+              (local.set $partial_bytes (i32.add (local.get $partial_bytes) (local.get $fill_amount)))
+              (local.set $src_ptr       (i32.add (local.get $src_ptr)       (local.get $fill_amount)))
+              (local.set $bytes_read    (i32.sub (local.get $bytes_read)    (local.get $fill_amount)))
+
+              (if (i32.eq (local.get $partial_bytes) (local.get $rate_bytes))
+                (then
+                  (call $xor_data_with_rate (global.get $RATE))
+                  (call $run_permutation)
+                  (local.set $partial_bytes (i32.const 0))
+                )
+              )
+            )
+          )
+
+          ;; Absorb complete rate-blocks directly from the read buffer
+          (block $no_full_blocks
+            (loop $full_blocks
+              (br_if $no_full_blocks (i32.lt_u (local.get $bytes_read) (local.get $rate_bytes)))
+
+              (memory.copy (memory $main) (memory $main)
+                (global.get $DATA_PTR)
+                (local.get $src_ptr)
+                (local.get $rate_bytes)
+              )
+              (call $xor_data_with_rate (global.get $RATE))
+              (call $run_permutation)
+
+              (local.set $src_ptr    (i32.add (local.get $src_ptr)    (local.get $rate_bytes)))
+              (local.set $bytes_read (i32.sub (local.get $bytes_read) (local.get $rate_bytes)))
+              (br $full_blocks)
+            )
+          )
+
+          ;; Save any leftover bytes into DATA_PTR for the next iteration
+          (if (local.get $bytes_read)
+            (then
+              (memory.copy (memory $main) (memory $main)
+                (global.get $DATA_PTR)
+                (local.get $src_ptr)
+                (local.get $bytes_read)
+              )
+              (local.set $partial_bytes (local.get $bytes_read))
+            )
+          )
+
+          (br $read_chunk)
+        )
+      )
+
+      ;;@debug-start
+      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
+      ;;@debug-end
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 6: Apply SHA3 padding — pad10*1 with domain byte 0x06 (FIPS 202 §B.2)
+      ;;@debug-start
+      (local.set $step (i32.add (local.get $step) (i32.const 1)))
+      ;;@debug-end
+      ;;
+      ;; DATA_PTR[0..partial_bytes-1] already holds the final partial block.
+      ;; Zero the remainder of the rate block, then:
+      ;;   DATA_PTR[partial_bytes]       |= 0x06   (domain + start bit)
+      ;;   DATA_PTR[rate_bytes - 1]      |= 0x80   (end bit)
+      ;; When partial_bytes == rate_bytes-1 both writes target the same byte → 0x86
+      (memory.fill (memory $main)
+        (i32.add (global.get $DATA_PTR) (local.get $partial_bytes))
+        (i32.const 0)
+        (i32.sub (local.get $rate_bytes) (local.get $partial_bytes))
+      )
+      (i32.store8 (memory $main)
+        (i32.add (global.get $DATA_PTR) (local.get $partial_bytes))
+        (i32.const 0x06)
+      )
+      (i32.store8 (memory $main)
+        (i32.add (global.get $DATA_PTR) (i32.sub (local.get $rate_bytes) (i32.const 1)))
+        (i32.or
+          (i32.load8_u (memory $main)
+            (i32.add (global.get $DATA_PTR) (i32.sub (local.get $rate_bytes) (i32.const 1)))
+          )
+          (i32.const 0x80)
+        )
+      )
+      (call $xor_data_with_rate (global.get $RATE))
+      (call $run_permutation)
+
+      ;;@debug-start
+      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
+      ;;@debug-end
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 7: Close the file
+      ;;@debug-start
+      (local.set $step (i32.add (local.get $step) (i32.const 1)))
+      ;;@debug-end
+      (local.set $return_code (call $wasi.fd_close (local.get $file_fd)))
+
+      ;;@debug-start
+      (call $write_step (i32.const 1) (local.get $step) (local.get $return_code))
+      ;;@debug-end
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 8: Squeeze — convert the first digest_bytes bytes of state to hex ASCII
+      ;;@debug-start
+      (local.set $step (i32.add (local.get $step) (i32.const 1)))
+      ;;@debug-end
+      (loop $output_byte
+        (call $to_asc_pair
+          (i32.load8_u (memory $main) (i32.add (global.get $STATE_PTR) (local.get $byte_offset)))
+          (i32.add (global.get $ASCII_HASH_PTR) (i32.shl (local.get $byte_offset) (i32.const 1)))
+        )
+        (br_if $output_byte
+          (i32.lt_u
+            (local.tee $byte_offset (i32.add (local.get $byte_offset) (i32.const 1)))
+            (local.get $digest_bytes)
+          )
+        )
+      )
+
+      ;;@debug-start
+      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
+      ;;@debug-end
+
+      ;; Write "<hex>  <filename>\n" to stdout
+      (call $write
+        (global.get $FD_STDOUT)
+        (global.get $ASCII_HASH_PTR)
+        (i32.shl (local.get $digest_bytes) (i32.const 1))
+      )
+      (call $write   (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 2))
+      (call $writeln
+        (global.get $FD_STDOUT)
+        (i32.load (memory $main) (global.get $FILE_PATH_PTR))
+        (i32.load (memory $main) (global.get $FILE_PATH_LEN_PTR))
+      )
+    ) ;; Block $exit
+  )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "get_command_line_args")
-        (result i32)
-    (call $wasi.args_sizes_get (global.get $ARGS_COUNT_PTR) (global.get $ARGV_BUF_LEN_PTR))
-    ;; drop  ;; This is always 0, so ignore it
+  ;; Write $str_len bytes at $str_ptr to file descriptor $fd
+  (func $write
+        (param $fd      i32)
+        (param $str_ptr i32)
+        (param $str_len i32)
 
-    (i32.load (global.get $ARGS_COUNT_PTR))
+    (i32.store (memory $main) (global.get $IOVEC_WRITE_BUF_PTR) (local.get $str_ptr))
+    (i32.store (memory $main)
+      (i32.add (global.get $IOVEC_WRITE_BUF_PTR) (i32.const 4))
+      (local.get $str_len)
+    )
+
+    (drop ;; Don't care about the number of bytes written
+      (call $wasi.fd_write
+        (local.get $fd)
+        (global.get $IOVEC_WRITE_BUF_PTR)
+        (i32.const 1)
+        (global.get $NREAD_PTR)
+      )
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Write optional "Err: " prefix (when fd=2) then $str_len bytes from $str_ptr into STR_WRITE_BUF_PTR.
+  ;; Returns $buf_ptr positioned immediately after the message, ready for further appending.
+  (func $format_msg
+        (param $fd      i32)
+        (param $str_ptr i32)
+        (param $str_len i32)
+        (result i32)
+
+    (local $buf_ptr i32)
+    (local.set $buf_ptr (global.get $STR_WRITE_BUF_PTR))
+
+    ;; Are we writing to stderr?
+    (if (i32.eq (local.get $fd) (i32.const 2))
+      (then ;; prefix the message with "Err: "
+        (memory.copy (memory $main) (memory $main)
+          (local.get $buf_ptr) (global.get $ERR_MSG_PREFIX) (i32.const 5)
+        )
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 5)))
+      )
+    )
+
+    (memory.copy (memory $main) (memory $main)
+      (local.get $buf_ptr) (local.get $str_ptr) (local.get $str_len)
+    )
+
+    (i32.add (local.get $buf_ptr) (local.get $str_len))
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Write $str_len bytes followed by a line feed; prefix with "Err: " when writing to stderr
+  (func $writeln
+        (param $fd      i32)
+        (param $str_ptr i32)
+        (param $str_len i32)
+
+    (local $buf_ptr i32)
+    (local.set $buf_ptr
+      (call $format_msg (local.get $fd) (local.get $str_ptr) (local.get $str_len))
+    )
+
+    (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x0A))
+
+    (call $write
+      (local.get $fd)
+      (global.get $STR_WRITE_BUF_PTR)
+      (i32.sub (i32.add (local.get $buf_ptr) (i32.const 1)) (global.get $STR_WRITE_BUF_PTR))
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Write $str_len bytes followed by " 0x<hex_val>" and a line feed; prefix with "Err: " when writing to stderr
+  (func $writeln_with_value
+        (param $fd      i32)
+        (param $str_ptr i32)
+        (param $str_len i32)
+        (param $val     i32)
+
+    (local $buf_ptr i32)
+    (local.set $buf_ptr
+      (call $format_msg (local.get $fd) (local.get $str_ptr) (local.get $str_len))
+    )
+
+    (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x20)) ;; ASCII space
+    (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
+
+    (i32.store16 (memory $main) (local.get $buf_ptr) (i32.const 0x7830)) ;; ASCII "0x" as LE integer
+    (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
+
+    (call $i32_to_hex_str (local.get $val) (local.get $buf_ptr))
+    (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 8)))
+
+    (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x0A)) ;; ASCII line feed
+
+    (call $write
+      (local.get $fd)
+      (global.get $STR_WRITE_BUF_PTR)
+      (i32.sub (i32.add (local.get $buf_ptr) (i32.const 1)) (global.get $STR_WRITE_BUF_PTR))
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Convert one byte to two hex ASCII characters and write them to $out_ptr
+  (func $to_asc_pair
+        (param $byte    i32)
+        (param $out_ptr i32)
+
+    (i32.store8 (memory $main)
+      (local.get $out_ptr)
+      (i32.load8_u (memory $main)
+        (i32.add (global.get $NYBBLE_TABLE) (i32.shr_u (local.get $byte) (i32.const 4)))
+      )
+    )
+    (i32.store8 (memory $main)
+      (i32.add (local.get $out_ptr) (i32.const 1))
+      (i32.load8_u (memory $main)
+        (i32.add (global.get $NYBBLE_TABLE) (i32.and (local.get $byte) (i32.const 0x0F)))
+      )
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Convert an i32 to 8 ASCII hex characters in network (big-endian) byte order, write to $str_ptr
+  (func $i32_to_hex_str
+        (param $i32_val i32)
+        (param $str_ptr i32)
+
+    (call $to_asc_pair
+      (i32.shr_u (local.get $i32_val) (i32.const 24))
+      (local.get $str_ptr)
+    )
+    (call $to_asc_pair
+      (i32.and (i32.shr_u (local.get $i32_val) (i32.const 16)) (i32.const 0xFF))
+      (i32.add (local.get $str_ptr) (i32.const 2))
+    )
+    (call $to_asc_pair
+      (i32.and (i32.shr_u (local.get $i32_val) (i32.const 8)) (i32.const 0xFF))
+      (i32.add (local.get $str_ptr) (i32.const 4))
+    )
+    (call $to_asc_pair
+      (i32.and (local.get $i32_val) (i32.const 0xFF))
+      (i32.add (local.get $str_ptr) (i32.const 6))
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Return the pointer and byte length of the n'th (1-based) command line argument.
+  ;; $wasi.args_get must have been called before this function.
+  ;;
+  ;; Returns: (ptr: i32, len: i32)
+  (func $fetch_arg_n
+        (param $arg_num i32)
+        (result i32 i32)
+
+    (local $argc         i32)
+    (local $argv_buf_len i32)
+    (local $arg_n_ptr    i32)
+    (local $arg_n_len    i32)
+
+    (local.set $argc         (i32.load (memory $main) (global.get $ARGS_COUNT_PTR)))
+    (local.set $argv_buf_len (i32.load (memory $main) (global.get $ARGV_BUF_LEN_PTR)))
+
+    (local.set $arg_n_ptr
+      (i32.load (memory $main)
+        (i32.add
+          (global.get $ARGV_PTRS_PTR)
+          (i32.shl (i32.sub (local.get $arg_num) (i32.const 1)) (i32.const 2))
+        )
+      )
+    )
+
+    (local.tee $arg_n_len
+      (i32.sub
+        (if (result i32)
+          (i32.eq (local.get $arg_num) (local.get $argc))
+          (then
+            (i32.sub
+              (i32.add (i32.load (memory $main) (global.get $ARGV_PTRS_PTR)) (local.get $argv_buf_len))
+              (local.get $arg_n_ptr)
+            )
+          )
+          (else
+            (i32.sub
+              (i32.load (memory $main)
+                (i32.add (global.get $ARGV_PTRS_PTR) (i32.shl (local.get $arg_num) (i32.const 2)))
+              )
+              (local.get $arg_n_ptr)
+            )
+          )
+        )
+        (i32.const 1)  ;; subtract null terminator
+      )
+    )
+
+    (local.get $arg_n_ptr)
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Open the file at $path_offset/$path_len inside the preopened directory $fd_dir.
+  ;;
+  ;; Returns: (return_code: i32, file_fd: i32)
+  (func $file_open
+        (param $fd_dir      i32)
+        (param $path_offset i32)
+        (param $path_len    i32)
+        (result i32 i32)
+
+    (local $return_code i32)
+    (local $file_fd     i32)
+
+    (block $exit
+      (local.tee $return_code
+        (call $wasi.path_open
+          (local.get $fd_dir)
+          (i32.const 0)             ;; dirflags
+          (local.get $path_offset)
+          (local.get $path_len)
+          (i32.const 0)             ;; oflags (O_RDONLY)
+          (i64.const 6)             ;; rights: FD_READ | FD_SEEK
+          (i64.const 0)             ;; inherited rights
+          (i32.const 0)             ;; fdflags
+          (global.get $FD_FILE_PTR)
+        )
+      )
+
+      (if ;; some sort of IO error occurred
+        (then
+          (block $error_handled
+            (if (i32.eq (local.get $return_code) (i32.const 0x02))  ;; Permission denied
+              (then (call $writeln (i32.const 2) (global.get $ERR_ACCESS)         (i32.const 17)) (br $error_handled))
+            )
+            (if (i32.eq (local.get $return_code) (i32.const 0x08))  ;; Bad file descriptor
+              (then (call $writeln (i32.const 2) (global.get $ERR_BAD_FD)          (i32.const 19)) (br $error_handled))
+            )
+            (if (i32.eq (local.get $return_code) (i32.const 0x2C))  ;; No such file or directory
+              (then (call $writeln (i32.const 2) (global.get $ERR_MSG_NOENT)       (i32.const 25)) (br $error_handled))
+            )
+            (if (i32.eq (local.get $return_code) (i32.const 0x36))  ;; Neither a directory nor a symlink
+              (then (call $writeln (i32.const 2) (global.get $ERR_NOT_DIR_SYMLINK) (i32.const 48)) (br $error_handled))
+            )
+            (if (i32.eq (local.get $return_code) (i32.const 0x3F))  ;; Operation not permitted
+              (then (call $writeln (i32.const 2) (global.get $ERR_NOT_PERMITTED)   (i32.const 23)) (br $error_handled))
+            )
+            ;; Generic fallback: unrecognised WASI errno — display message and return code
+            (call $writeln_with_value (i32.const 2) (global.get $ERR_GEN_IO) (i32.const 21) (local.get $return_code))
+          )
+          (br $exit)
+        )
+      )
+
+      (local.set $file_fd (i32.load (memory $main) (global.get $FD_FILE_PTR)))
+    )
+
+    (local.get $return_code)
+    (local.get $file_fd)
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Determine the size of an already-opened file; result written to $FILE_SIZE_PTR.
+  ;; Aborts with unreachable if fd_seek fails.
+  (func $file_size_get
+        (param $file_fd i32)
+        (result i32)
+
+    (local $return_code i32)
+
+    (block $exit
+      (local.set $return_code
+        (call $wasi.fd_seek (local.get $file_fd) (i64.const 0) (i32.const 2) (global.get $FILE_SIZE_PTR))
+      )
+      (br_if $exit (local.get $return_code))
+
+      (local.set $return_code
+        (call $wasi.fd_seek (local.get $file_fd) (i64.const 0) (i32.const 0) (global.get $NREAD_PTR))
+      )
+    )
+
+    (local.get $return_code)
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Copy STATE_PTR → THETA_A_BLK_PTR, run 24 Keccak rounds, copy CHI_RESULT_PTR → STATE_PTR
+  (func $run_permutation
+    (local $round i32)
+
+    (memory.copy (memory $main) (memory $main)
+      (global.get $THETA_A_BLK_PTR)
+      (global.get $STATE_PTR)
+      (i32.const 200)
+    )
+
+    (loop $next_round
+      (call $keccak (local.get $round))
+      (br_if $next_round
+        (i32.lt_u
+          (local.tee $round (i32.add (local.get $round) (i32.const 1)))
+          (i32.const 24)
+        )
+      )
+    )
+
+    (memory.copy (memory $main) (memory $main)
+      (global.get $STATE_PTR)
+      (global.get $CHI_RESULT_PTR)
+      (i32.const 200)
+    )
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -723,7 +1441,8 @@
   ;;
   ;; The parameter $n is only needed to test a single round of $theta_c_inner.
   ;; In normal operation, this parameter is hard-coded to 5
-  (func $theta_c (export "theta_c")
+  (func $theta_c
+        (export "theta_c")
         (param $n i32)
 
     (local $result       i64)
@@ -1332,9 +2051,8 @@
         )
       )
     )
-
-    ;; Dump state after transformation
     ;;@debug-start
+    ;; Dump state after transformation
     (if (local.get $debug_active)
       (then
         (memory.copy
@@ -1433,4 +2151,193 @@
     (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
     ;;@debug-end
   )
+
+  ;;@debug-start
+    ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; This function does nothing unless either $DEBUG_ACTIVE is true or we're writing to stderr
+  ;; Write a debug/trace message to the specified fd
+  ;; Returns: None
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func $write_msg
+        (param $fd      i32)  ;; Write to this file descriptor
+        (param $msg_ptr i32)  ;; Pointer to error message text
+        (param $msg_len i32)  ;; Length of error message
+
+    (local $buf_ptr i32)
+
+    (if
+      (i32.or
+        (global.get $DEBUG_ACTIVE)
+        (i32.eq (local.get $fd) (i32.const 2))
+      )
+      (then
+        (local.set $buf_ptr (global.get $STR_WRITE_BUF_PTR))
+
+        ;; Write message text
+        (memory.copy (memory $main) (memory $main) (local.get $buf_ptr) (local.get $msg_ptr) (local.get $msg_len))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (local.get $msg_len)))
+
+        ;; Write LF
+        (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x0A))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
+
+        (call $write
+          (local.get $fd)
+          (global.get $STR_WRITE_BUF_PTR)
+          (i32.sub (local.get $buf_ptr) (global.get $STR_WRITE_BUF_PTR)) ;; length = end address - start address
+        )
+      )
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; This function does nothing unless either $DEBUG_ACTIVE is true or we're writing to stderr
+  ;; Write a debug/trace message plus a value to the specified fd
+  ;; Returns: None
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func $write_msg_with_value
+        (param $fd      i32)  ;; Write to this file descriptor
+        (param $msg_ptr i32)  ;; Pointer to error message text
+        (param $msg_len i32)  ;; Length of error message
+        (param $msg_val i32)  ;; Some i32 value to be prefixed with "0x" then printed after the message text
+
+    (local $buf_ptr i32)
+
+    (if
+      (i32.or
+        (global.get $DEBUG_ACTIVE)
+        (i32.eq (local.get $fd) (i32.const 2))
+      )
+      (then
+        (local.set $buf_ptr (global.get $STR_WRITE_BUF_PTR))
+
+        ;; Write message text
+        (memory.copy (memory $main) (memory $main) (local.get $buf_ptr) (local.get $msg_ptr) (local.get $msg_len))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (local.get $msg_len)))
+
+        ;; Write "0x"
+        (i32.store16 (memory $main) (local.get $buf_ptr) (i32.const 0x7830)) ;; (little endian)
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
+
+        ;; Write i32 value as hex string
+        (call $i32_to_hex_str (local.get $msg_val) (local.get $buf_ptr))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 8)))
+
+        ;; Write LF
+        (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x0A))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
+
+        (call $write
+          (local.get $fd)
+          (global.get $STR_WRITE_BUF_PTR)
+          (i32.sub (local.get $buf_ptr) (global.get $STR_WRITE_BUF_PTR)) ;; length = end address - start address
+        )
+      )
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Write the return code of the current processing step to the specified fd
+  ;; Returns: None
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func $write_step
+        (param $fd       i32)
+        (param $step_no  i32)
+        (param $ret_code i32)
+
+    (local $buf_ptr i32)
+
+    ;; Do nothing unless we are either writing to stderr or $DEBUG_ACTIVE is true
+    (if
+      (i32.or
+        (global.get $DEBUG_ACTIVE)
+        (i32.eq (local.get $fd) (i32.const 2))
+      )
+      (then
+        (local.set $buf_ptr (global.get $STR_WRITE_BUF_PTR))
+
+        ;; Write step text
+        (memory.copy (memory $main) (memory $main) (local.get $buf_ptr) (global.get $DBG_STEP) (i32.const 6))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 6)))
+
+        ;; Write "0x" prefix
+        (i32.store16 (memory $main) (local.get $buf_ptr) (i32.const 0x7830)) ;; (little endian)
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
+
+        ;; Write step number as hex string
+        (call $i32_to_hex_str (local.get $step_no) (local.get $buf_ptr))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 8)))
+
+        ;; Write "  " padding
+        (i32.store16 (memory $main) (local.get $buf_ptr) (i32.load16_u (memory $main) (global.get $ASCII_SPACES)))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
+
+        ;; Write return code text
+        (memory.copy (memory $main) (memory $main) (local.get $buf_ptr) (global.get $DBG_RETURN_CODE) (i32.const 13))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 13)))
+
+        ;; Write "0x" prefix
+        (i32.store16 (memory $main) (local.get $buf_ptr) (i32.const 0x7830)) ;; (little endian)
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
+
+        ;; Write return code as hex string
+        (call $i32_to_hex_str (local.get $ret_code) (local.get $buf_ptr))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 8)))
+
+        ;; Write LF
+        (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x0A))
+        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
+
+        (call $write
+          (local.get $fd)
+          (global.get $STR_WRITE_BUF_PTR)
+          (i32.sub (local.get $buf_ptr) (global.get $STR_WRITE_BUF_PTR)) ;; length = end address - start address
+        )
+      )
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Write argc and argv list to stdout
+  ;; Returns: None
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func $write_args
+    (local $argc         i32)  ;; Argument count
+    (local $argc_count   i32)  ;; Loop counter
+    (local $argv_buf_len i32)  ;; Total length of argument string
+    (local $arg_ptr      i32)  ;; Pointer to current cmd line argument
+    (local $arg_len      i32)  ;; Length of current cmd line argument
+
+    (local.set $argc         (i32.load (memory $main) (global.get $ARGS_COUNT_PTR)))
+    (local.set $argv_buf_len (i32.load (memory $main) (global.get $ARGV_BUF_LEN_PTR)))
+
+    (if (global.get $DEBUG_ACTIVE)
+      (then
+        ;; Write "argc: 0x" to output buffer followed by value of $argc
+        (call $write_msg_with_value (i32.const 1) (global.get $DBG_MSG_ARGC) (i32.const 6) (local.get $argc))
+
+        ;; Print "argv_buf_len: 0x" line followed by the value of argv_buf_len
+        (call $write_msg_with_value (i32.const 1) (global.get $DBG_MSG_ARGV_LEN) (i32.const 14) (local.get $argv_buf_len))
+
+        (local.set $argc_count (i32.const 1))
+
+        ;; Write command lines args to output buffer
+        (loop $arg_loop
+          (local.set $arg_ptr (call $fetch_arg_n (local.get $argc_count)))
+          (local.set $arg_len)
+
+          (call $writeln (i32.const 1) (local.get $arg_ptr) (local.get $arg_len))
+
+          ;; Repeat while argc_count <= argc
+          (br_if $arg_loop
+            (i32.le_u
+              (local.tee $argc_count (i32.add (local.get $argc_count) (i32.const 1)))
+              (local.get $argc)
+            )
+          )
+        )
+      )
+    )
+  )
+  ;;@debug-end
 )

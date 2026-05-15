@@ -1,7 +1,7 @@
 {
   "name": "wasm_sha3",
-  "version": "0.1.0",
-  "description": "Calculate the hash of a local file using the SHA3",
+  "version": "1.0.0",
+  "description": "Calculate the SHA3 hash of a local file",
   "type": "module",
   "main": "sha3.mjs",
   "scripts": {

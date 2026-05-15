@@ -1,0 +1,42 @@
+[package]
+name = "chriswhealy/sha3"
+version = "1.0.0"
+license = "MIT"
+description = "Use the SHA3 algorithm to calculate a 224, 256, 384 or 512 bit digest of a local file"
+repository = "https://github.com/ChrisWhealy/wasm_sha3"
+readme = "./README.md"
+
+# See more keys and definitions at https://docs.wasmer.io/registry/manifest
+
+[[module]]
+name = "sha3"
+source = "./bin/sha3.prod.opt.wasm"
+abi = "wasi"
+
+[[command]]
+name = "224"
+module = "sha3"
+runner = "wasi"
+[command.annotations.wasi]
+main_args = ["224"]
+
+[[command]]
+name = "256"
+module = "sha3"
+runner = "wasi"
+[command.annotations.wasi]
+main_args = ["256"]
+
+[[command]]
+name = "384"
+module = "sha3"
+runner = "wasi"
+[command.annotations.wasi]
+main_args = ["384"]
+
+[[command]]
+name = "512"
+module = "sha3"
+runner = "wasi"
+[command.annotations.wasi]
+main_args = ["512"]
