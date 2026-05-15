@@ -78,31 +78,30 @@ $ ./sha3sum.mjs 384 ./tests/war_and_peace.txt
 If present in the CWD, `wasmer` will read `wasmer.toml` to discover which WASM module is to be run.
 In such cases, you need only specify `wasmer run .` where the meaning of `.` will be derived from the contents of `wasmer.toml`.
 
-`wasmer`, has both a `--dir` and a `--mapdir` argument, but you should always use the `--mapdir` argument.
-See [below](#wasmer-update) for why this is the case.
+`wasmer` has both a `--dir` and a `--mapdir` argument, but you should always use the `--mapdir` argument.
+See [here](https://github.com/ChrisWhealy/wasm_sha256#wasmer-update) for why this is the case.
 
 The value passed to the `--mapdir` argument is in the form `<guest_dir>::<host_dir>`.
 
 ***IMPORTANT***<br>
-You cannot specify shortcuts such `.` as the value of the `<guest_dir>`, nor `~` as the value of the `<host_dir>`.
-Such shortcuts are only replaced by the shell, not `wasmer`.
+You cannot specify shortcuts such `.` or `~` as these values are only replaced by the shell, not `wasmer`.
 
 Since `<guest_dir>` identifies the name of the WebAssembly module's virtual root directory, you would typically identify this as `/`.
 
-For the `<host_dir>`, `wasmer` does not evaluate the shell shortcut to your home directory (`~`).
-Instead, to grant access to your home directory, use the fully qualifiied path name.
+For the `<host_dir>`, `wasmer` cannot evaluate the shell shortcut `~` for your home directory.
+Instead, you must use the fully qualifiied path name.
 E.G. `/Users/chris/`.
-
-In this example, the CWD contains the directory `./test_data` which then contains `war_and_peace.txt`.
-Since `./test_data` becomes WASM's virtual root directory, the file name `war_and_peace.txt` does not need to be prefixed with the directory name.
-
-In this case, the `wasmer.toml` file contains definitions for commands called `224`, `256`, `384` and `512`.
-Within these command definitions, the corresponding hash length argument has been hard-coded.
 
 ```bash
 $ wasmer run . --mapdir /::./test_data --command-name=224 -- war_and_peace.txt
 1b74a9be309c26072ad2903b3ab16eda117414736d32df43df562bb1  war_and_peace.txt
 ```
+
+In the above example, the CWD contains the directory `./test_data` which then contains the text file `war_and_peace.txt`.
+Since `./test_data` becomes WASM's virtual root directory, the file name `war_and_peace.txt` does not need to be prefixed with the directory name.
+
+In this case, the `wasmer.toml` file contains definitions for commands called `224`, `256`, `384` and `512`.
+Within these command definitions, the corresponding hash length argument has been hard-coded, so there is no need for you to specify it explicitly.
 
 ## Wasmtime
 
