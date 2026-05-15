@@ -133,7 +133,7 @@ for idx in X.size {
 Each time a new block is read from the input data, it is `XOR`ed with the current rate and the resulting internal state passed to the Keccak function.
 This process is performed as many times as needed to fully "absorb" the input data.
 
-![Sponge function](./docs/sponge.png)
+![Sponge function](./sponge.png)
 
 When SHA3 is being used in SHA2 replacement mode, after the absorb phase has completed, the required hash value is obtained simply by taking the required number of bits from the rate at `Y(0)`.
 However, when SHA3 is being used in XOF mode, at least one further round of the squeeze phase is performed, yielding `Y(1)`.
