@@ -2,6 +2,8 @@
 
 An implementation of the SHA3 algorithm in WebAssembly Text based on the specification published as [NIST FIPS 202](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf).
 
+The resulting binary is just over 4Kb 😎
+
 # Overview
 
 The SHA3 algorithm can be used in two modes:
