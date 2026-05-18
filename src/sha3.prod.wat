@@ -1217,40 +1217,194 @@
   ;; }
   ;;
   ;; Matrix access must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
+  ;;
+  ;; For the purposes of runtime efficiency, this loop has been unrolled since the D-offset repeats the same pattern
+  ;; across all 5 rows: [16,24,32,0,8] (D[2],D[3],D[4],D[0],D[1])
   (func $theta_xor_loop (export "theta_xor_loop")
-    ;; Unrolled: THETA_RESULT_PTR[offset] = THETA_D_OUT_PTR[D_off] XOR THETA_A_BLK_PTR[offset]
-    ;; D-offset pattern repeats [16,24,32,0,8] (D[2],D[3],D[4],D[0],D[1]) across all 5 rows.
-    ;; State offsets from STATE_IDX_TAB traversal order.
     ;; y=2 group: A[2,2], A[3,2], A[4,2], A[0,2], A[1,2]
-    (i64.store (memory $main) offset=96  (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=16 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=96  (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=104 (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=24 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=104 (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=112 (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=32 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=112 (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=80  (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=0  (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=80  (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=88  (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=8  (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=88  (global.get $THETA_A_BLK_PTR))))
+    (i64.store (memory $main) offset=96
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=16 (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=96 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=104
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=24 (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=104(global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=112
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=32 (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=112(global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=80
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=0  (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=80 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=88
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=8  (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=88 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+
     ;; y=3 group: A[2,3], A[3,3], A[4,3], A[0,3], A[1,3]
-    (i64.store (memory $main) offset=136 (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=16 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=136 (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=144 (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=24 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=144 (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=152 (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=32 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=152 (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=120 (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=0  (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=120 (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=128 (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=8  (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=128 (global.get $THETA_A_BLK_PTR))))
+    (i64.store (memory $main) offset=136
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=16  (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=136 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=144
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=24  (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=144 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=152
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=32  (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=152 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=120
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=0   (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=120 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=128
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=8   (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=128 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+
     ;; y=4 group: A[2,4], A[3,4], A[4,4], A[0,4], A[1,4]
-    (i64.store (memory $main) offset=176 (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=16 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=176 (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=184 (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=24 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=184 (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=192 (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=32 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=192 (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=160 (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=0  (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=160 (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=168 (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=8  (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=168 (global.get $THETA_A_BLK_PTR))))
+    (i64.store (memory $main) offset=176
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=16  (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=176 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=184
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=24  (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=184 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=192
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=32  (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=192 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=160
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=0   (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=160 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=168
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=8   (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=168 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+
     ;; y=0 group: A[2,0], A[3,0], A[4,0], A[0,0], A[1,0]
-    (i64.store (memory $main) offset=16  (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=16 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=16  (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=24  (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=24 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=24  (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=32  (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=32 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=32  (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=0   (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=0  (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=0   (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=8   (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=8  (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=8   (global.get $THETA_A_BLK_PTR))))
+    (i64.store (memory $main) offset=16
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=16 (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=16 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=24
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=24 (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=24 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=32
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=32 (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=32 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=0
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=0 (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=0 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=8
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=8 (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=8 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+
     ;; y=1 group: A[2,1], A[3,1], A[4,1], A[0,1], A[1,1]
-    (i64.store (memory $main) offset=56  (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=16 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=56  (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=64  (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=24 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=64  (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=72  (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=32 (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=72  (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=40  (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=0  (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=40  (global.get $THETA_A_BLK_PTR))))
-    (i64.store (memory $main) offset=48  (global.get $THETA_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=8  (global.get $THETA_D_OUT_PTR)) (i64.load (memory $main) offset=48  (global.get $THETA_A_BLK_PTR))))
+    (i64.store (memory $main) offset=56
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=16 (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=56 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=64
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=24 (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=64 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=72
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=32 (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=72 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=40
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=0  (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=40 (global.get $THETA_A_BLK_PTR))
+      )
+    )
+    (i64.store (memory $main) offset=48
+      (global.get $THETA_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=8  (global.get $THETA_D_OUT_PTR))
+        (i64.load (memory $main) offset=48 (global.get $THETA_A_BLK_PTR))
+      )
+    )
 
   )
 
@@ -1266,39 +1420,119 @@
   ;;   }
   ;; }
   ;;
+  ;; For the purposes of runtime efficiency, this loop has been unrolled and the rotation amounts have been hard coded
+  ;; according to the values found in the $RHOTATION_TABLE.  This saves the need to perform modulo operations inside a
+  ;; loop, as well as avoiding the need to perform 25 separate loads from the rotation table.
   (func $rho (export "rho")
-    ;; FIPS 202 §3.2.2: A'[x,y] = rotl(A[x,y], r)  — reads THETA_RESULT_PTR (BUF_1), writes RHO_RESULT_PTR (BUF_0)
-    ;; Rotation amounts and state offsets from RHOTATION_TABLE / STATE_IDX_TAB traversal order.
     ;; y=2 group: A[2,2]=43, A[3,2]=25, A[4,2]=39, A[0,2]=3, A[1,2]=10
-    (i64.store (memory $main) offset=96  (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=96  (global.get $THETA_RESULT_PTR)) (i64.const 43)))
-    (i64.store (memory $main) offset=104 (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=104 (global.get $THETA_RESULT_PTR)) (i64.const 25)))
-    (i64.store (memory $main) offset=112 (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=112 (global.get $THETA_RESULT_PTR)) (i64.const 39)))
-    (i64.store (memory $main) offset=80  (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=80  (global.get $THETA_RESULT_PTR)) (i64.const  3)))
-    (i64.store (memory $main) offset=88  (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=88  (global.get $THETA_RESULT_PTR)) (i64.const 10)))
+    (i64.store (memory $main) offset=96
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=96  (global.get $THETA_RESULT_PTR)) (i64.const 43))
+    )
+    (i64.store (memory $main) offset=104
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=104 (global.get $THETA_RESULT_PTR)) (i64.const 25))
+    )
+    (i64.store (memory $main) offset=112
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=112 (global.get $THETA_RESULT_PTR)) (i64.const 39))
+    )
+    (i64.store (memory $main) offset=80
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=80  (global.get $THETA_RESULT_PTR)) (i64.const  3))
+    )
+    (i64.store (memory $main) offset=88
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=88  (global.get $THETA_RESULT_PTR)) (i64.const 10))
+    )
+
     ;; y=3 group: A[2,3]=15, A[3,3]=21, A[4,3]=8, A[0,3]=41, A[1,3]=45
-    (i64.store (memory $main) offset=136 (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=136 (global.get $THETA_RESULT_PTR)) (i64.const 15)))
-    (i64.store (memory $main) offset=144 (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=144 (global.get $THETA_RESULT_PTR)) (i64.const 21)))
-    (i64.store (memory $main) offset=152 (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=152 (global.get $THETA_RESULT_PTR)) (i64.const  8)))
-    (i64.store (memory $main) offset=120 (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=120 (global.get $THETA_RESULT_PTR)) (i64.const 41)))
-    (i64.store (memory $main) offset=128 (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=128 (global.get $THETA_RESULT_PTR)) (i64.const 45)))
+    (i64.store (memory $main) offset=136
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=136 (global.get $THETA_RESULT_PTR)) (i64.const 15))
+    )
+    (i64.store (memory $main) offset=144
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=144 (global.get $THETA_RESULT_PTR)) (i64.const 21))
+    )
+    (i64.store (memory $main) offset=152
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=152 (global.get $THETA_RESULT_PTR)) (i64.const  8))
+    )
+    (i64.store (memory $main) offset=120
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=120 (global.get $THETA_RESULT_PTR)) (i64.const 41))
+    )
+    (i64.store (memory $main) offset=128
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=128 (global.get $THETA_RESULT_PTR)) (i64.const 45))
+    )
+
     ;; y=4 group: A[2,4]=61, A[3,4]=56, A[4,4]=14, A[0,4]=18, A[1,4]=2
-    (i64.store (memory $main) offset=176 (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=176 (global.get $THETA_RESULT_PTR)) (i64.const 61)))
-    (i64.store (memory $main) offset=184 (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=184 (global.get $THETA_RESULT_PTR)) (i64.const 56)))
-    (i64.store (memory $main) offset=192 (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=192 (global.get $THETA_RESULT_PTR)) (i64.const 14)))
-    (i64.store (memory $main) offset=160 (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=160 (global.get $THETA_RESULT_PTR)) (i64.const 18)))
-    (i64.store (memory $main) offset=168 (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=168 (global.get $THETA_RESULT_PTR)) (i64.const  2)))
+    (i64.store (memory $main) offset=176
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=176 (global.get $THETA_RESULT_PTR)) (i64.const 61))
+    )
+    (i64.store (memory $main) offset=184
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=184 (global.get $THETA_RESULT_PTR)) (i64.const 56))
+    )
+    (i64.store (memory $main) offset=192
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=192 (global.get $THETA_RESULT_PTR)) (i64.const 14))
+    )
+    (i64.store (memory $main) offset=160
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=160 (global.get $THETA_RESULT_PTR)) (i64.const 18))
+    )
+    (i64.store (memory $main) offset=168
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=168 (global.get $THETA_RESULT_PTR)) (i64.const  2))
+    )
+
     ;; y=0 group: A[2,0]=62, A[3,0]=28, A[4,0]=27, A[0,0]=0, A[1,0]=1
-    (i64.store (memory $main) offset=16  (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=16  (global.get $THETA_RESULT_PTR)) (i64.const 62)))
-    (i64.store (memory $main) offset=24  (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=24  (global.get $THETA_RESULT_PTR)) (i64.const 28)))
-    (i64.store (memory $main) offset=32  (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=32  (global.get $THETA_RESULT_PTR)) (i64.const 27)))
-    (i64.store (memory $main) offset=0   (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=0   (global.get $THETA_RESULT_PTR)) (i64.const  0)))
-    (i64.store (memory $main) offset=8   (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=8   (global.get $THETA_RESULT_PTR)) (i64.const  1)))
+    (i64.store (memory $main) offset=16
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=16  (global.get $THETA_RESULT_PTR)) (i64.const 62))
+    )
+    (i64.store (memory $main) offset=24
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=24  (global.get $THETA_RESULT_PTR)) (i64.const 28))
+    )
+    (i64.store (memory $main) offset=32
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=32  (global.get $THETA_RESULT_PTR)) (i64.const 27))
+    )
+    (i64.store (memory $main) offset=0
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=0   (global.get $THETA_RESULT_PTR)) (i64.const  0))
+    )
+    (i64.store (memory $main) offset=8
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=8   (global.get $THETA_RESULT_PTR)) (i64.const  1))
+    )
+
     ;; y=1 group: A[2,1]=6, A[3,1]=55, A[4,1]=20, A[0,1]=36, A[1,1]=44
-    (i64.store (memory $main) offset=56  (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=56  (global.get $THETA_RESULT_PTR)) (i64.const  6)))
-    (i64.store (memory $main) offset=64  (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=64  (global.get $THETA_RESULT_PTR)) (i64.const 55)))
-    (i64.store (memory $main) offset=72  (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=72  (global.get $THETA_RESULT_PTR)) (i64.const 20)))
-    (i64.store (memory $main) offset=40  (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=40  (global.get $THETA_RESULT_PTR)) (i64.const 36)))
-    (i64.store (memory $main) offset=48  (global.get $RHO_RESULT_PTR) (i64.rotl (i64.load (memory $main) offset=48  (global.get $THETA_RESULT_PTR)) (i64.const 44)))
+    (i64.store (memory $main) offset=56
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=56  (global.get $THETA_RESULT_PTR)) (i64.const  6))
+    )
+    (i64.store (memory $main) offset=64
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=64  (global.get $THETA_RESULT_PTR)) (i64.const 55))
+    )
+    (i64.store (memory $main) offset=72
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=72  (global.get $THETA_RESULT_PTR)) (i64.const 20))
+    )
+    (i64.store (memory $main) offset=40
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=40  (global.get $THETA_RESULT_PTR)) (i64.const 36))
+    )
+    (i64.store (memory $main) offset=48
+      (global.get $RHO_RESULT_PTR)
+      (i64.rotl (i64.load (memory $main) offset=48  (global.get $THETA_RESULT_PTR)) (i64.const 44))
+    )
 
   )
 
@@ -1319,35 +1553,135 @@
   ;;   }
   ;; }
   ;;
-  ;; Since this algorithm results in a static reordering of the i64s, the final transformation can simply be hardcoded
-  ;; rather than calculated.
+  ;; For the purposes of runtime efficiency, this loop has been unrolled. The final transformation can simply be
+  ;; hardcoded since the algorithm results in a static reordering of the i64s.
   (func $pi (export "pi")
     ;; FIPS 202 §3.2.3: A'[x,y] = A[(x+3y) mod 5, x]  offset(x,y) = y*40 + x*8
-    (i64.store (memory $main) offset=0   (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=0   (global.get $RHO_RESULT_PTR))) ;; A'[0,0] <- A[0,0]
-    (i64.store (memory $main) offset=8   (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=48  (global.get $RHO_RESULT_PTR))) ;; A'[1,0] <- A[1,1]
-    (i64.store (memory $main) offset=16  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=96  (global.get $RHO_RESULT_PTR))) ;; A'[2,0] <- A[2,2]
-    (i64.store (memory $main) offset=24  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=144 (global.get $RHO_RESULT_PTR))) ;; A'[3,0] <- A[3,3]
-    (i64.store (memory $main) offset=32  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=192 (global.get $RHO_RESULT_PTR))) ;; A'[4,0] <- A[4,4]
-    (i64.store (memory $main) offset=40  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=24  (global.get $RHO_RESULT_PTR))) ;; A'[0,1] <- A[3,0]
-    (i64.store (memory $main) offset=48  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=72  (global.get $RHO_RESULT_PTR))) ;; A'[1,1] <- A[4,1]
-    (i64.store (memory $main) offset=56  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=80  (global.get $RHO_RESULT_PTR))) ;; A'[2,1] <- A[0,2]
-    (i64.store (memory $main) offset=64  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=128 (global.get $RHO_RESULT_PTR))) ;; A'[3,1] <- A[1,3]
-    (i64.store (memory $main) offset=72  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=176 (global.get $RHO_RESULT_PTR))) ;; A'[4,1] <- A[2,4]
-    (i64.store (memory $main) offset=80  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=8   (global.get $RHO_RESULT_PTR))) ;; A'[0,2] <- A[1,0]
-    (i64.store (memory $main) offset=88  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=56  (global.get $RHO_RESULT_PTR))) ;; A'[1,2] <- A[2,1]
-    (i64.store (memory $main) offset=96  (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=104 (global.get $RHO_RESULT_PTR))) ;; A'[2,2] <- A[3,2]
-    (i64.store (memory $main) offset=104 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=152 (global.get $RHO_RESULT_PTR))) ;; A'[3,2] <- A[4,3]
-    (i64.store (memory $main) offset=112 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=160 (global.get $RHO_RESULT_PTR))) ;; A'[4,2] <- A[0,4]
-    (i64.store (memory $main) offset=120 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=32  (global.get $RHO_RESULT_PTR))) ;; A'[0,3] <- A[4,0]
-    (i64.store (memory $main) offset=128 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=40  (global.get $RHO_RESULT_PTR))) ;; A'[1,3] <- A[0,1]
-    (i64.store (memory $main) offset=136 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=88  (global.get $RHO_RESULT_PTR))) ;; A'[2,3] <- A[1,2]
-    (i64.store (memory $main) offset=144 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=136 (global.get $RHO_RESULT_PTR))) ;; A'[3,3] <- A[2,3]
-    (i64.store (memory $main) offset=152 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=184 (global.get $RHO_RESULT_PTR))) ;; A'[4,3] <- A[3,4]
-    (i64.store (memory $main) offset=160 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=16  (global.get $RHO_RESULT_PTR))) ;; A'[0,4] <- A[2,0]
-    (i64.store (memory $main) offset=168 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=64  (global.get $RHO_RESULT_PTR))) ;; A'[1,4] <- A[3,1]
-    (i64.store (memory $main) offset=176 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=112 (global.get $RHO_RESULT_PTR))) ;; A'[2,4] <- A[4,2]
-    (i64.store (memory $main) offset=184 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=120 (global.get $RHO_RESULT_PTR))) ;; A'[3,4] <- A[0,3]
-    (i64.store (memory $main) offset=192 (global.get $PI_RESULT_PTR) (i64.load (memory $main) offset=168 (global.get $RHO_RESULT_PTR))) ;; A'[4,4] <- A[1,4]
+    ;; A'[0,0] <- A[0,0]
+    (i64.store (memory $main) offset=0
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=0   (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[1,0] <- A[1,1]
+    (i64.store (memory $main) offset=8
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=48  (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[2,0] <- A[2,2]
+    (i64.store (memory $main) offset=16
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=96  (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[3,0] <- A[3,3]
+    (i64.store (memory $main) offset=24
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=144 (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[4,0] <- A[4,4]
+    (i64.store (memory $main) offset=32
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=192 (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[0,1] <- A[3,0]
+    (i64.store (memory $main) offset=40
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=24  (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[1,1] <- A[4,1]
+    (i64.store (memory $main) offset=48
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=72  (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[2,1] <- A[0,2]
+    (i64.store (memory $main) offset=56
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=80  (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[3,1] <- A[1,3]
+    (i64.store (memory $main) offset=64
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=128 (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[4,1] <- A[2,4]
+    (i64.store (memory $main) offset=72
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=176 (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[0,2] <- A[1,0]
+    (i64.store (memory $main) offset=80
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=8   (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[1,2] <- A[2,1]
+    (i64.store (memory $main) offset=88
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=56  (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[2,2] <- A[3,2]
+    (i64.store (memory $main) offset=96
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=104 (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[3,2] <- A[4,3]
+    (i64.store (memory $main) offset=104
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=152 (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[4,2] <- A[0,4]
+    (i64.store (memory $main) offset=112
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=160 (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[0,3] <- A[4,0]
+    (i64.store (memory $main) offset=120
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=32  (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[1,3] <- A[0,1]
+    (i64.store (memory $main) offset=128
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=40  (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[2,3] <- A[1,2]
+    (i64.store (memory $main) offset=136
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=88  (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[3,3] <- A[2,3]
+    (i64.store (memory $main) offset=144
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=136 (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[4,3] <- A[3,4]
+    (i64.store (memory $main) offset=152
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=184 (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[0,4] <- A[2,0]
+    (i64.store (memory $main) offset=160
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=16  (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[1,4] <- A[3,1]
+    (i64.store (memory $main) offset=168
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=64  (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[2,4] <- A[4,2]
+    (i64.store (memory $main) offset=176
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=112 (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[3,4] <- A[0,3]
+    (i64.store (memory $main) offset=184
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=120 (global.get $RHO_RESULT_PTR))
+    )
+    ;; A'[4,4] <- A[1,4]
+    (i64.store (memory $main) offset=192
+      (global.get $PI_RESULT_PTR)
+      (i64.load (memory $main) offset=168 (global.get $RHO_RESULT_PTR))
+    )
 
   )
 
@@ -1366,43 +1700,346 @@
   ;;     }
   ;;   }
   ;; }
+  ;;
   ;; FIPS 202 §3.2.4: A'[x,y] = A[x,y] XOR (NOT(A[x+1,y]) AND A[x+2,y])
   ;;
-  ;; This algorithm however simply performs a static mapping, so the transformation can be hardcoded rather than calculated
+  ;; For the purposes of runtime efficiency, this loop has been unrolled as the algorithm simply performs a static
+  ;; mapping
   (func $chi (export "chi")
-    ;; FIPS 202 §3.2.4: A'[x,y] = A[x,y] XOR (NOT(A[x+1,y]) AND A[x+2,y])
-    ;; Reads PI_RESULT_PTR (BUF_1), writes CHI_RESULT_PTR (BUF_0) — no overlap, no hazard.
-    ;; Column wrapping within each y-group is encoded directly as literal offsets.
     ;; y=2 group: A[2,2], A[3,2], A[4,2], A[0,2], A[1,2]  — offsets: 96, 104, 112, 80, 88
-    (i64.store (memory $main) offset=96  (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=96  (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=104 (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=112 (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=104 (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=104 (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=112 (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=80  (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=112 (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=112 (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=80  (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=88  (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=80  (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=80  (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=88  (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=96  (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=88  (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=88  (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=96  (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=104 (global.get $PI_RESULT_PTR)))))
+    (i64.store (memory $main) offset=96
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=96  (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=104 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=112 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=104
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=104 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=112 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=80  (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=112
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=112 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=80  (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=88  (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=80
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=80  (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=88  (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=96  (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=88
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=88  (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=96  (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=104 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+
     ;; y=3 group: A[2,3], A[3,3], A[4,3], A[0,3], A[1,3]  — offsets: 136, 144, 152, 120, 128
-    (i64.store (memory $main) offset=136 (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=136 (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=144 (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=152 (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=144 (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=144 (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=152 (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=120 (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=152 (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=152 (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=120 (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=128 (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=120 (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=120 (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=128 (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=136 (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=128 (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=128 (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=136 (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=144 (global.get $PI_RESULT_PTR)))))
+    (i64.store (memory $main) offset=136
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=136 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=144 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=152 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=144
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=144 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=152 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=120 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=152
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=152 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=120 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=128 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=120
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=120 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=128 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=136 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=128
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=128 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=136 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=144 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+
     ;; y=4 group: A[2,4], A[3,4], A[4,4], A[0,4], A[1,4]  — offsets: 176, 184, 192, 160, 168
-    (i64.store (memory $main) offset=176 (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=176 (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=184 (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=192 (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=184 (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=184 (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=192 (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=160 (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=192 (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=192 (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=160 (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=168 (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=160 (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=160 (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=168 (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=176 (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=168 (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=168 (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=176 (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=184 (global.get $PI_RESULT_PTR)))))
+    (i64.store (memory $main) offset=176
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=176 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=184 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=192 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=184
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=184 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=192 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=160 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=192
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=192 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=160 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=168 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=160
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=160 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=168 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=176 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=168
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=168 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=176 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=184 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+
     ;; y=0 group: A[2,0], A[3,0], A[4,0], A[0,0], A[1,0]  — offsets: 16, 24, 32, 0, 8
-    (i64.store (memory $main) offset=16  (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=16  (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=24  (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=32  (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=24  (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=24  (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=32  (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=0   (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=32  (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=32  (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=0   (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=8   (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=0   (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=0   (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=8   (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=16  (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=8   (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=8   (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=16  (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=24  (global.get $PI_RESULT_PTR)))))
-    ;; y=1 group: A[2,1], A[3,1], A[4,1], A[0,1], A[1,1]  — offsets: 56, 64, 72, 40, 48
-    (i64.store (memory $main) offset=56  (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=56  (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=64  (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=72  (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=64  (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=64  (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=72  (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=40  (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=72  (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=72  (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=40  (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=48  (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=40  (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=40  (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=48  (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=56  (global.get $PI_RESULT_PTR)))))
-    (i64.store (memory $main) offset=48  (global.get $CHI_RESULT_PTR) (i64.xor (i64.load (memory $main) offset=48  (global.get $PI_RESULT_PTR)) (i64.and (i64.xor (i64.load (memory $main) offset=56  (global.get $PI_RESULT_PTR)) (i64.const -1)) (i64.load (memory $main) offset=64  (global.get $PI_RESULT_PTR)))))
+    (i64.store (memory $main) offset=16
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=16(global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=24 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=32 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=24
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=24(global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=32 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=0  (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=32
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=32(global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=0  (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=8  (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=0
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=0 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=8  (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=16 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=8
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=8 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=16 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=24 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+
+    ;; y=1 group: A[2,1], A[3,1], A[4,1], A[0,1], A[1,1] — offsets: 56, 64, 72, 40, 48
+    (i64.store (memory $main) offset=56
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=56 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=64 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=72 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=64
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=64 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=72 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=40 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=72
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=72 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=40 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=48 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=40
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=40 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=48 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=56 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
+    (i64.store (memory $main) offset=48
+      (global.get $CHI_RESULT_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=48 (global.get $PI_RESULT_PTR))
+        (i64.and
+          (i64.xor
+            (i64.load (memory $main) offset=56 (global.get $PI_RESULT_PTR))
+            (i64.const -1)
+          )
+          (i64.load (memory $main) offset=64 (global.get $PI_RESULT_PTR))
+        )
+      )
+    )
 
   )
 
