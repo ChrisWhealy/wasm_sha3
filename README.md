@@ -2,7 +2,7 @@
 
 An implementation of the SHA3 algorithm in WebAssembly Text based on the specification published as [NIST FIPS 202](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf).
 
-The resulting binary is 5.3 Kb 😎
+The resulting binary is just over 5.1 Kb 😎
 
 # Overview
 
@@ -84,7 +84,7 @@ $ ./sha3sum.mjs 384 ./tests/war_and_peace.txt
 9baecef1c5bd0d3358483274277d06e74598dcbfad6f837c8898fe790a5d0d17e9a6f04a50bf5b05bbe1f34ffe45d7f4  ./test_data/war_and_peace.txt
 ```
 
-## Using Wasmer
+## Using `wasmer`
 
 If present in the CWD, `wasmer` will read `wasmer.toml` to discover which WASM module is to be run.
 In such cases, you need only specify `wasmer run .` where the meaning of `.` will be derived from the contents of `wasmer.toml`.
@@ -99,14 +99,7 @@ $ wasmer run . --mapdir /::./test_data --command-name=224 -- war_and_peace.txt
 1b74a9be309c26072ad2903b3ab16eda117414736d32df43df562bb1  war_and_peace.txt
 ```
 
-***IMPORTANT***<br>
-You cannot specify shortcuts such as `.` or `~` as these values are only replaced by the shell, not `wasmer`.
-
 Since `<guest_dir>` identifies the name of the WebAssembly module's virtual root directory, you would typically identify this as `/`.
-
-For the `<host_dir>`, `wasmer` cannot evaluate the shell shortcut `~` for your home directory.
-Instead, you must use the fully qualifiied path name.
-E.G. `/Users/chris/`.
 
 In the above example, the CWD contains the directory `./test_data` which then contains the text file `war_and_peace.txt`.
 Since `./test_data` becomes WASM's virtual root directory, the file name `war_and_peace.txt` does not need to be prefixed with the directory name.
@@ -114,7 +107,17 @@ Since `./test_data` becomes WASM's virtual root directory, the file name `war_an
 In this case, the `wasmer.toml` file contains definitions for commands called `224`, `256`, `384` and `512`.
 Within these command definitions, the corresponding hash length argument has been hard-coded, so there is no need for you to specify it explicitly.
 
-## Using Wasmtime
+### General Points About Using `wasmer`
+
+`wasmer` is much stricter about enforcing WASI access rights than other runtimes such as `wasmtime` or `wazero`.
+
+For instance the `wasmtime` option `--mapdir` does not grant `FD_SEEK` as an inheritable right.
+Therefore, files in the directory pre-openend by the `--mapdir` option cannot have their size read by seeking to the end, neither can a plain text file be opened if its execute bit is set.
+In both cases, `wasmer` will return WASI errno 63 `EPERM` "Operation not permitted".
+
+`wasmtime` or `wazero` are more permissive about access rights and ignore this mismatch.
+
+## Using `wasmtime`
 
 The same logic used by `wasmer` applies when `wasmtime` creates WASM's virtual root directory.
 
@@ -125,7 +128,7 @@ $ wasmtime --dir ./test_data ./bin/sha3.prod.opt.wasm -- 256 war_and_peace.txt
 11a5e2565ce9b182b980aff48ed1bb33d1278bbd77ee4f506729d0272cc7c6f7  war_and_peace.txt
 ```
 
-## Using Wazero
+## Using `wazero`
 
 When using `wazero`, the `--mount` argument uses a syntax similar to `wasmer`'s `--mapdir` argument.
 

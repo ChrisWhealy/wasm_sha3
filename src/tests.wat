@@ -5,7 +5,7 @@
   (type $type_i32*3     (func (param i32 i32 i32)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (import "sha3" "prepareState"  (func $sha3.prepare_state  (type $type_i32*3)))
+  (import "sha3" "prepareState"  (func $sha3.prepare_state  (type $type_i32*2)))
   (import "sha3" "thetaC"        (func $sha3.theta_c        (type $type_i32*1)))
   (import "sha3" "thetaD"        (func $sha3.theta_d))
   (import "sha3" "thetaXorLoop"  (func $sha3.theta_xor_loop))
@@ -22,14 +22,14 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_xor_data_with_rate")
         (param $digest_len i32)
-    (call $sha3.prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
+    (call $sha3.prepare_state (i32.const 1) (local.get $digest_len))
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "test_theta_c")
         (param $digest_len i32)
         (param $rounds i32)
-    (call $sha3.prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
+    (call $sha3.prepare_state (i32.const 1) (local.get $digest_len))
     (call $sha3.theta_c (local.get $rounds))
   )
 
@@ -37,7 +37,7 @@
   (func (export "test_theta_d")
         (param $digest_len i32)
 
-    (call $sha3.prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
+    (call $sha3.prepare_state (i32.const 1) (local.get $digest_len))
     (call $sha3.theta_c (i32.const 5))
     (call $sha3.theta_d)
   )
@@ -46,7 +46,6 @@
   (func (export "test_theta_xor_loop")
         (param $digest_len i32)
 
-    (call $sha3.prepare_state (i32.const 1) (i32.const 0) (local.get $digest_len))
     (call $sha3.theta_xor_loop)
   )
 
@@ -54,7 +53,7 @@
   (func (export "test_theta")
         (param $digest_len i32)
 
-    (call $sha3.prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
+    (call $sha3.prepare_state (i32.const 1) (local.get $digest_len))
     (call $sha3.theta)
   )
 
@@ -83,7 +82,7 @@
   (func (export "test_theta_rho")
         (param $digest_len i32)
 
-    (call $sha3.prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
+    (call $sha3.prepare_state (i32.const 1) (local.get $digest_len))
     (call $sha3.theta)
     (call $sha3.rho)
   )
@@ -93,7 +92,7 @@
   (func (export "test_theta_rho_pi")
         (param $digest_len i32)
 
-    (call $sha3.prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
+    (call $sha3.prepare_state (i32.const 1) (local.get $digest_len))
     (call $sha3.theta)
     (call $sha3.rho)
     (call $sha3.pi)
@@ -104,7 +103,7 @@
   (func (export "test_theta_rho_pi_chi")
         (param $digest_len i32)
 
-    (call $sha3.prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
+    (call $sha3.prepare_state (i32.const 1) (local.get $digest_len))
     (call $sha3.theta)
     (call $sha3.rho)
     (call $sha3.pi)
@@ -116,7 +115,7 @@
   (func (export "test_theta_rho_pi_chi_iota")
         (param $digest_len i32)
 
-    (call $sha3.prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
+    (call $sha3.prepare_state (i32.const 1) (local.get $digest_len))
     (call $sha3.theta)
     (call $sha3.rho)
     (call $sha3.pi)

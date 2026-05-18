@@ -64,7 +64,6 @@
   (type $type_wasi_fd_close  (func (param i32)                                 (result i32)))
   (type $type_wasi_args      (func (param i32 i32)                             (result i32)))
   (type $type_wasi_path_open (func (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
-  (type $type_wasi_fd_seek   (func (param i32 i64 i32 i32)                     (result i32)))
   (type $type_wasi_fd_io     (func (param i32 i32 i32 i32)                     (result i32)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -72,7 +71,6 @@
   (import "wasi_snapshot_preview1" "args_sizes_get" (func $wasi.args_sizes_get (type $type_wasi_args)))
   (import "wasi_snapshot_preview1" "args_get"       (func $wasi.args_get       (type $type_wasi_args)))
   (import "wasi_snapshot_preview1" "path_open"      (func $wasi.path_open      (type $type_wasi_path_open)))
-  (import "wasi_snapshot_preview1" "fd_seek"        (func $wasi.fd_seek        (type $type_wasi_fd_seek)))
   (import "wasi_snapshot_preview1" "fd_read"        (func $wasi.fd_read        (type $type_wasi_fd_io)))
   (import "wasi_snapshot_preview1" "fd_write"       (func $wasi.fd_write       (type $type_wasi_fd_io)))
   (import "wasi_snapshot_preview1" "fd_close"       (func $wasi.fd_close       (type $type_wasi_fd_close)))
@@ -100,7 +98,9 @@
   (memory $main (export "memory") 33)
 
   ;;@debug-start
-  (global $DEBUG_ACTIVE       i32 (i32.const 1))
+  ;; Build with "npm build:dev" to include debug messages.
+  ;; $DEBUG_ACTIVE must also be set to 1 in order for step function trace statements to become visible
+  (global $DEBUG_ACTIVE       i32 (i32.const 0))
   ;;@debug-end
 
   (global $DEBUG_IO_BUFF_PTR  i32 (i32.const 0))
@@ -123,8 +123,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; File IO  (all i64 output pointers must be 8-byte aligned otherwise wasmtime throws its toys out of the pram)
   ;; 0x000004E4       4   i32     file_fd
-  ;; 0x000004E8       8   i64     fd_seek file size          [8-byte aligned]
-  ;; 0x000004F0       8   i64     Bytes transferred / seek   [8-byte aligned]
+  ;; 0x000004F0       8   i64     Bytes transferred by fd_read [8-byte aligned]
   ;; 0x000004F8       8   i32x2   Read  iovec (ptr + len)
   ;; 0x00000500       8   i32x2   Write iovec (ptr + len)
   ;; 0x00000508       4   i32     Pointer to file path name
@@ -255,20 +254,18 @@
     "\10\18\20\00\08"  ;; a_blk_idx 15-19
     "\10\18\20\00\08"  ;; a_blk_idx 20-24
   )
-  ;; 3 bytes padding at 0x389-0x38B for 32-bit alignment of STATE_PTR
-
-  (global $STATE_PTR    (export "STATE_PTR")    i32 (i32.const 0x0000038C))  ;; 200 bytes
+  ;; STATE_PTR/RATE_PTR alias BUF_0: state lives permanently in the permutation working buffer
+  (global $STATE_PTR    (export "STATE_PTR")    i32 (i32.const 0x0000012C))  ;; BUF_0 alias — 200 bytes
   (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x00000454))  ;; length = rate bytes (varies with digest size)
 
   ;; Default digest size = 256 bits, so in 64-bit words, rate = 17 and capacity = 8
   (global $RATE         (export "RATE")         (mut i32) (i32.const 17))
   (global $CAPACITY     (export "CAPACITY")     (mut i32) (i32.const 8))
-  (global $RATE_PTR     (export "RATE_PTR")          i32  (i32.const 0x0000038C))
-  (global $CAPACITY_PTR (export "CAPACITY_PTR") (mut i32) (i32.const 0x0000038C))  ;; set at runtime: STATE_PTR + RATE*8
+  (global $RATE_PTR     (export "RATE_PTR")          i32  (i32.const 0x0000012C))  ;; BUF_0 alias
+  (global $CAPACITY_PTR (export "CAPACITY_PTR") (mut i32) (i32.const 0x0000012C))  ;; set at runtime: STATE_PTR + RATE*8
 
   (global $FD_FILE_PTR         i32 (i32.const 0x000004E4))
-  (global $FILE_SIZE_PTR       i32 (i32.const 0x000004E8))  ;; 8-byte aligned for fd_seek i64 output
-  (global $NREAD_PTR           i32 (i32.const 0x000004F0))  ;; 8-byte aligned for fd_seek i64 output
+  (global $NREAD_PTR           i32 (i32.const 0x000004F0))  ;; 8-byte aligned for fd_read i64 output
   (global $IOVEC_READ_BUF_PTR  i32 (i32.const 0x000004F8))
   (global $IOVEC_WRITE_BUF_PTR i32 (i32.const 0x00000500))
   (global $FILE_PATH_PTR       i32 (i32.const 0x00000508))
@@ -277,7 +274,7 @@
   (global $ARGV_BUF_LEN_PTR    i32 (i32.const 0x00000514))
   (global $ARGV_PTRS_PTR       i32 (i32.const 0x00000518))
   (global $ARGV_BUF_PTR        i32 (i32.const 0x000005E4))
-  (global $ASCII_HASH_PTR      i32 (i32.const 0x00000A44))  ;; Up to 128 bytes (SHA3-512 = 128 hex chars)
+  (global $ASCII_HASH_PTR      i32 (i32.const 0x00000A44))  ;; Will need at most 128 bytes (SHA3-512 = 128 hex chars)
 
   (global $NYBBLE_TABLE        i32 (i32.const 0x00000AC4))  ;; Length = 16
   (data (memory $main) (i32.const 0x00000AC4) "0123456789abcdef")
@@ -297,12 +294,6 @@
 
   (global $ERR_MSG_NOENT       i32 (i32.const 0x00000B30))  ;; Length = 25
   (data (memory $main) (i32.const 0x00000B30) "No such file or directory")
-
-  (global $ERR_FILE_SIZE_READ  i32 (i32.const 0x00000B50))  ;; Length = 24
-  (data (memory $main) (i32.const 0x00000B50) "Unable to read file size")
-
-  (global $ERR_FILE_TOO_LARGE  i32 (i32.const 0x00000B68))  ;; Length = 21
-  (data (memory $main) (i32.const 0x00000B68) "File too large (>4Gb)")
 
   (global $ERR_READING_FILE    i32 (i32.const 0x00000B88))  ;; Length = 18
   (data (memory $main) (i32.const 0x00000B88) "Error reading file")
@@ -430,7 +421,6 @@
     (local $file_fd         i32)
     (local $return_code     i32)
     (local $bytes_read      i32)
-    (local $file_size_bytes i32)
     (local $src_ptr         i32)
     (local $partial_bytes   i32)  ;; bytes accumulated in DATA_PTR for the current partial block
     (local $fill_amount     i32)
@@ -574,40 +564,7 @@
       ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 3: Get file size
-      ;;@debug-start
-      (local.set $step (i32.add (local.get $step) (i32.const 1)))
-      ;;@debug-end
-      (local.set $return_code (call $file_size_get (local.get $file_fd)))
-
-      (if (local.get $return_code)
-        (then
-          ;;@debug-start
-          (call $write_step (i32.const 1) (local.get $step) (local.get $return_code))
-          ;;@debug-end
-          (call $writeln (i32.const 2) (global.get $ERR_FILE_SIZE_READ) (i32.const 24))
-          (br $exit)
-        )
-      )
-
-      (if
-        (i64.ge_u (i64.load (memory $main) (global.get $FILE_SIZE_PTR)) (i64.const 4294967296))
-        (then
-          ;;@debug-start
-          (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
-          ;;@debug-end
-          (call $writeln (i32.const 2) (global.get $ERR_FILE_TOO_LARGE) (i32.const 21))
-          (br $exit)
-        )
-      )
-
-      ;;@debug-start
-      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
-      ;;@debug-end
-      (local.set $file_size_bytes (i32.wrap_i64 (i64.load (memory $main) (global.get $FILE_SIZE_PTR))))
-
-      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 4: Initialise Keccak state
+      ;; Step 3: Initialise Keccak state
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
       ;;@debug-end
@@ -621,7 +578,7 @@
       ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 5: Read file in 2 MB chunks and absorb into the sponge
+      ;; Step 4: Read file in 2 MB chunks and absorb into the sponge
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
       ;;@debug-end
@@ -722,7 +679,7 @@
       ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 6: Apply SHA3 padding — pad10*1 with domain byte 0x06 (FIPS 202 §B.2)
+      ;; Step 5: Apply SHA3 padding — pad10*1 with domain byte 0x06 (FIPS 202 §B.2)
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
       ;;@debug-end
@@ -758,7 +715,7 @@
       ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 7: Close the file
+      ;; Step 6: Close the file
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
       ;;@debug-end
@@ -769,7 +726,7 @@
       ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 8: Squeeze — convert the first digest_bytes bytes of state to hex ASCII
+      ;; Step 7: Squeeze — convert the first digest_bytes bytes of state to hex ASCII
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
       ;;@debug-end
@@ -1026,7 +983,7 @@
           (local.get $path_offset)
           (local.get $path_len)
           (i32.const 0)             ;; oflags (O_RDONLY)
-          (i64.const 6)             ;; rights: FD_READ | FD_SEEK
+          (i64.const 2)             ;; rights: FD_READ
           (i64.const 0)             ;; inherited rights
           (i32.const 0)             ;; fdflags
           (global.get $FD_FILE_PTR)
@@ -1066,38 +1023,9 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Determine the size of an already-opened file; result written to $FILE_SIZE_PTR.
-  ;; Aborts with unreachable if fd_seek fails.
-  (func $file_size_get
-        (param $file_fd i32)
-        (result i32)
-
-    (local $return_code i32)
-
-    (block $exit
-      (local.set $return_code
-        (call $wasi.fd_seek (local.get $file_fd) (i64.const 0) (i32.const 2) (global.get $FILE_SIZE_PTR))
-      )
-      (br_if $exit (local.get $return_code))
-
-      (local.set $return_code
-        (call $wasi.fd_seek (local.get $file_fd) (i64.const 0) (i32.const 0) (global.get $NREAD_PTR))
-      )
-    )
-
-    (local.get $return_code)
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Copy STATE_PTR → THETA_A_BLK_PTR, run 24 Keccak rounds, copy CHI_RESULT_PTR → STATE_PTR
+  ;; Run 24 Keccak rounds in-place on BUF_0 (STATE_PTR = THETA_A_BLK_PTR = CHI_RESULT_PTR)
   (func $run_permutation
     (local $round i32)
-
-    (memory.copy (memory $main) (memory $main)
-      (global.get $THETA_A_BLK_PTR)
-      (global.get $STATE_PTR)
-      (i32.const 200)
-    )
 
     (loop $next_round
       (call $keccak (local.get $round))
@@ -1108,20 +1036,13 @@
         )
       )
     )
-
-    (memory.copy (memory $main) (memory $main)
-      (global.get $STATE_PTR)
-      (global.get $CHI_RESULT_PTR)
-      (i32.const 200)
-    )
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $prepare_state
         (export "prepare_state")
-        (param $init_mem      i32) ;; Initialise state memory?
-        (param $copy_to_a_blk i32) ;; Copy state to Theta A block?
-        (param $digest_len    i32) ;; Defaults to 256
+        (param $init_mem   i32) ;; Initialise state memory?
+        (param $digest_len i32) ;; Defaults to 256
 
     ;;@debug-start
     (local $debug_active i32)
@@ -1178,19 +1099,6 @@
 
     ;; XOR first input block with the rate
     (call $xor_data_with_rate (global.get $RATE) (global.get $DATA_PTR))
-
-    ;; If necessary, copy the internal state to $THETA_A_BLK_PTR
-    (if (local.get $copy_to_a_blk)
-      (then
-        (memory.copy
-          (memory $main)
-          (memory $main)
-          (global.get $THETA_A_BLK_PTR)
-          (global.get $STATE_PTR)
-          (i32.const 200)
-        )
-      )
-    )
 
     ;;@debug-start
     (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
@@ -2636,7 +2544,7 @@
     (local.set $fn_id (i32.const 13))
 
     (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
-    (call $prepare_state (i32.const 1) (i32.const 1) (local.get $digest_len))
+    (call $prepare_state (i32.const 1) (local.get $digest_len))
 
     ;; CHI_RESULT_PTR = THETA_A_BLK_PTR (ping-pong BUF_0), so each round's output lands
     ;; directly where the next round's theta reads it — no inter-round copy needed.
