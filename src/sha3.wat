@@ -679,7 +679,7 @@
 
               (if (i32.eq (local.get $partial_bytes) (local.get $rate_bytes))
                 (then
-                  (call $xor_data_with_rate (global.get $RATE))
+                  (call $xor_data_with_rate (global.get $RATE) (global.get $DATA_PTR))
                   (call $run_permutation)
                   (local.set $partial_bytes (i32.const 0))
                 )
@@ -692,12 +692,7 @@
             (loop $full_blocks
               (br_if $no_full_blocks (i32.lt_u (local.get $bytes_read) (local.get $rate_bytes)))
 
-              (memory.copy (memory $main) (memory $main)
-                (global.get $DATA_PTR)
-                (local.get $src_ptr)
-                (local.get $rate_bytes)
-              )
-              (call $xor_data_with_rate (global.get $RATE))
+              (call $xor_data_with_rate (global.get $RATE) (local.get $src_ptr))
               (call $run_permutation)
 
               (local.set $src_ptr    (i32.add (local.get $src_ptr)    (local.get $rate_bytes)))
@@ -755,7 +750,7 @@
           (i32.const 0x80)
         )
       )
-      (call $xor_data_with_rate (global.get $RATE))
+      (call $xor_data_with_rate (global.get $RATE) (global.get $DATA_PTR))
       (call $run_permutation)
 
       ;;@debug-start
@@ -1182,7 +1177,7 @@
     ;;@debug-end
 
     ;; XOR first input block with the rate
-    (call $xor_data_with_rate (global.get $RATE))
+    (call $xor_data_with_rate (global.get $RATE) (global.get $DATA_PTR))
 
     ;; If necessary, copy the internal state to $THETA_A_BLK_PTR
     (if (local.get $copy_to_a_blk)
@@ -1208,6 +1203,7 @@
   ;; i.e. sequential byte offsets 0, 8, 16, ... from RATE_PTR (FIPS 202 §3.1.2)
   (func $xor_data_with_rate
         (param $rate_words i32)
+        (param $src_ptr    i32)
 
     (local $data_idx     i32)
     (local $rate_ptr     i32)
@@ -1242,7 +1238,7 @@
         (local.get $rate_ptr)
         (i64.xor
           (i64.load (memory $main) (local.get $rate_ptr))
-          (i64.load (memory $main) (i32.add (global.get $DATA_PTR) (i32.shl (local.get $data_idx) (i32.const 3))))
+          (i64.load (memory $main) (i32.add (local.get $src_ptr) (i32.shl (local.get $data_idx) (i32.const 3))))
         )
       )
 
