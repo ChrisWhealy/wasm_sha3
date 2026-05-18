@@ -84,25 +84,18 @@ $ ./sha3sum.mjs 384 ./tests/war_and_peace.txt
 9baecef1c5bd0d3358483274277d06e74598dcbfad6f837c8898fe790a5d0d17e9a6f04a50bf5b05bbe1f34ffe45d7f4  ./test_data/war_and_peace.txt
 ```
 
-## Using `wasmer`
+## Using `wasmer 7.1`
 
 If present in the CWD, `wasmer` will read `wasmer.toml` to discover which WASM module is to be run.
 In such cases, you need only specify `wasmer run .` where the meaning of `.` will be derived from the contents of `wasmer.toml`.
 
-`wasmer` has both a `--dir` and a `--mapdir` argument, but you should always use the `--mapdir` argument.
-See [here](https://github.com/ChrisWhealy/wasm_sha256#wasmer-update) for why this is the case.
-
-The value passed to the `--mapdir` argument is in the form `<guest_dir>::<host_dir>`.
-
 ```bash
-$ wasmer run . --mapdir /::./test_data --command-name=224 -- war_and_peace.txt
+$ wasmer run . --volume ./test_data:/. --command-name=224 -- war_and_peace.txt
 1b74a9be309c26072ad2903b3ab16eda117414736d32df43df562bb1  war_and_peace.txt
 ```
 
-Since `<guest_dir>` identifies the name of the WebAssembly module's virtual root directory, you would typically identify this as `/`.
-
-In the above example, the CWD contains the directory `./test_data` which then contains the text file `war_and_peace.txt`.
-Since `./test_data` becomes WASM's virtual root directory, the file name `war_and_peace.txt` does not need to be prefixed with the directory name.
+The `--volume` argument preopens the first named directory and mounts it as the second named directory.
+So in this case, the contents of `./test_data` appear to be in WebAssembly's root directory `/.`
 
 In this case, the `wasmer.toml` file contains definitions for commands called `224`, `256`, `384` and `512`.
 Within these command definitions, the corresponding hash length argument has been hard-coded, so there is no need for you to specify it explicitly.

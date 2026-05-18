@@ -230,7 +230,10 @@
   (global $NYBBLE_TABLE        i32 (i32.const 0x00000AC4))  ;; Length = 16
   (data (memory $main) (i32.const 0x00000AC4) "0123456789abcdef")
 
-  (global $DIGEST_LEN     (mut i32) (i32.const 256))  ;; Set by _start; default 256
+  (global $DIGEST_LEN     (mut i32) (i32.const 256))  ;; Set by init_state; default 256
+  (global $PARTIAL_BYTES  (mut i32) (i32.const 0))    ;; absorb: bytes accumulated in current partial rate-block
+  (global $DOMAIN_BYTE    (mut i32) (i32.const 0x06)) ;; 0x06 = SHA3, 0x1f = SHAKE
+  (global $SQUEEZE_OFFSET (mut i32) (i32.const 0))    ;; squeeze: byte offset within current rate-block
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Error messages
@@ -350,6 +353,179 @@
   (global $MSG_BLKS_PER_BUFFER i32 (i32.const 0x00008000))  ;; $READ_BUFFER_SIZE / 64
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Initialise module state for a new hash/XOF computation.
+  ;; Sets rate, capacity, domain byte; zeros the Keccak state; resets the absorb and squeeze cursors.
+  (func $init_state (export "init_state")
+        (param $digest_len  i32)  ;; capacity bits: 224 | 256 | 384 | 512
+        (param $domain_byte i32)  ;; 0x06 = SHA3, 0x1f = SHAKE
+
+    (global.set $DOMAIN_BYTE    (local.get $domain_byte))
+    (global.set $DIGEST_LEN     (local.get $digest_len))
+    (global.set $PARTIAL_BYTES  (i32.const 0))
+    (global.set $SQUEEZE_OFFSET (i32.const 0))
+
+    ;; Both $RATE and $CAPACITY hold the number of u64 words in each portion of the state
+    ;; $RATE + $CAPACITY must always equal 25
+    (global.set $RATE
+      (i32.shr_u
+        (i32.sub (i32.const 1600) (i32.shl (local.get $digest_len) (i32.const 1)))
+        (i32.const 6)
+      )
+    )
+    (global.set $CAPACITY     (i32.sub (i32.const 25) (global.get $RATE)))
+    (global.set $CAPACITY_PTR (i32.add (global.get $STATE_PTR) (i32.shl (global.get $RATE) (i32.const 3))))
+
+    (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200))
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Absorb $src_len bytes at $src_ptr into the sponge state.
+  ;; Handles partial-block accumulation across calls; call finalize() when all input has been absorbed.
+  (func $absorb (export "absorb")
+        (param $src_ptr  i32)
+        (param $src_len  i32)
+
+    (local $rate_bytes  i32)
+    (local $fill_amount i32)
+
+    (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
+
+    ;; Complete any partial rate-block accumulated from a previous absorb call
+    (if (global.get $PARTIAL_BYTES)
+      (then
+        (local.set $fill_amount (i32.sub (local.get $rate_bytes) (global.get $PARTIAL_BYTES)))
+        (if (i32.gt_u (local.get $fill_amount) (local.get $src_len))
+          (then (local.set $fill_amount (local.get $src_len)))
+        )
+        (memory.copy (memory $main) (memory $main)
+          (i32.add (global.get $DATA_PTR) (global.get $PARTIAL_BYTES))
+          (local.get $src_ptr)
+          (local.get $fill_amount)
+        )
+        (global.set $PARTIAL_BYTES (i32.add (global.get $PARTIAL_BYTES) (local.get $fill_amount)))
+        (local.set $src_ptr        (i32.add (local.get $src_ptr)        (local.get $fill_amount)))
+        (local.set $src_len        (i32.sub (local.get $src_len)        (local.get $fill_amount)))
+
+        (if (i32.eq (global.get $PARTIAL_BYTES) (local.get $rate_bytes))
+          (then
+            (call $xor_data_with_rate (global.get $RATE) (global.get $DATA_PTR))
+            (call $keccak24)
+            (global.set $PARTIAL_BYTES (i32.const 0))
+          )
+        )
+      )
+    )
+
+    ;; Absorb complete rate-blocks directly from the source buffer
+    (block $no_full_blocks
+      (loop $full_blocks
+        (br_if $no_full_blocks (i32.lt_u (local.get $src_len) (local.get $rate_bytes)))
+
+        (call $xor_data_with_rate (global.get $RATE) (local.get $src_ptr))
+        (call $keccak24)
+
+        (local.set $src_ptr (i32.add (local.get $src_ptr) (local.get $rate_bytes)))
+        (local.set $src_len (i32.sub (local.get $src_len) (local.get $rate_bytes)))
+
+        (br $full_blocks)
+      )
+    )
+
+    ;; Save any leftover bytes into DATA_PTR for the next absorb call or for finalize
+    (if (local.get $src_len)
+      (then
+        (memory.copy (memory $main) (memory $main)
+          (global.get $DATA_PTR)
+          (local.get $src_ptr)
+          (local.get $src_len)
+        )
+        (global.set $PARTIAL_BYTES (local.get $src_len))
+      )
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Complete the absorb phase by appling the correct padding byte (0x06 for SHA3 or 0x1f for SHAKE) in the remainder of
+  ;; the rate block, then run the final Keccak round
+  (func $finalize (export "finalize")
+    (local $rate_bytes i32)
+    (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
+
+    ;; Zero the portion of DATA_PTR that follows the last absorbed byte
+    (memory.fill (memory $main)
+      (i32.add (global.get $DATA_PTR) (global.get $PARTIAL_BYTES))
+      (i32.const 0)
+      (i32.sub (local.get $rate_bytes) (global.get $PARTIAL_BYTES))
+    )
+    ;; Write domain separator immediately after the last absorbed byte
+    (i32.store8 (memory $main)
+      (i32.add (global.get $DATA_PTR) (global.get $PARTIAL_BYTES))
+      (global.get $DOMAIN_BYTE)
+    )
+    ;; Set the high bit of the last byte in the rate block (pad10*1 rule)
+    (i32.store8 (memory $main)
+      (i32.add (global.get $DATA_PTR) (i32.sub (local.get $rate_bytes) (i32.const 1)))
+      (i32.or
+        (i32.load8_u (memory $main)
+          (i32.add (global.get $DATA_PTR) (i32.sub (local.get $rate_bytes) (i32.const 1)))
+        )
+        (i32.const 0x80)
+      )
+    )
+    (call $xor_data_with_rate (global.get $RATE) (global.get $DATA_PTR))
+    (call $keccak24)
+
+    (global.set $SQUEEZE_OFFSET (i32.const 0))
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Squeeze $len bytes from the sponge state into the buffer at $out_ptr.
+  ;; May be called repeatedly; applies an additional Keccak permutation whenever the rate block is exhausted.
+  (func $squeeze (export "squeeze")
+        (param $out_ptr i32)
+        (param $len     i32)
+
+    (local $rate_bytes i32)
+    (local $available  i32)
+    (local $copy_len   i32)
+
+    (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
+
+    (block $done
+      (loop $squeeze_loop
+        (br_if $done (i32.eqz (local.get $len)))
+
+        (local.set $available
+          (i32.sub (local.get $rate_bytes) (global.get $SQUEEZE_OFFSET))
+        )
+        (local.set $copy_len
+          (if (result i32) (i32.lt_u (local.get $len) (local.get $available))
+            (then (local.get $len))
+            (else (local.get $available))
+          )
+        )
+        (memory.copy (memory $main) (memory $main)
+          (local.get $out_ptr)
+          (i32.add (global.get $STATE_PTR) (global.get $SQUEEZE_OFFSET))
+          (local.get $copy_len)
+        )
+        (global.set $SQUEEZE_OFFSET (i32.add (global.get $SQUEEZE_OFFSET) (local.get $copy_len)))
+        (local.set $out_ptr         (i32.add (local.get $out_ptr)         (local.get $copy_len)))
+        (local.set $len             (i32.sub (local.get $len)             (local.get $copy_len)))
+
+        (if (i32.eq (global.get $SQUEEZE_OFFSET) (local.get $rate_bytes))
+          (then
+            (call $keccak24)
+            (global.set $SQUEEZE_OFFSET (i32.const 0))
+          )
+        )
+
+        (br $squeeze_loop)
+      )
+    )
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Entry point.  Called automatically by the WASI runtime.
   ;;
   ;; Expects two command line arguments:
@@ -366,15 +542,11 @@
     (local $hash_len_val    i32)  ;; 4-byte LE load of the digest-bits argument
     (local $digest_len      i32)  ;; 224 | 256 | 384 | 512
     (local $digest_bytes    i32)  ;; digest_len / 8
-    (local $rate_bytes      i32)  ;; RATE * 8
     (local $filename_ptr    i32)
     (local $filename_len    i32)
     (local $file_fd         i32)
     (local $return_code     i32)
     (local $bytes_read      i32)
-    (local $src_ptr         i32)
-    (local $partial_bytes   i32)  ;; bytes accumulated in DATA_PTR for the current partial block
-    (local $fill_amount     i32)
     (local $byte_offset     i32)
     ;;@debug-start
     (local $step            i32)
@@ -463,18 +635,7 @@
       (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
       ;;@debug-end
 
-      (global.set $DIGEST_LEN  (local.get $digest_len))
       (local.set $digest_bytes (i32.shr_u (local.get $digest_len) (i32.const 3)))
-
-      ;; rate_words = (1600 - digest_len * 2) / 64
-      (global.set $RATE
-        (i32.shr_u
-          (i32.sub (i32.const 1600) (i32.shl (local.get $digest_len) (i32.const 1)))
-          (i32.const 6)
-        )
-      )
-      ;; rate_bytes = rate_words * 8
-      (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       ;; Step 2: Extract filename (last arg) and open the file
@@ -519,10 +680,7 @@
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
       ;;@debug-end
-      (global.set $CAPACITY     (i32.sub (i32.const 25) (global.get $RATE)))
-      (global.set $CAPACITY_PTR (i32.add (global.get $STATE_PTR) (i32.shl (global.get $RATE) (i32.const 3))))
-
-      (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200))
+      (call $init_state (local.get $digest_len) (i32.const 0x06))
 
       ;;@debug-start
       (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
@@ -567,59 +725,7 @@
             )
           )
 
-          (local.set $src_ptr (global.get $READ_BUFFER_PTR))
-
-          ;; Complete any partial rate-block left over from the previous iteration
-          (if (local.get $partial_bytes)
-            (then
-              (local.set $fill_amount (i32.sub (local.get $rate_bytes) (local.get $partial_bytes)))
-              (if (i32.gt_u (local.get $fill_amount) (local.get $bytes_read))
-                (then (local.set $fill_amount (local.get $bytes_read)))
-              )
-              (memory.copy (memory $main) (memory $main)
-                (i32.add (global.get $DATA_PTR) (local.get $partial_bytes))
-                (local.get $src_ptr)
-                (local.get $fill_amount)
-              )
-              (local.set $partial_bytes (i32.add (local.get $partial_bytes) (local.get $fill_amount)))
-              (local.set $src_ptr       (i32.add (local.get $src_ptr)       (local.get $fill_amount)))
-              (local.set $bytes_read    (i32.sub (local.get $bytes_read)    (local.get $fill_amount)))
-
-              (if (i32.eq (local.get $partial_bytes) (local.get $rate_bytes))
-                (then
-                  (call $xor_data_with_rate (global.get $RATE) (global.get $DATA_PTR))
-                  (call $run_permutation)
-                  (local.set $partial_bytes (i32.const 0))
-                )
-              )
-            )
-          )
-
-          ;; Absorb complete rate-blocks directly from the read buffer
-          (block $no_full_blocks
-            (loop $full_blocks
-              (br_if $no_full_blocks (i32.lt_u (local.get $bytes_read) (local.get $rate_bytes)))
-
-              (call $xor_data_with_rate (global.get $RATE) (local.get $src_ptr))
-              (call $run_permutation)
-
-              (local.set $src_ptr    (i32.add (local.get $src_ptr)    (local.get $rate_bytes)))
-              (local.set $bytes_read (i32.sub (local.get $bytes_read) (local.get $rate_bytes)))
-              (br $full_blocks)
-            )
-          )
-
-          ;; Save any leftover bytes into DATA_PTR for the next iteration
-          (if (local.get $bytes_read)
-            (then
-              (memory.copy (memory $main) (memory $main)
-                (global.get $DATA_PTR)
-                (local.get $src_ptr)
-                (local.get $bytes_read)
-              )
-              (local.set $partial_bytes (local.get $bytes_read))
-            )
-          )
+          (call $absorb (global.get $READ_BUFFER_PTR) (local.get $bytes_read))
 
           (br $read_chunk)
         )
@@ -630,36 +736,11 @@
       ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 5: Apply SHA3 padding — pad10*1 with domain byte 0x06 (FIPS 202 §B.2)
+      ;; Step 5: Apply SHA3 padding and run the final permutation
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
       ;;@debug-end
-      ;;
-      ;; DATA_PTR[0..partial_bytes-1] already holds the final partial block.
-      ;; Zero the remainder of the rate block, then:
-      ;;   DATA_PTR[partial_bytes]       |= 0x06   (domain + start bit)
-      ;;   DATA_PTR[rate_bytes - 1]      |= 0x80   (end bit)
-      ;; When partial_bytes == rate_bytes-1 both writes target the same byte → 0x86
-      (memory.fill (memory $main)
-        (i32.add (global.get $DATA_PTR) (local.get $partial_bytes))
-        (i32.const 0)
-        (i32.sub (local.get $rate_bytes) (local.get $partial_bytes))
-      )
-      (i32.store8 (memory $main)
-        (i32.add (global.get $DATA_PTR) (local.get $partial_bytes))
-        (i32.const 0x06)
-      )
-      (i32.store8 (memory $main)
-        (i32.add (global.get $DATA_PTR) (i32.sub (local.get $rate_bytes) (i32.const 1)))
-        (i32.or
-          (i32.load8_u (memory $main)
-            (i32.add (global.get $DATA_PTR) (i32.sub (local.get $rate_bytes) (i32.const 1)))
-          )
-          (i32.const 0x80)
-        )
-      )
-      (call $xor_data_with_rate (global.get $RATE) (global.get $DATA_PTR))
-      (call $run_permutation)
+      (call $finalize)
 
       ;;@debug-start
       (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
@@ -677,13 +758,15 @@
       ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 7: Squeeze — convert the first digest_bytes bytes of state to hex ASCII
+      ;; Step 7: Squeeze — extract digest_bytes into DATA_PTR, then convert to hex ASCII
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
       ;;@debug-end
+      (call $squeeze (global.get $DATA_PTR) (local.get $digest_bytes))
+
       (loop $output_byte
         (call $to_asc_pair
-          (i32.load8_u (memory $main) (i32.add (global.get $STATE_PTR) (local.get $byte_offset)))
+          (i32.load8_u (memory $main) (i32.add (global.get $DATA_PTR) (local.get $byte_offset)))
           (i32.add (global.get $ASCII_HASH_PTR) (i32.shl (local.get $byte_offset) (i32.const 1)))
         )
         (br_if $output_byte
@@ -976,7 +1059,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Run 24 Keccak rounds in-place on BUF_0 (STATE_PTR = THETA_A_BLK_PTR = CHI_RESULT_PTR)
   ;; The loop has been unrolled to improve optimisation
-  (func $run_permutation
+  (func $keccak24
     (call $keccak (i32.const 0))
     (call $keccak (i32.const 1))
     (call $keccak (i32.const 2))
