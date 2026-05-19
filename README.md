@@ -6,20 +6,19 @@ The resulting binary is just under 5 Kb 😎
 
 # Table of Contents
 
-- [SHA3 Implementation in WebAssembly Text](#sha3-implementation-in-webassembly-text)
-- [Table of Contents](#table-of-contents)
 - [Overview](#overview)
 - [Local Execution](#local-execution)
   - [Host Environment Prerequisites](#host-environment-prerequisites)
   - [Building Locally](#building-locally)
   - [WASM File System Access](#wasm-file-system-access)
   - [Using NodeJS](#using-nodejs)
-  - [Using `wasmer v7.1`](#using-wasmer-v71)
-  - [Using `wasmtime v44.0.0`](#using-wasmtime-v4400)
-  - [Using `wazero v1.11.0`](#using-wazero-v1110)
+  - [Using `wasmer`](#using-wasmer-v71)
+  - [Using `wasmtime`](#using-wasmtime-v4400)
+  - [Using `wazero`](#using-wazero-v1110)
 - [Development Usage](#development-usage)
-  - [Stripping Out Debug Coding](#stripping-out-debug-coding)
 - [Behind the Scenes](#behind-the-scenes)
+  - [Sponge Functions](./docs/sponge.md)
+  - [The Keccak Function](./docs/keccak.md)
 
 # Overview
 

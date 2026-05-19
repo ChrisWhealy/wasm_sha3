@@ -1,5 +1,18 @@
 # How the Keccak Function Works Internally
 
+## Table of Contents
+
+- [Indexing Convention within the Internal State Matrix](./docs/keccak_internals.md#indexing-convention-within-the-internal-state-matrix)
+- [Internal Step Functions](./docs/keccak_internals.md#internal-step-functions)
+- [θ Theta](./docs/keccak_internals.md#θ-theta)
+- [ρ Rho](./docs/keccak_internals.md#ρ-rho)
+- [π Pi](./docs/keccak_internals.md#π-pi)
+- [χ Chi](./docs/keccak_internals.md#χ-chi)
+- [ι Iota](./docs/keccak_internals.md#ι-iota)
+
+---
+
+
 Since this implementation is using SHA3 as a drop-in replacement for SHA2, the internal state is always 1600 bits, and the required digest output size `d` is one of `224`, `256`, `384` or `512` bits.
 
 This example will use `d = 256`; therefore, the rate will be:
