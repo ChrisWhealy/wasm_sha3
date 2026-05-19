@@ -69,7 +69,7 @@ By default, `./sha3sum.mjs` runs the `prod` version of the WebAssembly module.
 
 ## Drop-In Mode
 
-In drop-in mode, `./sha3sum.mjs` copies output format of the OS command `sha3sum`.
+In drop-in mode, `./sha3sum.mjs` copies the output format of the OS command `sha3sum`.
 
 ```bash
 $ ./sha3sum.mjs <digest-len> <filename>
@@ -86,7 +86,7 @@ $ ./sha3sum.mjs 384 ./tests/war_and_peace.txt
 
 ## XOF Mode
 
-In XOF mode, &lt;output_bytes&gt; are written to `stdout` without the filename.
+In XOF mode, `<output_bytes>` are written to `stdout` without the filename.
 
 ```bash
 $ ./sha3sum.mjs <digest_len> <output_bytes> <filename>
@@ -105,7 +105,7 @@ $ ./sha3sum.mjs shake128 32 ./test_data/war_and_peace.txt
 
 # Using `wasmer v7.1`
 
-Wasmer can run the SHA3 algorithm in both Drop-In and XOF mode.
+Wasmer can run the SHA3 algorithm in both drop-in and XOF mode.
 
 If present in the CWD, `wasmer` will read `wasmer.toml` to discover which WASM module is to be run.
 In such cases, you need only specify `wasmer run .` where the meaning of `.` will be derived from the contents of `wasmer.toml`.
@@ -135,7 +135,7 @@ $ wasmer run . --volume ./test_data:/. --command-name=shake128 -- 64 war_and_pea
 
 # Using `wasmtime v44.0.0`
 
-Wasmtime can run the SHA3 algorithm in both Drop-In and XOF mode.
+Wasmtime can run the SHA3 algorithm in both drop-in and XOF mode.
 
 In this example, the `--dir <host_dir>` argument uses `./test_data` as the virtual root and from within WASM, `/` is implied.
 
@@ -155,7 +155,7 @@ $ wasmtime --dir ./test_data ./bin/sha3.prod.opt.wasm -- shake256 32 war_and_pea
 
 # Using `wazero v1.11.0`
 
-Wazero can run the SHA3 algorithm in both Drop-In and XOF mode.
+Wazero can run the SHA3 algorithm in both drop-in and XOF mode.
 
 When using `wazero`, the `--mount` argument uses a syntax similar to `wasmer`'s `--volume` argument.
 
