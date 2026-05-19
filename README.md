@@ -113,11 +113,11 @@ $ wasmtime --dir ./test_data ./bin/sha3.prod.opt.wasm -- 256 war_and_peace.txt
 
 ## Using `wazero v1.11.0`
 
-When using `wazero`, the `--mount` argument uses a syntax similar to `wasmer`'s `--mapdir` argument.
+When using `wazero`, the `--mount` argument uses a syntax similar to `wasmer`'s `--volume` argument.
 
 ```bash
-$ wazero run -mount=.:. ./bin/sha3.prod.opt.wasm 512 ./test_data/war_and_peace.txt
-6bff6edfba3c35ae470578a5a16bfd2ff3dc00ddd33de983e1d1c35d4ca0f0be2ff821987c8d646f956ea28809f976a3ad454de9104b53dc22370a671161fef5  ./test_data/war_and_peace.txt
+$ wazero run -mount=./test_data:. ./bin/sha3.prod.opt.wasm 224 war_and_peace.txt
+1b74a9be309c26072ad2903b3ab16eda117414736d32df43df562bb1  ./test_data/war_and_peace.txt
 ```
 
 ---
