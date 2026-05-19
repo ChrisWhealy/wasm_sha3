@@ -8,7 +8,7 @@ The resulting binary is 5.2 Kb 😎
 
 - [Overview](#overview)
   - [Drop-In Replacement Mode for SHA2](#drop-in-replacement-mode-for-sha2)
-  - [Extendible Output Function (XOF) Mode](#extendible-output-function-(xof)-mode)
+  - [Extendible Output Function (XOF) Mode](#extendible-output-function-xof-mode)
   - [How Does Drop-In Mode Differ From XOF Mode?](#how-does-drop-in-mode-differ-from-xof-mode)
 - [Local Execution](#local-execution)
   - [Host Environment Prerequisites](#host-environment-prerequisites)
