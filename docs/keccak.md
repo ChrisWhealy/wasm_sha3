@@ -11,26 +11,27 @@
 
 SHA3 manipulates the input data using a function that has been given the made up name of "Keccak" (pronounced "ket chak").
 
-# Input Data Termination and Block Padding
+# Domain Suffix and Block Padding
 
-The input data is divided into some number `t` of blocks where `t` is the file size in bits divided by the rate.
+The input data is divided into some number `t` of blocks, where `t` is the file size in bits divided by the rate.
 If this number is not an integer, then it is rounded up to the next whole number.
+
 More formally, this is given by:
 
 ```javascript
 let t = Math.floor(file_size_in_bits / rate) + (file_size_in_bits mod rate < 4 ? 1 : 0)
 ```
 
-The last block that has a "domain suffix" appended, followed by some number of padding bits so that the last block is entirely filled:
+The last block always has a "domain suffix" appended, followed by some number of padding bits so that the last block is entirely filled:
 
   1. Append the domain suffix to the message:
      - SHA3: append `01` (2 bits)
      - SHAKE: append `1111` (4 bits)
-  2. Apply the `pad10*1` function (NIST FIPS 202 §5.1) to bring the total length to a multiple of the rate
+  2. Apply the `pad10*1` function (see NIST FIPS 202 §5.1) to fill the remaining space in the last block
 
-So, the data is always suffixed with the domain suffix bits (either `01` or `1111`) followed by however many padding bits the `pad10*1` function generates.
+The data is always suffixed with the domain suffix bits (being either `01` or `1111`) followed by however many padding bits the `pad10*1` function generates.
 
-The rule for the `pad10*1` function is that it must generate a bit string that:
+The `pad10*1` function will always generate a bit string that:
 * Starts and ends with bit `1`
 * Between which are zero or more bit `0`s
 

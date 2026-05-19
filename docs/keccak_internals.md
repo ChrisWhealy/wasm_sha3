@@ -36,11 +36,11 @@ Steps 2 to 5 below describe the SHA3 absorb phase, and step 6 describes the sque
 
 3. XOR the input data with the data already present in the rate region of the internal state.
 
-4. Perform the Keccak function (comprising 24 rounds of the five step functions documented below) against the data in the internal state.
+4. Perform 24 rounds of the Keccak function against the data in the internal state.
 
 5. Did step 2 hit end of file?
 
-   No&nbsp; - Goto step 2<br>Yes  - Goto step 6
+   Nope - Goto step 2<br>Yup&nbsp; - Goto step 6
 
 6. We're done - the required digest is the first `d` bits in the rate region of the internal state.
 
@@ -64,7 +64,8 @@ The array data then follows the order `(3,3), (4,3), (0,3), (1,3), (2,3)` follow
 
 # Internal Step Functions
 
-Each of the five, internal step functions is identified with a Greek letter and they are always executed in the following order:
+Internally, the Keccak function invokes a sequence of five step functions, each of which is identified with a Greek letter.
+These functions are always executed in the following order:
 
 * &theta; Theta
 * &rho; Rho
