@@ -140,7 +140,7 @@ Any statements used only for debug tracing (such as calls to functions `$hexdump
 
 To compile for production, such function calls can be removed from the source code by first running `./utils/strip-debug.mjs`.
 
-This then produces a "production" version of the WAT source code (`./src/sha256.prod.wat`) from which these delimiters and all the coding between them has been removed.
+This then produces a "production" version of the WAT source code (`./src/sha256.prod.wat`) from which these delimiters and all the coding between them have been removed.
 
 # Behind the Scenes
 
