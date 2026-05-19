@@ -15,7 +15,8 @@
 
 # Introduction
 
-Since this implementation is using SHA3 as a drop-in replacement for SHA2, the internal state is always 1600 bits, and the required digest output size `d` is one of `224`, `256`, `384` or `512` bits.
+For this example, we will use SHA3 in drop-in replacement mode for SHA2.
+This means that the internal state is always 1600 bits long and the required digest output size `d` may only be one of `224`, `256`, `384` or `512` bits.
 
 This example will use `d = 256`; therefore, the rate will be:
 
@@ -36,7 +37,7 @@ rate = 1600 - 2 * d
 
 5. Did step 2 hit end of file?
 
-   No? - Goto step 2<br>Yes?  - Goto step 6
+   No&nbsp; - Goto step 2<br>Yes  - Goto step 6
 
 6. We're done - the required digest is the first `d` bits in the rate region of the internal state.
 
