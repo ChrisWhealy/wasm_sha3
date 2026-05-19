@@ -19,6 +19,7 @@ The resulting binary is just under 5 Kb 😎
 - [Behind the Scenes](#behind-the-scenes)
   - [Sponge Functions](./docs/sponge.md)
   - [The Keccak Function](./docs/keccak.md)
+  - [The Internals of the Keccak Function](./docs/keccak_internals.md)
 
 # Overview
 
