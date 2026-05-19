@@ -28,7 +28,7 @@ Therefore, `d` may only be one of `224`, `256`, `384`, or `512` bits.
 
 ## Extendible Output Function (XOF) Mode
 
-When used in XOF mode, the SHA3 function can produce an arbitrary quantity of psuedo-random output data.
+When used in XOF mode, the SHA3 function can produce an arbitrary quantity of pseudo-random output data.
 
 §6.2 in the above NIST FIPS 202 document describes the definition two XOF mode functions known as `SHAKE128` and `SHAKE256`.
 
