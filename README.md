@@ -6,38 +6,20 @@ The resulting binary is just under 5 Kb 😎
 
 # Table of Contents
 
+- [SHA3 Implementation in WebAssembly Text](#sha3-implementation-in-webassembly-text)
+- [Table of Contents](#table-of-contents)
 - [Overview](#overview)
 - [Local Execution](#local-execution)
   - [Host Environment Prerequisites](#host-environment-prerequisites)
   - [Building Locally](#building-locally)
   - [WASM File System Access](#wasm-file-system-access)
   - [Using NodeJS](#using-nodejs)
-  - [Using `wasmer`](#using-wasmer-v71)
-  - [Using `wasmtime`](#using-wasmtime-v4400)
-  - [Using `wazero`](#using-wazero-v1110)
+  - [Using `wasmer v7.1`](#using-wasmer-v71)
+  - [Using `wasmtime v44.0.0`](#using-wasmtime-v4400)
+  - [Using `wazero v1.11.0`](#using-wazero-v1110)
 - [Development Usage](#development-usage)
   - [Stripping Out Debug Coding](#stripping-out-debug-coding)
 - [Behind the Scenes](#behind-the-scenes)
-  - [Understanding the SHA3 Algorithm](#understanding-the-sha3-algorithm)
-- [Sponge Functions](./docs/sponge.md)
-  - [Absorb Phase](./docs/sponge.md#absorb-phase)
-  - [Squeeze Phase](./docs/sponge.md#squeeze-phase)
-  - [SHA3 Internal State](./docs/sponge.md#sha3-internal-state)
-    - [Partitioning the Internal State](./docs/sponge.md#partitioning-the-internal-state)
-      - [Rate](./docs/sponge.md#rate)
-      - [Capacity](./docs/sponge.md#capacity)
-      - [Security Level](./docs/sponge.md#security-level)
-- [The Keccak Function](./docs/keccak.md)
-  - [Input Block Padding](./docs/keccak.md#input-block-padding)
-  - [Keccak-f Input Processing](./docs/keccak.md#keccak-f-input-processing)
-- [How the Keccak Function Works Internally](./docs/keccak_internals.md)
-  - [Indexing Convention within the Internal State Matrix](./docs/keccak_internals.md#indexing-convention-within-the-internal-state-matrix)
-  - [Internal Step Functions](./docs/keccak_internals.md#internal-step-functions)
-  - [θ Theta](./docs/keccak_internals.md#θ-theta)
-  - [ρ Rho](./docs/keccak_internals.md#ρ-rho)
-  - [π Pi](./docs/keccak_internals.md#π-pi)
-  - [χ Chi](./docs/keccak_internals.md#χ-chi)
-  - [ι Iota](./docs/keccak_internals.md#ι-iota)
 
 # Overview
 
@@ -178,8 +160,6 @@ To compile for production, such function calls can be removed from the source co
 This then produces a "production" version of the WAT source code (`./src/sha256.prod.wat`) from which these delimiters and all the coding between them have been removed.
 
 # Behind the Scenes
-
-## Understanding the SHA3 Algorithm
 
 In order to understand the inner workings of the SHA3 algorithm itself, you must read this [NIST document](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf).
 
