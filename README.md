@@ -13,6 +13,8 @@ The resulting binary is 5.2 Kb 😎
 - [Local Execution](./docs/local_execution.md)
 - [Development Usage](./docs/dev_usage.md)
 - [SHA3 Internals](./docs/sponge.md)
+  - [Keccak Function](./docs/keccak.md)
+  - [Inside the Keccak Function](./docs/keccak_internals.md)
 
 # Overview
 
