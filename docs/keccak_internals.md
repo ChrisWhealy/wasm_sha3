@@ -26,6 +26,8 @@ rate = 1600 - 2 * d
      = 1088 bits
 ```
 
+Steps 2 to 5 below describe the SHA3 absorb phase, and step 6 describes the squeeze phase.
+
 1. To start with, the Keccak function's internal state is initialised to 200 bytes of `0x00`.
 
 2. Consume `rate` bits from the input file/stream.
@@ -33,13 +35,21 @@ rate = 1600 - 2 * d
 
 3. XOR the input data with the data already present in the rate region of the internal state.
 
-4. Perform 24 rounds of the five step functions documented below against the data in the internal state.
+4. Perform the Keccak function (comprising 24 rounds of the five step functions documented below) against the data in the internal state.
 
 5. Did step 2 hit end of file?
 
    No&nbsp; - Goto step 2<br>Yes  - Goto step 6
 
 6. We're done - the required digest is the first `d` bits in the rate region of the internal state.
+
+## XOF Mode
+
+If we are running SHA3 in XOF mode, then once the absorb phase in steps 2-5 has completed, we need to output the requested number of bytes from the rate part of the internal state.
+
+It is quite possible that we need to output more bytes than are contained in the rate, so in this case, we first output the entire rate, then rerun the Keccak function against the internal state to generate more data in the rate.
+
+We keep running the Keccak function against the internal state until the required number of output bytes have been generated.
 
 ## Indexing Convention within the Internal State Matrix
 
