@@ -40,7 +40,7 @@ Steps 2 to 5 below describe the SHA3 absorb phase, and step 6 describes the sque
 
 5. Did step 2 hit end of file?
 
-   Nope - Goto step 2<br>Yup&nbsp; - Goto step 6
+   Nope - Goto step 2<br>Yup&nbsp;&nbsp; - Goto step 6
 
 6. We're done - the required digest is the first `d` bits in the rate region of the internal state.
 
