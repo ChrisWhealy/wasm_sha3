@@ -50,9 +50,10 @@ The SHA3 function requires that its input data is broken up into a whole number 
 However, it is very unlikely that the length of the input data is an exact multiple of the block size; so, any space left at the end of the last block must be padded to ensure the last block is always full.
 
 The first difference between the two SHA3 modes rests on how the last block is padded.
-The second difference rests on the amount of output data the SHA3 algorithm outputs.
+The second difference rests on the amount of output data the SHA3 algorithm produces.
 
-In Drop-in mode, the SHA3 algorithmn will produce output that is exactly 224, 256, 384 or 512 bits in length.  However, in XOF mode, SHA3 can generate output of arbitrary length.
+In Drop-in mode, the SHA3 algorithmn will produce output that is exactly 224, 256, 384 or 512 bits in length.
+However, in XOF mode, SHA3 can generate output of arbitrary length.
 
 # Local Execution
 

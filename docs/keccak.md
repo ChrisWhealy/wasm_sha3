@@ -11,44 +11,32 @@
 
 SHA3 manipulates the input data using a function that has been given the made up name of "Keccak" (pronounced "ket chak").
 
-# Input Block Padding
+# Input Data Termination and Block Padding
 
-The input data is divided into some number (`t`) of blocks of the same size as the rate where `t` is given by:
+The input data is divided into some number `t` of blocks where `t` is the file size in bits divided by the rate.
+If this number is not an integer, then it is rounded up to the next whole number.
+More formally, this is given by:
 
 ```javascript
 let t = Math.floor(file_size_in_bits / rate) + (file_size_in_bits mod rate < 4 ? 1 : 0)
 ```
 
-The last block must be padded so that the data being processed fills an integer number of blocks.
+The last block that has a "domaiun suffix" appended, followed by some number of padding bits so that the last block is entirely filled.
 
-The padding rules depend on whether SHA3 is being used in SHA2-replacement mode, or XOF mode.
-In our case, we are only concerned with SHA2-replacement mode, so the padding rules are as follows:
+The process for both drop-in and XOF modes is:
 
-* The data must be suffixed with the two padding marker bits `01`
-* The padding marker must be followed by a variable length bit sequence that:
-   * Starts and ends with bit `1`
-   * Between the start and end `1`s there must be zero or more bit `0`s
+  1. Append the domain suffix to the message:
+    - SHA3: append `01` (2 bits)
+    - SHAKE: append `1111` (4 bits)
+  2. Apply the `pad10*1` function (NIST FIPS 202 §5.1) to bring the total length to a multiple of the rate
 
-Thus, if the size of data `n` in the last block is 4 or more bits smaller than the rate `r`, the last block will be padded as follows:
+So, the data is always suffixed with the domain suffix bits (either `01` or `1111`) followed by however many padding bits the `pad10*1` function generates.
 
-| Size of data<br> in last block | Padding<br>marker | Padding<br>bit sequence | Complete<br>bit string
-|---|---|---|---
-| `r-4` | `01` | `11` | `0111`
-| `r-5` | `01` | `101` | `01101`
-| `r-6` | `01` | `1001` | `011001`
-| `r-7` | `01` | `10001` | `0110001`
-| `r-n` | `01` | `1[n-4 * 0]1` | `0110...01`
+The rule for the `pad10*1` function is that it must generate a bit string that:
+* Starts and ends with bit `1`
+* Between which are zero or more bit `0`s
 
-In the event that the block size is 3 or fewer bits smaller than the rate `r`, then the remaining bits are padded using the same scheme as above, but the padding string spills over into a new block:
-
-| Size of data<br>in last block | Padding bit<br>sequence in<br>last block | Padding bits<br>in extra block
-|---|---|---
-| `r-3` | `011` | `[r-1 * 0]1`
-| `r-2` | `01` | `1[r-2 * 0]1`
-| `r-1` | `0` | `11[r-3 * 0]1`
-| `r` | | `011[r-4 * 0]1`
-
-Note that if the data is an exact integer multiple of the block size `r`, then an extra block containing only the padding string is always added.
+Note that if the data is an exact integer multiple of the block size `r`, then an entire extra block containing only the domain suffix and the padding bit string is always added.
 
 # Keccak Function Input Processing
 
