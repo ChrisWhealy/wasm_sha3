@@ -211,8 +211,9 @@
   (global $PARTIAL_BYTES  (mut i32) (i32.const 0))    ;; absorb: bytes accumulated in current partial rate-block
   (global $DOMAIN_BYTE    (mut i32) (i32.const 0x06)) ;; 0x06 = SHA3, 0x1f = SHAKE
   (global $SQUEEZE_OFFSET (mut i32) (i32.const 0))    ;; squeeze: byte offset within current rate-block
-  (global $SHAKE_BYTE          i32  (i32.const 0x1f)) ;; Rate block terminator for SHAKE functions
-  (global $SHA3_BYTE           i32  (i32.const 0x06)) ;; Rate block terminator for SHA3 functions
+
+  (global $SHAKE_BYTE (export "DOMAIN_SHAKE") i32 (i32.const 0x1f)) ;; Rate block suffix for SHAKE functions
+  (global $SHA3_BYTE  (export "DOMAIN_SHA3")  i32 (i32.const 0x06)) ;; Rate block suffix for SHA3 functions
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Error messages
@@ -255,8 +256,8 @@
   (global $STR_WRITE_BUF_PTR   i32 (i32.const 0x00001DE4))
 
   ;; $main Memory Map: Pages 2-33
-  (global $READ_BUFFER_PTR     i32 (i32.const 0x00010000))  ;; Start of memory page 2
-  (global $READ_BUFFER_SIZE    i32 (i32.const 0x00200000))  ;; fd_read buffer size = 2Mb
+  (global $READ_BUFFER_PTR  (export "READ_BUFFER_PTR")  i32 (i32.const 0x00010000))  ;; Start of memory page 2
+  (global $READ_BUFFER_SIZE (export "READ_BUFFER_SIZE") i32 (i32.const 0x00200000))  ;; fd_read buffer size = 2Mb
 
   ;; If you change the value of $READ_BUFFER_SIZE, you must manually update $MSG_BLKS_PER_BUFFER!
   (global $MSG_BLKS_PER_BUFFER i32 (i32.const 0x00008000))  ;; $READ_BUFFER_SIZE / 64
@@ -730,7 +731,7 @@
         ) ;; Loop $hex_chunk
       ) ;; Block $hex_done
 
-      ;; Only print the file name after the output data when running in SHA2 drop-in replacement mode
+      ;; Only print the file name when running in SHA2 drop-in replacement mode
       (if (i32.eq (local.get $domain_byte) (global.get $SHA3_BYTE))
         (then
           (call $write   (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 2))
