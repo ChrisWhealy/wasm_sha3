@@ -902,12 +902,20 @@
         ) ;; Loop $hex_chunk
       ) ;; Block $hex_done
 
-      ;; Write "  <filename>\n" to stdout
-      (call $write   (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 2))
-      (call $writeln
-        (global.get $FD_STDOUT)
-        (i32.load (memory $main) (global.get $FILE_PATH_PTR))
-        (i32.load (memory $main) (global.get $FILE_PATH_LEN_PTR))
+      ;; Only print the file name when running in SHA2 drop-in replacement mode
+      (if (i32.eq (local.get $domain_byte) (global.get $SHA3_BYTE))
+        (then
+          (call $write   (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 2))
+          (call $writeln
+            (global.get $FD_STDOUT)
+            (i32.load (memory $main) (global.get $FILE_PATH_PTR))
+            (i32.load (memory $main) (global.get $FILE_PATH_LEN_PTR))
+          )
+        )
+        (else
+          ;; Just print a line feed
+          (call $writeln (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 0))
+        )
       )
     ) ;; Block $exit
   )
