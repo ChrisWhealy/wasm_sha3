@@ -27,6 +27,14 @@ export class SHA3Sponge {
   #validDigestLens  // { domainByte → Set<digestLen> }, keyed by values read from exports
   #devMode          // true when instantiated with the debug module wired in
 
+  static #genBinPath(isProd, isOpt) {
+    return `./bin/sha3.${isProd ? 'prod' : 'dev'}${isOpt ? '.opt' : ''}.wasm`
+  }
+
+  static #genDebugPath(isOpt) {
+    return `./bin/debug${isOpt ? '.opt' : ''}.wasm`
+  }
+
   constructor(instance, devMode = false) {
     this.#exports     = instance.exports
     this.#readBufPtr  = instance.exports.READ_BUFFER_PTR.value
@@ -122,38 +130,41 @@ export class SHA3Sponge {
     this.#exports.squeeze(this.#readBufPtr, numBytes)
     return this.#mem.slice(this.#readBufPtr, this.#readBufPtr + numBytes)
   }
-}
 
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-// Instantiate the WASM module and return a SHA3Sponge ready for use.
-//
-// When debugBinPath is supplied the debug WASM module is instantiated first and its memory and hexdump functions are
-// injected into the SHA3 module's import object alongside the log functions from utils/logging.mjs.
-//
-// For this to work, you must first run `npm run build:dev` to create a binary containing debug call sites
-export async function createSponge(wasmBinPath, debugBinPath = null) {
-  const wasi      = new WASI({ version: 'unstable' })
-  const importObj = { wasi_snapshot_preview1: wasi.wasiImport }
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // Instantiate the WASM module and return a SHA3Sponge ready for use.
+  //
+  // isProd  true  → sha3.prod[.opt].wasm  (no debug imports)
+  //         false → sha3.dev[.opt].wasm   (debug module instantiated and wired in)
+  // isOpt   true  → optimised binary (.opt); false → unoptimised (default: true)
+  //
+  // Dev mode requires `npm run build:dev` to have been run first.
+  static async create(isProd = true, isOpt = true) {
+    const wasi      = new WASI({ version: 'unstable' })
+    const importObj = { wasi_snapshot_preview1: wasi.wasiImport }
 
-  if (debugBinPath) {
-    const debugWasi   = new WASI({ version: 'unstable' })
-    const debugModule = await WebAssembly.instantiate(
-      new Uint8Array(readFileSync(debugBinPath)),
-      { wasi_snapshot_preview1: debugWasi.wasiImport },
-    )
-    debugWasi.start(debugModule.instance)
+    // If we're running in dev mode, create a debug WASM instance and wire in its exports to the main module's imports
+    // so that the hexdump() function is available for logging internal state.
+    if (!isProd) {
+      const debugWasi   = new WASI({ version: 'unstable' })
+      const debugModule = await WebAssembly.instantiate(
+        new Uint8Array(readFileSync(SHA3Sponge.#genDebugPath(isOpt))),
+        { wasi_snapshot_preview1: debugWasi.wasiImport },
+      )
+      debugWasi.start(debugModule.instance)
 
-    importObj['debug'] = {
-      memory:  debugModule.instance.exports.memory,
-      hexdump: debugModule.instance.exports.hexdump,
+      importObj['debug'] = {
+        memory:  debugModule.instance.exports.memory,
+        hexdump: debugModule.instance.exports.hexdump,
+      }
+      importObj['log'] = log
     }
-    importObj['log'] = log
+
+    const wasmModule = await WebAssembly.instantiate(
+      new Uint8Array(readFileSync(SHA3Sponge.#genBinPath(isProd, isOpt))),
+      importObj,
+    )
+
+    return new SHA3Sponge(wasmModule.instance, !isProd)
   }
-
-  const module = await WebAssembly.instantiate(
-    new Uint8Array(readFileSync(wasmBinPath)),
-    importObj,
-  )
-
-  return new SHA3Sponge(module.instance, debugBinPath !== null)
 }

@@ -57,7 +57,9 @@ The syntax for specifying such preopened resources varies between the different 
 
 # Using NodeJS
 
-Depending on whether you want to use
+The `sha3` WebAssembly module is instantiated and managed by creating and instance of the `SHA3Sponge` class.
+
+To see the usage of this class, take a look at the coding in `sha3sponge_demo.mjs`.
 
 The JavaScript module invoked by NodeJS does not use very sophisticated logic for determining the location of the target file.
 Instead, it assumes the current working directory is the one containing `sha3sum.mjs` and the `WASI` instance then preopens `process.cwd()`.
@@ -65,18 +67,41 @@ This means the target file ***must*** live in (or beneath) that directory.
 
 By default, `./sha3sum.mjs` runs the `prod` version of the WebAssembly module.
 
+## Drop-In Mode
+
+In drop-in mode, `./sha3sum.mjs` copies output format of the OS command `sha3sum`.
+
 ```bash
-$ ./sha3sum.mjs <hash-size> <filename>
+$ ./sha3sum.mjs <digest-len> <filename>
 ```
 
-Where `<hash-size>` is one of `224`, `256`, `384` or `512`
+Where `<digest-len>` is one of `224`, `256`, `384` or `512`
 
-For example
+For example:
 
 ```bash
 $ ./sha3sum.mjs 384 ./tests/war_and_peace.txt
 9baecef1c5bd0d3358483274277d06e74598dcbfad6f837c8898fe790a5d0d17e9a6f04a50bf5b05bbe1f34ffe45d7f4  ./test_data/war_and_peace.txt
 ```
+
+## XOF Mode
+
+In XOF mode, &lt;output_bytes&gt; are written to `stdout` without the filename.
+
+```bash
+$ ./sha3sum.mjs <digest_len> <output_bytes> <filename>
+```
+
+Where `<digest-len>` is one of `shake128` or `shake256`
+
+For example
+
+```bash
+$ ./sha3sum.mjs shake128 32 ./test_data/war_and_peace.txt
+203c8a358de1abc98d809cb6d5920dad444afa03d95814c9a9ceef79acf9e475
+```
+
+---
 
 # Using `wasmer v7.1`
 
@@ -105,7 +130,7 @@ The following command runs SHA3 in XOF mode and generates 64 bytes of output dat
 
 ```bash
 $ wasmer run . --volume ./test_data:/. --command-name=shake128 -- 64 war_and_peace.txt
-203c8a358de1abc98d809cb6d5920dad444afa03d95814c9a9ceef79acf9e475498015ad958d4217f5235df6f651697b32ff56fa5c3dc259dab97fd8084b829c  war_and_peace.txt
+203c8a358de1abc98d809cb6d5920dad444afa03d95814c9a9ceef79acf9e475498015ad958d4217f5235df6f651697b32ff56fa5c3dc259dab97fd8084b829c
 ```
 
 # Using `wasmtime v44.0.0`
@@ -145,5 +170,5 @@ $ wazero run -mount=./test_data:. ./bin/sha3.prod.opt.wasm 224 war_and_peace.txt
 
 ```bash
 $ wazero run -mount=./test_data:. ./bin/sha3.prod.opt.wasm shale256 28 war_and_peace.txt
-0874ad7b6e05764fa19318c85cac7ae7b8fd64473f1df23f002c9a4a  ./test_data/war_and_peace.txt
+0874ad7b6e05764fa19318c85cac7ae7b8fd64473f1df23f002c9a4a
 ```

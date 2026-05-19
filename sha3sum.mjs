@@ -5,7 +5,7 @@ process.removeAllListeners('warning')
 process.on('warning', w => w.name === 'ExperimentalWarning' ? {} : console.warn(w.name, w.message))
 
 import { readFileSync } from 'fs'
-import { createSponge } from './SHA3Sponge.mjs'
+import { SHA3Sponge } from './SHA3Sponge.mjs'
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 let digestLen, domainByte, outputBytes, filePath
@@ -23,11 +23,8 @@ if (!algo) {
   process.exit(1)
 }
 
-const wasmBinPath = dev ? './bin/sha3.dev.opt.wasm' : './bin/sha3.prod.opt.wasm'
-const debugBinPath = dev ? './bin/debug.opt.wasm' : null
-
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const sponge = await createSponge(wasmBinPath, debugBinPath)
+const sponge = await SHA3Sponge.create(!dev)
 
 // Parse and then validate the arguments
 if (algo === 'shake128' || algo === 'shake256') {
