@@ -100,16 +100,6 @@ So in this case, the contents of `./test_data` appear to be in WebAssembly's roo
 In this case, the `wasmer.toml` file contains definitions for commands called `224`, `256`, `384` and `512`.
 Within these command definitions, the corresponding hash length argument has been hard-coded, so there is no need for you to specify it explicitly.
 
-### General Points About Using `wasmer`
-
-`wasmer` is much stricter about enforcing WASI access rights than other runtimes such as `wasmtime` or `wazero`.
-
-For instance the `wasmtime` option `--mapdir` does not grant `FD_SEEK` as an inheritable right.
-Therefore, files in the directory pre-openend by the `--mapdir` option cannot have their size read by seeking to the end, neither can a plain text file be opened if its execute bit is set.
-In both cases, `wasmer` will return WASI errno 63 `EPERM` "Operation not permitted".
-
-`wasmtime` or `wazero` are more permissive about access rights and ignore this mismatch.
-
 ## Using `wasmtime`
 
 The same logic used by `wasmer` applies when `wasmtime` creates WASM's virtual root directory.
