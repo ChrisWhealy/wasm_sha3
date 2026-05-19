@@ -10,11 +10,11 @@ The resulting binary is 5.2 Kb 😎
   - [Drop-In Replacement Mode for SHA2](#drop-in-replacement-mode-for-sha2)
   - [Extendible Output Function (XOF) Mode](#extendible-output-function-xof-mode)
   - [How Does Drop-In Mode Differ From XOF Mode?](#how-does-drop-in-mode-differ-from-xof-mode)
-- [Local Execution](./docs/local_execution.md)
-- [Development Usage](./docs/dev_usage.md)
-- [SHA3 Internals](./docs/sponge.md)
-  - [Keccak Function](./docs/keccak.md)
-  - [Inside the Keccak Function](./docs/keccak_internals.md)
+- [Local Execution](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/local_execution.md)
+- [Development Usage](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/dev_usage.md)
+- [SHA3 Internals](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/sponge.md)
+  - [Keccak Function](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/keccak.md)
+  - [Inside the Keccak Function](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/keccak_internals.md)
 
 # Overview
 
