@@ -58,13 +58,21 @@ The internal state (of size `b`) is subdivided into two regions known as the `ra
 The `rate` is the region into which the input data is written and from which the output digest will be taken.
 It has this name because its size determines the rate at which the input data can be consumed.
 
+The larger the rate, the faster the input file can be processed; however, this comes at the cost of a lower security level.
+
 ### Capacity
 
 The remainder of the internal state is a region known as the `capacity`, and this is ***never*** made public.
 
 Its purpose is to act as a hidden entropy pool into which the data bits in the `rate` are thoroughly mixed.
 
-Further to this, the size `c` of the capacity must always be twice the size of the output digest length `d`, thus `c = 2d` making `r = 1600 - 2d`.
+
+
+### Security Level
+
+The algorithm's security level is tied to the digest size since the size `c` of the capacity must always be twice the size of the required digest length `d`.
+
+Thus `c = 2d`, making `r = 1600 - 2d`.
 
 Given this constraint, the sizes of `r` and `c` may only be one of the following pairs (in bits):
 
@@ -75,6 +83,7 @@ Given this constraint, the sizes of `r` and `c` may only be one of the following
 | `384` | `192` | `r = 1600 - (2 * 384)` |  `768` |  `832` |
 | `512` | `256` | `r = 1600 - (2 * 512)` |  `576` | `1024` |
 
+![Subdivisions of the SHA3 internal state](./internal_state.png)
 
 ## The "Keccak" Function
 
