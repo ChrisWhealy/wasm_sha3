@@ -1,7 +1,7 @@
 {
   "name": "wasm_sha3",
-  "version": "1.3.0",
-  "description": "Calculate the SHA3 hash of a local file as a SHA2 drop-in replacement",
+  "version": "1.3.1",
+  "description": "Calculates the SHA3 hash of a local file, implemented in WebAssembly Text",
   "type": "module",
   "main": "sha3.mjs",
   "scripts": {
