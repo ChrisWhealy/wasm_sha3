@@ -57,7 +57,7 @@ The syntax for specifying such preopened resources varies between the different 
 
 # Using NodeJS
 
-The `sha3` WebAssembly module is instantiated and managed by creating and instance of the `SHA3Sponge` class.
+The `sha3` WebAssembly module is instantiated and managed by creating an instance of the `SHA3Sponge` class.
 
 To see the usage of this class, take a look at the coding in `sha3sponge_demo.mjs`.
 
