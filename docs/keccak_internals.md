@@ -3,6 +3,7 @@
 ## Table of Contents
 
 - [Introduction](#introduction)
+  - [XOF Mode](#xof-mode)
   - [Indexing Convention within the Internal State Matrix](#indexing-convention-within-the-internal-state-matrix)
 - [Internal Step Functions](#internal-step-functions)
   - [θ Theta](#θ-theta)
