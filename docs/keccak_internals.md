@@ -2,16 +2,18 @@
 
 ## Table of Contents
 
-- [Indexing Convention within the Internal State Matrix](./docs/keccak_internals.md#indexing-convention-within-the-internal-state-matrix)
-- [Internal Step Functions](./docs/keccak_internals.md#internal-step-functions)
-- [θ Theta](./docs/keccak_internals.md#θ-theta)
-- [ρ Rho](./docs/keccak_internals.md#ρ-rho)
-- [π Pi](./docs/keccak_internals.md#π-pi)
-- [χ Chi](./docs/keccak_internals.md#χ-chi)
-- [ι Iota](./docs/keccak_internals.md#ι-iota)
+- [Introduction](#introduction)
+  - [Indexing Convention within the Internal State Matrix](#indexing-convention-within-the-internal-state-matrix)
+- [Internal Step Functions](#internal-step-functions)
+  - [θ Theta](#θ-theta)
+  - [ρ Rho](#ρ-rho)
+  - [π Pi](#π-pi)
+  - [χ Chi](#χ-chi)
+  - [ι Iota](#ι-iota)
 
 ---
 
+# Introduction
 
 Since this implementation is using SHA3 as a drop-in replacement for SHA2, the internal state is always 1600 bits, and the required digest output size `d` is one of `224`, `256`, `384` or `512` bits.
 
@@ -48,7 +50,7 @@ The linear order of the data in expected test results starts in the bottom left 
 
 The array data then follows the order `(3,3), (4,3), (0,3), (1,3), (2,3)` followed by `(3,4), (4,4), (0,4), (1,4), (2,4)`, then `(3,0), (4,0), (0,0), (1,0), (2,0)` etc.
 
-## Internal Step Functions
+# Internal Step Functions
 
 Each of the five, internal step functions is identified with a Greek letter and they are always executed in the following order:
 

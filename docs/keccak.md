@@ -1,9 +1,17 @@
 
 # The Keccak Function
 
+## Table of Contents
+
+- [Introduction](#introduction)
+- [Input Block Padding](#input-block-padding)
+- [Keccak Function Input Processing](#keccak-function-input-processing)
+
+# Introduction
+
 SHA3 manipulates the input data using a function that has been given the made up name of "Keccak" (pronounced "ket chak").
 
-## Input Block Padding
+# Input Block Padding
 
 The input data is divided into some number (`t`) of blocks of the same size as the rate where `t` is given by:
 
@@ -42,7 +50,7 @@ In the event that the block size is 3 or fewer bits smaller than the rate `r`, t
 
 Note that if the data is an exact integer multiple of the block size `r`, then an extra block containing only the padding string is always added.
 
-## Keccak-f Input Processing
+# Keccak Function Input Processing
 
 Now that the input data `X` has been organised into some integer number `t` of blocks of size `r` (the last of which has been appropriately padded), the "absorb" phase performs the following loop:
 

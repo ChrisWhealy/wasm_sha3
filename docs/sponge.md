@@ -2,12 +2,15 @@
 
 ## Table of Contents
 
-- [Absorb Phase](./docs/sponge.md#absorb-phase)
-- [Squeeze Phase](./docs/sponge.md#squeeze-phase)
-- [SHA3 Internal State](./docs/sponge.md#sha3-internal-state)
-  - [Partitioning the Internal State](./docs/sponge.md#partitioning-the-internal-state)
+- [Introduction](#introduction)
+  - [Absorb Phase](#absorb-phase)
+  - [Squeeze Phase](#squeeze-phase)
+- [SHA3 Internal State](#sha3-internal-state)
+  - [Partitioning the Internal State](#partitioning-the-internal-state)
 
 ---
+
+# Introduction
 
 The hash function used by SHA3 belongs to a family of functions known as "sponge" functions.
 These functions are entirely deterministic; that is, for the same input, they will always yield the same output.
