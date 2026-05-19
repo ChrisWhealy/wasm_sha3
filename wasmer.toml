@@ -40,3 +40,17 @@ module = "sha3"
 runner = "wasi"
 [command.annotations.wasi]
 main_args = ["512"]
+
+[[command]]
+name = "shake128"
+module = "sha3"
+runner = "wasi"
+[command.annotations.wasi]
+main_args = ["shake128"]
+
+[[command]]
+name = "shake256"
+module = "sha3"
+runner = "wasi"
+[command.annotations.wasi]
+main_args = ["shake256"]

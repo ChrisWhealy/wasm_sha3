@@ -119,7 +119,7 @@
   ;; 0x0000030C     100   i32x25  State index table
   ;; 0x00000370      25   i8x25   Theta XOR D offset table
   ;; 0x00000389       3           Padding (32-bit alignment)
-  ;; 0x0000038C     200   i64x25  Entropy pool (fixed at 200 bytes, subdivided into rate and capacity)
+  ;; 0x0000038C     200   bytes   DATA_PTR scratch buffer (rate-block staging; max 168 bytes for SHAKE128)
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; File IO  (all i64 output pointers must be 8-byte aligned otherwise wasmtime throws its toys out of the pram)
   ;; 0x000004E4       4   i32     file_fd
@@ -207,7 +207,7 @@
 
   ;; STATE_PTR/RATE_PTR alias BUF_0: state lives permanently in the permutation working buffer
   (global $STATE_PTR    (export "STATE_PTR")    i32 (i32.const 0x0000012C))  ;; BUF_0 alias — 200 bytes
-  (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x00000454))  ;; length = rate bytes (varies with digest size)
+  (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x0000038C))  ;; length = rate bytes (up to 168 bytes for SHAKE128)
 
   ;; Default digest size = 256 bits, so in 64-bit words, rate = 17 and capacity = 8
   (global $RATE         (export "RATE")         (mut i32) (i32.const 17))
@@ -234,6 +234,8 @@
   (global $PARTIAL_BYTES  (mut i32) (i32.const 0))    ;; absorb: bytes accumulated in current partial rate-block
   (global $DOMAIN_BYTE    (mut i32) (i32.const 0x06)) ;; 0x06 = SHA3, 0x1f = SHAKE
   (global $SQUEEZE_OFFSET (mut i32) (i32.const 0))    ;; squeeze: byte offset within current rate-block
+  (global $SHAKE_BYTE          i32  (i32.const 0x1f)) ;; Rate block terminator for SHAKE functions
+  (global $SHA3_BYTE           i32  (i32.const 0x06)) ;; Rate block terminator for SHA3 functions
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Error messages
@@ -243,8 +245,8 @@
   (global $ERR_MSG_PREFIX      i32 (i32.const 0x00000AE7))  ;; Length = 5
   (data (memory $main) (i32.const 0x00000AE7) "Err: ")
 
-  (global $ERR_MSG_BAD_ARGS    i32 (i32.const 0x00000AEC))  ;; Length = 63
-  (data (memory $main) (i32.const 0x00000AEC) "Bad args. Expected one of 224, 256, 384, or 512 plus <filename>")
+  (global $ERR_MSG_BAD_ARGS    i32 (i32.const 0x00000AEC))  ;; Length = 65
+  (data (memory $main) (i32.const 0x00000AEC) "Bad args: 224|256|384|512 <file>  or  shake128|256 <bytes> <file>")
 
   (global $ERR_MSG_NOENT       i32 (i32.const 0x00000B30))  ;; Length = 25
   (data (memory $main) (i32.const 0x00000B30) "No such file or directory")
@@ -355,8 +357,9 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Initialise module state for a new hash/XOF computation.
   ;; Sets rate, capacity, domain byte; zeros the Keccak state; resets the absorb and squeeze cursors.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $init_state (export "init_state")
-        (param $digest_len  i32)  ;; capacity bits: 224 | 256 | 384 | 512
+        (param $digest_len  i32)  ;; SHA3: 224|256|384|512; SHAKE: 128 (SHAKE128) or 256 (SHAKE256)
         (param $domain_byte i32)  ;; 0x06 = SHA3, 0x1f = SHAKE
 
     (global.set $DOMAIN_BYTE    (local.get $domain_byte))
@@ -381,6 +384,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Absorb $src_len bytes at $src_ptr into the sponge state.
   ;; Handles partial-block accumulation across calls; call finalize() when all input has been absorbed.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $absorb (export "absorb")
         (param $src_ptr  i32)
         (param $src_len  i32)
@@ -447,6 +451,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Complete the absorb phase by appling the correct padding byte (0x06 for SHA3 or 0x1f for SHAKE) in the remainder of
   ;; the rate block, then run the final Keccak round
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $finalize (export "finalize")
     (local $rate_bytes i32)
     (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
@@ -481,6 +486,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Squeeze $len bytes from the sponge state into the buffer at $out_ptr.
   ;; May be called repeatedly; applies an additional Keccak permutation whenever the rate block is exhausted.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $squeeze (export "squeeze")
         (param $out_ptr i32)
         (param $len     i32)
@@ -526,22 +532,34 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Entry point.  Called automatically by the WASI runtime.
+  ;; This entry point is only called when the WASI instance is started - E.G. in JavaScript, by calling wasi.start().
   ;;
   ;; Expects two command line arguments:
   ;;   <digest-bits>  one of 224, 256, 384, or 512
-  ;;   <file>         path to the file to hash
+  ;;   <file>         a path to the file to be hashed.
+  ;;                  This pathname is relative to directory preopened when the WASI instance is created.
   ;;
-  ;; Reads the file in 2 MB chunks, absorbs each rate-sized block into the Keccak state, applies SHA3
-  ;; padding (FIPS 202 §B.2), squeezes the first digest_bytes bytes from the state, and writes the
-  ;; result as "<hex>  <filename>\n" to stdout.
+  ;; Step 0) Parse the command line arguments using wasi.args_sizes_get and wasi.args_get.
+  ;;         Validate that argument count is correct and that total argument length does not exceed some arbitrary limit
+  ;;         (i.e., is not > 256 bytes)
+  ;; Step 1) Parse digest bit length argument
+  ;; Step 2) Parse filename argument and open file
+  ;; Step 3) Initialise Keccak state
+  ;; Step 4) While bytes_read > 0, read the file in 2 MB chunks, absorbing each rate-sized block into the Keccak state.
+  ;; Step 5) Once we hit EOF, finalize the last block by applying domain specific padding (FIPS 202 §B.2)
+  ;; Step 6) Close the file
+  ;; Step 7) Squeeze digest_bytes from the state and write the result as "<hex>  <filename>\n" to stdout.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "_start")
     (local $argc            i32)
     (local $argv_buf_len    i32)
     (local $hash_len_ptr    i32)
-    (local $hash_len_val    i32)  ;; 4-byte LE load of the digest-bits argument
-    (local $digest_len      i32)  ;; 224 | 256 | 384 | 512
-    (local $digest_bytes    i32)  ;; digest_len / 8
+    (local $hash_len_val    i32)  ;; 4-byte LE load of the algo argument
+    (local $digest_len      i32)  ;; SHA3: 224|256|384|512  SHAKE: 128|256
+    (local $digest_bytes    i32)  ;; SHA3: digest_len/8; SHAKE: user-supplied output byte count
+    (local $domain_byte     i32)  ;; 0x06 = SHA3, 0x1f = SHAKE
+    (local $remaining       i32)  ;; bytes still to output in the hex-squeeze loop
+    (local $chunk           i32)  ;; current chunk size in the hex-squeeze loop
     (local $filename_ptr    i32)
     (local $filename_len    i32)
     (local $file_fd         i32)
@@ -576,13 +594,13 @@
         )
       )
 
-      ;; Must be at least 2 arguments: digest-bits and filename
+      ;; Minimum: needs at least hash/variant + filename (2 user args)
       (if (i32.lt_u (local.get $argc) (i32.const 2))
         (then
           ;;@debug-start
           (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
           ;;@debug-end
-          (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 63))
+          (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 65))
           (br $exit)
         )
       )
@@ -592,7 +610,13 @@
       ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 1: Parse and validate the digest-bits argument (second-to-last)
+      ;; Step 1: Parse algorithm argument to determine SHA3 or SHAKE mode.
+      ;;
+      ;; Uses relative indexing from the end of argv so that the module works regardless of how many leading args the
+      ;; host runtime prepends (argv[0], script path, etc.):
+      ;;   SHA3:   [..., hash_size, filename]      — hash_size at argc-1, filename at argc
+      ;;   SHAKE:  [..., variant, bytes, filename] — variant at argc-2, bytes at argc-1, filename at argc
+      ;;
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
       ;;@debug-end
@@ -604,48 +628,124 @@
       (call $write_args)
       ;;@debug-end
 
-      (drop ;; Don't care about the returned length
-        (local.set $hash_len_ptr (call $fetch_arg_n (i32.sub (local.get $argc) (i32.const 1))))
-      )
+      (block $args_ok
+        ;; SHAKE detection: check the third-to-last arg for "shak" (only when at least 3 args exist)
+        (if (i32.ge_u (local.get $argc) (i32.const 3))
+          (then
+            (drop
+              (local.set $hash_len_ptr (call $fetch_arg_n (i32.sub (local.get $argc) (i32.const 2))))
+            )
+            ;; Does the third last argument start with "shak"?
+            (if (i32.eq
+                  (i32.load (memory $main) (local.get $hash_len_ptr))
+                  (i32.const 0x6B616873) ;; "shak"
+                )
+              (then
+                (block $shake_ok
+                  ;; Bytes 4-7 distinguish the variant: "e128" (LE 0x38323165) or "e256" (LE 0x36353265)
+                  (if (i32.eq
+                        (i32.load (memory $main) (i32.add (local.get $hash_len_ptr) (i32.const 4)))
+                        (i32.const 0x38323165) ;; "e128"
+                      )
+                    (then
+                      (local.set $digest_len  (i32.const 128))
+                      (local.set $domain_byte (global.get $SHAKE_BYTE))
+                      (br $shake_ok)
+                    )
+                  )
+                  (if (i32.eq
+                        (i32.load (memory $main) (i32.add (local.get $hash_len_ptr) (i32.const 4)))
+                        (i32.const 0x36353265) ;; "e256"
+                      )
+                    (then
+                      (local.set $digest_len  (i32.const 256))
+                      (local.set $domain_byte (global.get $SHAKE_BYTE))
+                      (br $shake_ok)
+                    )
+                  )
+                  ;;@debug-start
+                  (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
+                  ;;@debug-end
+                  (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 65))
+                  (br $exit)
+                )
 
-      ;; Load 4 bytes so the null terminator is included; compare as a little-endian i32
-      (local.set $hash_len_val (i32.load (memory $main) (local.get $hash_len_ptr)))
+                ;; Parse output_bytes from the second  last arg (argc-1)
+                (local.set $hash_len_val
+                  (local.set $hash_len_ptr
+                    (call $fetch_arg_n (i32.sub (local.get $argc) (i32.const 1)))
+                  )
+                )
+                (local.set $digest_bytes
+                  (call $parse_decimal (local.get $hash_len_ptr) (local.get $hash_len_val))
+                )
+                (br $args_ok)
+              )
+            )
+          )
+        )
 
-      (block $algo_ok
-        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00343232)) ;; ASCII "224\0"
-          (then (local.set $digest_len (i32.const 224)) (br $algo_ok))
+        ;; SHA3 mode: second last arg should hold the number of digest bits
+        (drop
+          (local.set $hash_len_ptr (call $fetch_arg_n (i32.sub (local.get $argc) (i32.const 1))))
         )
-        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00363532)) ;; ASCII "256\0"
-          (then (local.set $digest_len (i32.const 256)) (br $algo_ok))
+        (local.set $hash_len_val (i32.load (memory $main) (local.get $hash_len_ptr)))
+
+        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00343232)) ;; "224\0"
+          (then
+            (local.set $digest_len  (i32.const 224))
+            (local.set $domain_byte (global.get $SHA3_BYTE))
+            (br $args_ok)
+          )
         )
-        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00343833)) ;; ASCII "384\0"
-          (then (local.set $digest_len (i32.const 384)) (br $algo_ok))
+        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00363532)) ;; "256\0"
+          (then
+            (local.set $digest_len  (i32.const 256))
+            (local.set $domain_byte (global.get $SHA3_BYTE))
+            (br $args_ok)
+          )
         )
-        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00323135)) ;; ASCII "512\0"
-          (then (local.set $digest_len (i32.const 512)) (br $algo_ok))
+        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00343833)) ;; "384\0"
+          (then
+            (local.set $digest_len  (i32.const 384))
+            (local.set $domain_byte (global.get $SHA3_BYTE))
+            (br $args_ok)
+          )
         )
+        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00323135)) ;; "512\0"
+          (then
+            (local.set $digest_len  (i32.const 512))
+            (local.set $domain_byte (global.get $SHA3_BYTE))
+            (br $args_ok)
+          )
+        )
+
         ;;@debug-start
         (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
         ;;@debug-end
-        (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 63))
+        (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 65))
         (br $exit)
-      )
+      ) ;; $args_ok
 
       ;;@debug-start
       (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
       ;;@debug-end
 
-      (local.set $digest_bytes (i32.shr_u (local.get $digest_len) (i32.const 3)))
+      ;; For SHA3 mode, derive output byte count from digest length; SHAKE already set it above
+      (if (i32.ne (local.get $domain_byte) (global.get $SHAKE_BYTE))
+        (then
+          (local.set $digest_bytes (i32.shr_u (local.get $digest_len) (i32.const 3)))
+        )
+      )
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       ;; Step 2: Extract filename (last arg) and open the file
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
       ;;@debug-end
-      ;; fetch_arg_n leaves two values on the stack
       (local.set $filename_len
         (local.set $filename_ptr
-          (call $fetch_arg_n (local.get $argc))
+          (call $fetch_arg_n (local.get $argc)) ;; fetch_arg_n leaves two values on the stack, hence nested set calls
         )
       )
 
@@ -662,7 +762,7 @@
         )
       )
 
-      (if
+      (if ;; $return_code > 0
         (then
           ;;@debug-start
           (call $write_step (i32.const 1) (local.get $step) (local.get $return_code))
@@ -680,7 +780,7 @@
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
       ;;@debug-end
-      (call $init_state (local.get $digest_len) (i32.const 0x06))
+      (call $init_state (local.get $digest_len) (local.get $domain_byte))
 
       ;;@debug-start
       (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
@@ -700,6 +800,8 @@
       (block $eof
         (loop $read_chunk
           (local.tee $return_code
+            ;; Returns errno: i32
+            ;; The bytes read is discovered by reading the i32 at $NREAD_PTR
             (call $wasi.fd_read
               (local.get $file_fd)
               (global.get $IOVEC_READ_BUF_PTR)
@@ -718,7 +820,7 @@
             )
           )
 
-          (if ;; fd_read returned 0 bytes, we're done
+          (if ;; EOF?
             (i32.eqz (local.tee $bytes_read (i32.load (memory $main) (global.get $NREAD_PTR))))
             (then
               (br $eof)
@@ -736,7 +838,7 @@
       ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 5: Apply SHA3 padding and run the final permutation
+      ;; Step 5: Apply SHA3 padding and run the final keccak round
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
       ;;@debug-end
@@ -758,35 +860,49 @@
       ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 7: Squeeze — extract digest_bytes into DATA_PTR, then convert to hex ASCII
+      ;; Step 7: Squeeze digest_bytes in 64-byte chunks, hex-encode each chunk and write to stdout.
+      ;;         Works for both fixed-length SHA3 digests and arbitrary-length SHAKE XOF output.
       ;;@debug-start
       (local.set $step (i32.add (local.get $step) (i32.const 1)))
-      ;;@debug-end
-      (call $squeeze (global.get $DATA_PTR) (local.get $digest_bytes))
-
-      (loop $output_byte
-        (call $to_asc_pair
-          (i32.load8_u (memory $main) (i32.add (global.get $DATA_PTR) (local.get $byte_offset)))
-          (i32.add (global.get $ASCII_HASH_PTR) (i32.shl (local.get $byte_offset) (i32.const 1)))
-        )
-        (br_if $output_byte
-          (i32.lt_u
-            (local.tee $byte_offset (i32.add (local.get $byte_offset) (i32.const 1)))
-            (local.get $digest_bytes)
-          )
-        )
-      )
-
-      ;;@debug-start
       (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
       ;;@debug-end
+      (local.set $remaining (local.get $digest_bytes))
 
-      ;; Write "<hex>  <filename>\n" to stdout
-      (call $write
-        (global.get $FD_STDOUT)
-        (global.get $ASCII_HASH_PTR)
-        (i32.shl (local.get $digest_bytes) (i32.const 1))
-      )
+      (block $hex_done
+        (loop $hex_chunk
+          (br_if $hex_done (i32.eqz (local.get $remaining)))
+
+          (local.set $chunk
+            (if (result i32) (i32.lt_u (local.get $remaining) (i32.const 64))
+              (then (local.get $remaining))
+              (else (i32.const 64))
+            )
+          )
+
+          (call $squeeze (global.get $DATA_PTR) (local.get $chunk))
+
+          (local.set $byte_offset (i32.const 0))
+          (loop $to_hex
+            (call $to_asc_pair
+              (i32.load8_u (memory $main) (i32.add (global.get $DATA_PTR) (local.get $byte_offset)))
+              (i32.add (global.get $ASCII_HASH_PTR) (i32.shl (local.get $byte_offset) (i32.const 1)))
+            )
+            (br_if $to_hex
+              (i32.lt_u
+                (local.tee $byte_offset (i32.add (local.get $byte_offset) (i32.const 1)))
+                (local.get $chunk)
+              )
+            )
+          )
+
+          (call $write (global.get $FD_STDOUT) (global.get $ASCII_HASH_PTR) (i32.shl (local.get $chunk) (i32.const 1)))
+
+          (local.set $remaining (i32.sub (local.get $remaining) (local.get $chunk)))
+          (br $hex_chunk)
+        ) ;; Loop $hex_chunk
+      ) ;; Block $hex_done
+
+      ;; Write "  <filename>\n" to stdout
       (call $write   (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 2))
       (call $writeln
         (global.get $FD_STDOUT)
@@ -798,6 +914,7 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Write $str_len bytes at $str_ptr to file descriptor $fd
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $write
         (param $fd      i32)
         (param $str_ptr i32)
@@ -822,6 +939,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Write optional "Err: " prefix (when fd=2) then $str_len bytes from $str_ptr into STR_WRITE_BUF_PTR.
   ;; Returns $buf_ptr positioned immediately after the message, ready for further appending.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $format_msg
         (param $fd      i32)
         (param $str_ptr i32)
@@ -850,6 +968,7 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Write $str_len bytes followed by a line feed; prefix with "Err: " when writing to stderr
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $writeln
         (param $fd      i32)
         (param $str_ptr i32)
@@ -871,6 +990,7 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Write $str_len bytes followed by " 0x<hex_val>" and a line feed; prefix with "Err: " when writing to stderr
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $writeln_with_value
         (param $fd      i32)
         (param $str_ptr i32)
@@ -902,6 +1022,7 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Convert one byte to two hex ASCII characters and write them to $out_ptr
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $to_asc_pair
         (param $byte    i32)
         (param $out_ptr i32)
@@ -922,6 +1043,7 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Convert an i32 to 8 ASCII hex characters in network (big-endian) byte order, write to $str_ptr
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $i32_to_hex_str
         (param $i32_val i32)
         (param $str_ptr i32)
@@ -949,6 +1071,7 @@
   ;; $wasi.args_get must have been called before this function.
   ;;
   ;; Returns: (ptr: i32, len: i32)
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $fetch_arg_n
         (param $arg_num i32)
         (result i32 i32)
@@ -997,9 +1120,47 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Parse an ASCII decimal string at $ptr/$len into an i32
+  ;; Stops at the first non-digit byte
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func $parse_decimal
+        (param $ptr i32)
+        (param $len i32)
+        (result i32)
+
+    (local $result i32)
+    (local $i      i32)
+    (local $ch     i32)
+
+    (block $done
+      (loop $digits
+        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
+        (local.set $ch
+          (i32.sub
+            (i32.load8_u (memory $main) (i32.add (local.get $ptr) (local.get $i)))
+            (i32.const 48) ;; All ASCII digits start at 0x30
+          )
+        )
+        (br_if $done (i32.gt_u (local.get $ch) (i32.const 9)))
+        (local.set $result
+          (i32.add
+            (i32.mul (local.get $result) (i32.const 10))
+            (local.get $ch)
+          )
+        )
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $digits)
+      )
+    )
+
+    (local.get $result)
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Open the file at $path_offset/$path_len inside the preopened directory $fd_dir.
   ;;
   ;; Returns: (return_code: i32, file_fd: i32)
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $file_open
         (param $fd_dir      i32)
         (param $path_offset i32)
@@ -1059,6 +1220,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Run 24 Keccak rounds in-place on BUF_0 (STATE_PTR = THETA_A_BLK_PTR = CHI_RESULT_PTR)
   ;; The loop has been unrolled to improve optimisation
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $keccak24
     (call $keccak (i32.const 0))
     (call $keccak (i32.const 1))
@@ -1086,6 +1248,9 @@
     (call $keccak (i32.const 23))
   )
 
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Prepare the Keccak internal state, partitioning it according to the specified digest length and absorbing the first
+  ;; input block
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $prepare_state
         (export "prepare_state")
@@ -1157,6 +1322,7 @@
   ;; In place XOR the data at $RATE_PTR with the data at $DATA_PTR
   ;; Data is absorbed in FIPS 202 lane order: A[0,0], A[1,0], ..., A[4,0], A[0,1], ...
   ;; i.e. sequential byte offsets 0, 8, 16, ... from RATE_PTR (FIPS 202 §3.1.2)
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $xor_data_with_rate
         (param $rate_words i32)
         (param $src_ptr    i32)
@@ -1227,6 +1393,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Perform a single round of the Keccak function
   ;; The output lives at $CHI_RESULT_PTR because the the last step function (iota) performs an in-place modification
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $keccak (export "keccak")
         (param $round i32)
 
@@ -1271,6 +1438,7 @@
   ;;
   ;; Reads 200 bytes starting at $THETA_A_BLK_PTR
   ;; Writes 200 bytes to $THETA_RESULT_PTR
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $theta (export "theta")
     (local $c0 i64) (local $c1 i64) (local $c2 i64) (local $c3 i64) (local $c4 i64)
     (local $d0 i64) (local $d1 i64) (local $d2 i64) (local $d3 i64) (local $d4 i64)
@@ -1535,6 +1703,7 @@
   ;; For the purposes of runtime efficiency, this loop has been unrolled and the rotation amounts have been hard coded
   ;; according to the values found in the $RHOTATION_TABLE.  This saves the need to perform modulo operations inside a
   ;; loop, as well as avoiding the need to perform 25 separate loads from the rotation table.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $rho (export "rho")
     ;;@debug-start
     (local $debug_active i32)
@@ -1694,6 +1863,7 @@
   ;;
   ;; For the purposes of runtime efficiency, this loop has been unrolled. The final transformation can simply be
   ;; hardcoded since the algorithm results in a static reordering of the i64s.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $pi (export "pi")
     ;;@debug-start
     (local $debug_active i32)
@@ -1870,6 +2040,7 @@
   ;;
   ;; For the purposes of runtime efficiency, this loop has been unrolled as the algorithm simply performs a static
   ;; mapping
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $chi (export "chi")
     ;;@debug-start
     (local $debug_active i32)
@@ -2252,6 +2423,7 @@
   ;; XOR in place the i64 at $CHI_RESULT_PTR with the supplied round constant.
   ;; FIPS 202 §3.2.5: A'[0,0] = A[0,0] XOR RC[round]
   ;; A[0,0] lives at offset 0 of CHI_RESULT_PTR; round constants are stored little-endian.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $iota (export "iota")
         (param $round i32)
 
@@ -2334,6 +2506,7 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Run the absorb and squeeze phases of the sponge function
   ;; Used as a helper for testing a variable number of rounds of the Keccak
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func (export "sponge")
         (param $digest_len i32)
         (param $n          i32)
@@ -2386,7 +2559,6 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; This function does nothing unless either $DEBUG_ACTIVE is true or we're writing to stderr
   ;; Write a debug/trace message to the specified fd
-  ;; Returns: None
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $write_msg
         (param $fd      i32)  ;; Write to this file descriptor
@@ -2423,7 +2595,6 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; This function does nothing unless either $DEBUG_ACTIVE is true or we're writing to stderr
   ;; Write a debug/trace message plus a value to the specified fd
-  ;; Returns: None
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $write_msg_with_value
         (param $fd      i32)  ;; Write to this file descriptor
@@ -2468,7 +2639,6 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Write the return code of the current processing step to the specified fd
-  ;; Returns: None
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $write_step
         (param $fd       i32)
@@ -2529,7 +2699,6 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Write argc and argv list to stdout
-  ;; Returns: None
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $write_args
     (local $argc         i32)  ;; Argument count
