@@ -21,9 +21,7 @@ More formally, this is given by:
 let t = Math.floor(file_size_in_bits / rate) + (file_size_in_bits mod rate < 4 ? 1 : 0)
 ```
 
-The last block that has a "domain suffix" appended, followed by some number of padding bits so that the last block is entirely filled.
-
-The last block is padded as follows:
+The last block that has a "domain suffix" appended, followed by some number of padding bits so that the last block is entirely filled:
 
   1. Append the domain suffix to the message:
      - SHA3: append `01` (2 bits)
