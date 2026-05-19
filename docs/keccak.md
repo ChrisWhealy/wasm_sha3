@@ -58,8 +58,9 @@ This process is performed as many times as needed to fully "absorb" the input da
 ![Sponge function](./sponge.png)
 
 When SHA3 is being used in SHA2 replacement mode, after the absorb phase has completed, the required hash value is obtained simply by taking the required number of bits from the rate at `Y(0)`.
-However, when SHA3 is being used in XOF mode, at least one further round of the squeeze phase is performed, yielding `Y(1)`.
-At this point you may take as output any number of bits from the rate (up to the full size of the rate), and then perform any number of further squeeze rounds to continue generating psuedo-random data.
+
+However, when SHA3 is being used in XOF mode, the squeeze phase will be performed as many times as needed to generate the required number of output bytes.
+Hence, states `Y(1)`, `Y(2)` or `Y(3)` may need to be created in order to generate the required length of output data.
 
 This process is entirely deterministic.
 For the same input followed by the same number of squeeze rounds, the same output data will always be generated.
