@@ -30,7 +30,7 @@ However, the squeeze phase can be run multiple times, thus allowing SHA3 to beha
 
 The SHA3 algorithm is fed input data that is used to manipulate its internal state.
 
-All internal operations acting on the internal state treat that state as if it were a 3-dimensional matrix having the dimensions `5 * 5 * w`, where `w = 2^l` and `l` is an integer in the range `0..6`.
+All operations acting on the internal state treat it as a 3-dimensional matrix having the dimensions `5 * 5 * w`, where `w = 2^l` and `l` is an integer in the range `0..6`.
 
 Thus, the size (`b`) of the internal state in bits may only be one of:
 
@@ -51,12 +51,17 @@ However, implementing SHA3 as a SHA2 replacement requires `l` to be fixed at `6`
 
 ## Partitioning the Internal State
 
-The internal state is subdivided into two regions known as the `rate` (of size `r`) and the `capacity` (of size `c`) such that `r + c = b`.  Therefore in our case, `r + c = 1600`.
+The internal state (of size `b`) is subdivided into two regions known as the `rate` (of size `r`) and the `capacity` (of size `c`) such that `r + c = b`.  Therefore in our case, `r + c = 1600`.
+
+### Rate
 
 The `rate` is the region into which the input data is written and from which the output digest will be taken.
 It has this name because its size determines the rate at which the input data can be consumed.
 
-The region known as the `capacity` however is never made public.
+### Capacity
+
+The remainder of the internal state is a region known as the `capacity`, and this is ***never*** made public.
+
 Its purpose is to act as a hidden entropy pool into which the data bits in the `rate` are thoroughly mixed.
 
 Further to this, the size `c` of the capacity must always be twice the size of the output digest length `d`, thus `c = 2d` making `r = 1600 - 2d`.
