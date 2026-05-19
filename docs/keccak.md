@@ -1,175 +1,73 @@
-# How the Keccak Function Works Internally
 
-Since this implementation is using SHA3 as a drop-in replacement for SHA2, the internal state is always 1600 bits, and the required digest output size `d` is one of `224`, `256`, `384` or `512` bits.
+## The "Keccak" Function
 
-This example will use `d = 256`; therefore, the rate will be:
+SHA3 manipulates the input data using a function that has been given the made up name of "Keccak" (pronounced "ket chak").
 
+## Input Block Padding
+
+The input data is divided into some number (`t`) of blocks of the same size as the rate where `t` is given by:
+
+```javascript
+let t = Math.floor(file_size_in_bits / rate) + (file_size_in_bits mod rate < 4 ? 1 : 0)
 ```
-rate = 1600 - 2 * d
-     = 1600 - 2 * 256
-     = 1088 bits
-```
 
-1. To start with, the Keccak function's internal state is initialised to 200 bytes of `0x00`.
+The last block must be padded so that the data being processed fills an integer number of blocks.
 
-2. Consume `rate` bits from the input file/stream.
-   If the input supplies less than `rate` bits, then pad the input data such that it fills a complete rate block as previously described.
+The padding rules depend on whether SHA3 is being used in SHA2-replacement mode, or XOF mode.
+In our case, we are only concerned with SHA2-replacement mode, so the padding rules are as follows:
 
-3. XOR the input data with the data already present in the rate region of the internal state.
+* The data must be suffixed with the two padding marker bits `01`
+* The padding marker must be followed by a variable length bit sequence that:
+   * Starts and ends with bit `1`
+   * Between the start and end `1`s there must be zero or more bit `0`s
 
-4. Perform 24 rounds of the five step functions documented below against the data in the internal state.
+Thus, if the size of data `n` in the last block is 4 or more bits smaller than the rate `r`, the last block will be padded as follows:
 
-5. Did step 2 hit end of file?
+| Size of data<br> in last block | Padding<br>marker | Padding<br>bit sequence | Complete<br>bit string
+|---|---|---|---
+| `r-4` | `01` | `11` | `0111`
+| `r-5` | `01` | `101` | `01101`
+| `r-6` | `01` | `1001` | `011001`
+| `r-7` | `01` | `10001` | `0110001`
+| `r-n` | `01` | `1[n-4 * 0]1` | `0110...01`
 
-   No? - Goto step 2<br>Yes?  - Goto step 6
+In the event that the block size is 3 or fewer bits smaller than the rate `r`, then the remaining bits are padded using the same scheme as above, but the padding string spills over into a new block:
 
-6. We're done - the required digest is the first `d` bits in the rate region of the internal state.
+| Size of data<br>in last block | Padding bit<br>sequence in<br>last block | Padding bits<br>in extra block
+|---|---|---
+| `r-3` | `011` | `[r-1 * 0]1`
+| `r-2` | `01` | `1[r-2 * 0]1`
+| `r-1` | `0` | `11[r-3 * 0]1`
+| `r` | | `011[r-4 * 0]1`
 
-## Indexing Convention within the Internal State Matrix
+Note that if the data is an exact integer multiple of the block size `r`, then an extra block containing only the padding string is always added.
 
-This module follows the state array indexing convention described in section 3.1.4 of the NIST document.
+## Keccak-f Input Processing
 
-![Indexing convention of internal state matrix](./indexing_convention.png)
-
-The linear order of the data in expected test results starts in the bottom left corner `(3,3)` of the above matrix.
-
-The array data then follows the order `(3,3), (4,3), (0,3), (1,3), (2,3)` followed by `(3,4), (4,4), (0,4), (1,4), (2,4)`, then `(3,0), (4,0), (0,0), (1,0), (2,0)` etc.
-
-## Internal Step Functions
-
-Each of the five, internal step functions is identified with a Greek letter and they are always executed in the following order:
-
-* &theta; Theta
-* &rho; Rho
-* &pi; Pi
-* &chi; Chi
-* &iota; Iota
-
-![Keccak Internals](./keccak_internals.png)
-
-A sequence of calls to the Theta, Rho, Pi, Chi and Iota functions constitutes one round of the Keccak function.
-24 Keccak rounds are always performed per block of data read into the internal state.
-
-## &theta; Theta
-
-Theta mixes each column of the state into every other column, ensuring that a change in any single lane eventually propagates to the entire state.
-It is performed in three sub-steps:
-
-1. **Theta-C**<br>For each column `x`, XOR all five lanes in that column down to a single `u64` parity value.
-
-   ```rust
-   fn theta_c(state: &[[u64; 5]; 5]) -> [u64; 5] {
-       let mut c = [0u64; 5];
-       for x in 0..5 {
-           c[x] = state[x][0] ^ state[x][1] ^ state[x][2] ^ state[x][3] ^ state[x][4];
-       }
-       c
-   }
-   ```
-
-2. **Theta-D**<br>For each column `x`, XOR the parity of the column to the left `(x-1) mod 5` with the parity of the column to the right `(x+1) mod 5` rotated left by one bit.
-
-   ```rust
-   fn theta_d(c: &[u64; 5]) -> [u64; 5] {
-       let mut d = [0u64; 5];
-       for x in 0..5 {
-           d[x] = c[(x + 4) % 5] ^ c[(x + 1) % 5].rotate_left(1);
-       }
-       d
-   }
-   ```
-
-3. **Theta XOR**<br>XOR every lane `A[x,y]` with `D[x]` — the mixing value derived from column `x`.
-
-   ```rust
-   fn theta(state: &mut [[u64; 5]; 5]) {
-       let c = theta_c(state);
-       let d = theta_d(&c);
-       for x in 0..5 {
-           for y in 0..5 {
-               state[x][y] ^= d[x];
-           }
-       }
-   }
-   ```
-
-## &rho; Rho
-
-Rho rotates each lane left by a fixed, position-dependent number of bits defined by FIPS 202 Table 2.
-Lane `A[0,0]` is not rotated.
-This step introduces diffusion in the bit-position dimension (`z`) of the state.
+Now that the input data `X` has been organised into some integer number `t` of blocks of size `r` (the last of which has been appropriately padded), the "absorb" phase performs the following loop:
 
 ```rust
-const RHO_OFFSETS: [[u32; 5]; 5] = [
-//   y=0  y=1  y=2  y=3  y=4
-    [  0,  36,   3,  41,  18 ],  // x=0
-    [  1,  44,  10,  45,   2 ],  // x=1
-    [ 62,   6,  43,  15,  61 ],  // x=2
-    [ 28,  55,  25,  21,  56 ],  // x=3
-    [ 27,  20,  39,   8,  14 ],  // x=4
-];
+// Internal state starts as 200 initialised u64s
+let mut state[u64; 200] = [0; 200];
+// The rate size in bits is given by 1600 - (2 * digest_size)
+// Assuming a digest size of 256 bits the rate size = 1600 - (2 * 256) = 1088
+let rate_size = 1088 >>> 6;  // As u64 words
 
-fn rho(state: &mut [[u64; 5]; 5]) {
-    for x in 0..5 {
-        for y in 0..5 {
-            state[x][y] = state[x][y].rotate_left(RHO_OFFSETS[x][y]);
-        }
-    }
+for idx in X.size {
+    state = keccak_f([state[0..rate_size] XOR X[idx], ...state[rate_size..]])
 }
 ```
 
-## &pi; Pi
+Each time a new block is read from the input data, it is `XOR`ed with the current rate and the resulting internal state passed to the Keccak function.
+This process is performed as many times as needed to fully "absorb" the input data.
 
-Pi rearranges the lanes according to a fixed permutation.
-Each lane at position `(x, y)` is moved to position `(y, (2x + 3y) mod 5)`, or equivalently, the new lane at `(x, y)` is taken from the old lane at `((x + 3y) mod 5, x)`.
-This step provides long-range diffusion across the rows and columns of the state.
+![Sponge function](./sponge.png)
 
-```rust
-fn pi(state: &[[u64; 5]; 5]) -> [[u64; 5]; 5] {
-    let mut result = [[0u64; 5]; 5];
-    for x in 0..5 {
-        for y in 0..5 {
-            result[x][y] = state[(x + 3 * y) % 5][x];
-        }
-    }
-    result
-}
-```
+When SHA3 is being used in SHA2 replacement mode, after the absorb phase has completed, the required hash value is obtained simply by taking the required number of bits from the rate at `Y(0)`.
+However, when SHA3 is being used in XOF mode, at least one further round of the squeeze phase is performed, yielding `Y(1)`.
+At this point you may take as output any number of bits from the rate (up to the full size of the rate), and then perform any number of further squeeze rounds to continue generating psuedo-random data.
 
-## &chi; Chi
+This process is entirely deterministic.
+For the same input followed by the same number of squeeze rounds, the same output data will always be generated.
 
-Chi is the only **non-linear** step in the Keccak round.
-For each lane, it XORs in a value derived from the bitwise complement of the next lane in the same row AND'ed with the lane after that.
-Because it operates across five lanes simultaneously and introduces non-linearity, it is the primary source of the cryptographic strength of SHA3.
-
-```rust
-fn chi(state: &mut [[u64; 5]; 5]) {
-    for y in 0..5 {
-        // Take a snapshot of the row before modifying it
-        let row = [state[0][y], state[1][y], state[2][y], state[3][y], state[4][y]];
-        for x in 0..5 {
-            state[x][y] = row[x] ^ ((!row[(x + 1) % 5]) & row[(x + 2) % 5]);
-        }
-    }
-}
-```
-
-## &iota; Iota
-
-Iota breaks the symmetry that would otherwise exist between rounds by XOR'ing a round-specific constant into lane `A[0,0]`.
-Without this step, every round would be identical and the entire 24-round permutation could be collapsed to a single round, drastically weakening the function.
-
-```rust
-const ROUND_CONSTANTS: [u64; 24] = [
-    0x0000000000000001, 0x0000000000008082, 0x800000000000808A, 0x8000000080008000,
-    0x000000000000808B, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
-    0x000000000000008A, 0x0000000000000088, 0x0000000080008009, 0x000000008000000A,
-    0x000000008000808B, 0x800000000000008B, 0x8000000000008089, 0x8000000000008003,
-    0x8000000000008002, 0x8000000000000080, 0x000000000000800A, 0x800000008000000A,
-    0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008,
-];
-
-fn iota(state: &mut [[u64; 5]; 5], round: usize) {
-    state[0][0] ^= ROUND_CONSTANTS[round];
-}
-```
+[This page](./keccak_internals.md) provides a description of how the Keccak function works internally.
