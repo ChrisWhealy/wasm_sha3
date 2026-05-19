@@ -84,7 +84,7 @@ $ ./sha3sum.mjs 384 ./tests/war_and_peace.txt
 9baecef1c5bd0d3358483274277d06e74598dcbfad6f837c8898fe790a5d0d17e9a6f04a50bf5b05bbe1f34ffe45d7f4  ./test_data/war_and_peace.txt
 ```
 
-## Using `wasmer 7.1`
+## Using `wasmer v7.1`
 
 If present in the CWD, `wasmer` will read `wasmer.toml` to discover which WASM module is to be run.
 In such cases, you need only specify `wasmer run .` where the meaning of `.` will be derived from the contents of `wasmer.toml`.
@@ -100,7 +100,7 @@ So in this case, the contents of `./test_data` appear to be in WebAssembly's roo
 In this case, the `wasmer.toml` file contains definitions for commands called `224`, `256`, `384` and `512`.
 Within these command definitions, the corresponding hash length argument has been hard-coded, so there is no need for you to specify it explicitly.
 
-## Using `wasmtime`
+## Using `wasmtime v44.0.0`
 
 The same logic used by `wasmer` applies when `wasmtime` creates WASM's virtual root directory.
 
@@ -111,7 +111,7 @@ $ wasmtime --dir ./test_data ./bin/sha3.prod.opt.wasm -- 256 war_and_peace.txt
 11a5e2565ce9b182b980aff48ed1bb33d1278bbd77ee4f506729d0272cc7c6f7  war_and_peace.txt
 ```
 
-## Using `wazero`
+## Using `wazero v1.11.0`
 
 When using `wazero`, the `--mount` argument uses a syntax similar to `wasmer`'s `--mapdir` argument.
 
