@@ -1,5 +1,5 @@
 
-## The "Keccak" Function
+# The Keccak Function
 
 SHA3 manipulates the input data using a function that has been given the made up name of "Keccak" (pronounced "ket chak").
 
