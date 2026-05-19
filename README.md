@@ -42,5 +42,5 @@ However, it is very unlikely that the length of the input data is an exact multi
 The first difference between the two SHA3 modes rests on how the last block is padded.
 The second difference rests on the amount of output data the SHA3 algorithm produces.
 
-In Drop-in mode, the SHA3 algorithmn will produce output that is exactly 224, 256, 384 or 512 bits in length.
+In Drop-in mode, the SHA3 algorithm will produce output that is exactly 224, 256, 384 or 512 bits in length.
 However, in XOF mode, SHA3 can generate output of arbitrary length.
