@@ -27,7 +27,7 @@
 ;; |    224 |  1152 |  448 |    18 |    7 |
 ;; |    256 |  1088 |  512 |    17 |    8 |
 ;; |    384 |   832 |  768 |    13 |   12 |
-;; |    512 |   572 | 1024 |     9 |   16 |
+;; |    512 |   576 | 1024 |     9 |   16 |
 ;; +--------+-------+------+-------+------+
 ;;
 ;; This module follows the indexing convention described in section 3.1.4 of the above document
@@ -276,6 +276,9 @@
 
   (global $ERR_GEN_IO          i32 (i32.const 0x00000C78))  ;; Length = 21
   (data (memory $main) (i32.const 0x00000C78) "IO error opening file")
+
+  (global $ERR_MSG_SHAKE_BYTES i32 (i32.const 0x00000F00))  ;; Length = 49
+  (data (memory $main) (i32.const 0x00000F00) "SHAKE byte count must be in the range 1..16777216")
 
   ;;@debug-start
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -680,6 +683,19 @@
                 )
                 (local.set $digest_bytes
                   (call $parse_decimal (local.get $hash_len_ptr) (local.get $hash_len_val))
+                )
+                ;; Reject values < 1 or > 16 Mb (0x01000000)
+                (if (i32.or
+                      (i32.eqz  (local.get $digest_bytes))
+                      (i32.gt_u (local.get $digest_bytes) (i32.const 0x01000000))
+                    )
+                  (then
+                    ;;@debug-start
+                    (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
+                    ;;@debug-end
+                    (call $writeln (i32.const 2) (global.get $ERR_MSG_SHAKE_BYTES) (i32.const 49))
+                    (br $exit)
+                  )
                 )
                 (br $args_ok)
               )

@@ -39,7 +39,7 @@ if (algo === 'shake128' || algo === 'shake256') {
   filePath = rest[0]
 }
 
-if (!filePath || isNaN(outputBytes) || outputBytes < 1) {
+if (!filePath || isNaN(outputBytes)) {
   process.stderr.write(USAGE)
   process.exit(1)
 }

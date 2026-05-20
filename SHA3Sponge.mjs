@@ -125,10 +125,17 @@ export class SHA3Sponge {
   // position is tracked by $SQUEEZE_OFFSET in the WASM module).
   //
   // Returns a Uint8Array containing the requested bytes.
-  squeeze(numBytes) {
-    // Reuse the read buffer as the output staging area since its no longer needed once finalize() has been called.
-    this.#exports.squeeze(this.#readBufPtr, numBytes)
-    return this.#mem.slice(this.#readBufPtr, this.#readBufPtr + numBytes)
+  squeeze(outLen) {
+    if (outLen < 1 || outLen > this.#readBufSize) {
+      throw new RangeError(
+        `SHA3Sponge.squeeze: output_length = ${outLen}.  Must be between 1 and ${this.#readBufSize}.\n` +
+        `            For larger output, call squeeze() multiple times.`
+      )
+    }
+
+    // Since finalize() must have been called before calling squeeze(), we can reuse the read buffer as the output area
+    this.#exports.squeeze(this.#readBufPtr, outLen)
+    return this.#mem.slice(this.#readBufPtr, this.#readBufPtr + outLen)
   }
 
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
