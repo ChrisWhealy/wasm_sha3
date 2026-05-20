@@ -631,7 +631,7 @@
   ;;   <file>         a path to the file to be hashed.
   ;;                  This pathname is relative to directory preopened when the WASI instance is created.
   ;;
-  ;; Step 0) Parse the command line arguments using wasi.args_sizes_get and wasi.args_get.
+  ;; Step 0) Parse the command line arguments using wasi.args_sizes_get and wasi.args_get
   ;;         Validate that argument count is correct and that total argument length does not exceed some arbitrary limit
   ;;         (i.e., is not > 256 bytes)
   ;; Step 1) Parse digest bit length argument
@@ -690,8 +690,8 @@
       ;;
       ;; Uses relative indexing from the end of argv so that the module works regardless of how many leading args the
       ;; host runtime prepends (argv[0], script path, etc.):
-      ;;   SHA3:   [..., hash_size, filename]      — hash_size at argc-1, filename at argc
-      ;;   SHAKE:  [..., variant, bytes, filename] — variant at argc-2, bytes at argc-1, filename at argc
+      ;;   SHA3:  [..., hash_size, filename]      — hash_size at argc-1, filename at argc
+      ;;   SHAKE: [..., variant, bytes, filename] — variant at argc-2, bytes at argc-1, filename at argc
       ;;
       (drop
         (call $wasi.args_get (global.get $ARGV_PTRS_PTR) (global.get $ARGV_BUF_PTR))
@@ -737,7 +737,7 @@
                   (br $exit)
                 )
 
-                ;; Parse output_bytes from the second  last arg (argc-1)
+                ;; Parse output_bytes from the second last arg (argc-1)
                 (local.set $hash_len_val
                   (local.set $hash_len_ptr
                     (call $fetch_arg_n (i32.sub (local.get $argc) (i32.const 1)))
@@ -848,7 +848,7 @@
         (loop $read_chunk
           (local.tee $return_code
             ;; Returns errno: i32
-            ;; The bytes read is discovered by reading the i32 at $NREAD_PTR
+            ;; The bytes read is discovered by reading the i32 pointed to by $NREAD_PTR
             (call $wasi.fd_read
               (local.get $file_fd)
               (global.get $IOVEC_READ_BUF_PTR)
@@ -875,7 +875,7 @@
       )
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 5: Finalize the input state by applying the appropriatepadding and running the final keccak round
+      ;; Step 5: Finalize the input state by applying the appropriate padding and running the final keccak round
       (call $finalize)
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
