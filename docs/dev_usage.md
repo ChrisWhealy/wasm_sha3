@@ -3,7 +3,7 @@
 ## Overview
 
 ***IMPORTANT***<br>Development version of the WASM binary can only be run through NodeJS and not CLI runtimes such as `wasmer` or `wasmtime`.
-This is because although the CLI runtimes can provide the `WASI` runtime, they cannot provide instances of the extra `debug` and `log` module that are also needed in development.
+This is because although the CLI invokes `sha3.wasm` from within an instance of the `WASI` runtime, it cannot also provide instances of the extra `debug` and `log` modules that are also needed during development.
 This means if you try to invoke the `dev` version of the WASM module from say `wasmtime`, it will fail with a link error.
 
 Also, CLI runtimes such as `wasmer` and `wasmtime` only ever invoke the `_start()` function.
