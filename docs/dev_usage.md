@@ -3,7 +3,7 @@
 ## Overview
 
 ***IMPORTANT***<br>Development version of the WASM binary can only be run through NodeJS and not CLI runtimes such as `wasmer` or `wasmtime`.
-This is because although the CLI invokes `sha3.wasm` from within an instance of the `WASI` runtime, it cannot also provide instances of the extra `debug` and `log` modules that are also needed during development.
+This is because although the CLI invokes `sha3.wasm` from within an instance of the `WASI` runtime, it cannot provide instances of the extra `debug` and `log` modules that are also needed during development.
 This means if you try to invoke the `dev` version of the WASM module from say `wasmtime`, it will fail with a link error.
 
 Also, CLI runtimes such as `wasmer` and `wasmtime` only ever invoke the `_start()` function.
@@ -23,8 +23,8 @@ If you wish to run this program with the debug trace statements switched on, the
 
 ## Stripping Out Debug Coding
 
-Any statements used only for debug tracing (such as calls to functions `$hexdump`, `$write_msg` or `$write_step` etc) are delimited by preprocessor markers `;;@debug-start` and `;;@debug-end`.
+Any statements used only for debug tracing (such as calls to functions `$hexdump`, `$write_msg` or `$write_args` etc) are enclosed between the preprocessor markers `;;@debug-start` and `;;@debug-end`.
 
-To compile for production, such function calls can be removed from the source code by first running `./utils/strip-debug.mjs`.
+When compiling for production, such function calls are removed from the source code by running `./utils/strip-debug.mjs`.
 
-This then produces a "production" version of the WAT source code (`./src/sha256.prod.wat`) from which these delimiters and all the coding between them have been removed.
+This then produces a `.prod` version of the WAT source code (`./src/sha256.prod.wat`) from which these delimiters and all the enclosed code has been removed.
