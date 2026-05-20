@@ -150,7 +150,7 @@ $ wasmtime --dir ./test_data ./bin/sha3.prod.opt.wasm -- 256 war_and_peace.txt
 
 ```bash
 $ wasmtime --dir ./test_data ./bin/sha3.prod.opt.wasm -- shake256 32 war_and_peace.txt
-0874ad7b6e05764fa19318c85cac7ae7b8fd64473f1df23f002c9a4a18e3c223  war_and_peace.txt
+0874ad7b6e05764fa19318c85cac7ae7b8fd64473f1df23f002c9a4a18e3c223
 ```
 
 # Using `wazero v1.11.0`
