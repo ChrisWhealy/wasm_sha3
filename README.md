@@ -17,28 +17,12 @@ The resulting binary is 5.3 Kb 😎
   - [Keccak Function](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/keccak.md)
   - [Inside the Keccak Function](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/keccak_internals.md)
 
-# Run The Published Version
-
-Assuming you have [`wasmer`](https://docs.wasmer.io/install/) installed, you can run the published version of this program as follows:
-
-```bash
-wasmer run chriswhealy/sha3 --volume=<local_directory>:/. --command-name=<cmd> <output-length> <filename>
-```
-
-| Arg | Possible Values | Description
-|---|---|---|
-| `<local_directory>` | A local directory on your machine | The directory to be preopened for WASM
-| `<cmd>` | `224` , `256`, `384` or `512` | Run SHA3 in SHA2 drop-in replacement mode and produce a digest this many bits long
-| `<cmd>` | `shake128` , `shake256` | Run SHA3 in Extendible Output Function (XOF) mode and produce `<output-length>` bytes of pseudo-random data
-| `<output-length>` | Some integer between 0 and 16777216 | Only specified with the `shake128` and `shake256` commands
-| `<filename>` | The filename to be hashed | This file must live in or below the `<local_directory>`
-
 # Overview
 
 The SHA3 algorithm can be used in two modes:
 
 * As a drop-in replacement for SHA2, or in
-* Extendable Output Function (XOF) mode
+* Extendible Output Function (XOF) mode
 
 ## Drop-In Replacement Mode for SHA2
 
@@ -53,13 +37,24 @@ When used in XOF mode, the SHA3 function can produce an arbitrary quantity of ps
 
 ## How Does Drop-In Mode Differ From XOF Mode?
 
-Internally, the same hashing function is used in both modes.
+Internally, the same hashing function is used in both modes; but with the following differences:
 
-The SHA3 function requires that its input data is broken up into a whole number of equally sized blocks.
-However, it is very unlikely that the length of the input data is an exact multiple of the block size; so, any space left at the end of the last block must be padded to ensure the last block is always full.
+1. The data in the last block is terminated with `0x06` in drop-in mode, but `0x1111` in XOF mode
+2. In drop-in mode, the output must be exactly 224, 256, 384 or 512 bits long.
+   In XOF mode, the output can be of any arbitrary length
 
-The first difference between the two SHA3 modes rests on how the last block is padded.
-The second difference rests on the amount of output data the SHA3 algorithm produces.
+# Run The Published Version
 
-In Drop-in mode, the SHA3 algorithm will produce output that is exactly 224, 256, 384 or 512 bits in length.
-However, in XOF mode, SHA3 can generate output of arbitrary length.
+Assuming you have [`wasmer`](https://docs.wasmer.io/install/) installed, you can run the published version of this program as follows:
+
+```bash
+wasmer run chriswhealy/sha3 --volume=<local_directory>:/. --command-name=<cmd> <output-length> <filename>
+```
+
+| Arg | Possible Values | Description
+|---|---|---|
+| `<local_directory>` | A local directory on your machine | The directory to be preopened for WASM
+| `<cmd>` | `224` , `256`, `384` or `512` | Run SHA3 in SHA2 drop-in replacement mode and produce a digest this many bits long
+| `<cmd>` | `shake128` , `shake256` | Run SHA3 in XOF mode and produce `<output-length>` bytes of pseudo-random data
+| `<output-length>` | Some integer between 0 and 16777216 | Only specified with the `shake128` and `shake256` commands
+| `<filename>` | The filename to be hashed | This file must live in or below the `<local_directory>`
