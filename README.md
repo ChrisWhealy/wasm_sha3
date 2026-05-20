@@ -55,5 +55,5 @@ wasmer run chriswhealy/sha3 --volume=<local_directory>:/. --command-name=<cmd> <
 | `<local_directory>` | A local directory on your machine | The directory to be preopened for WASM
 | `<cmd>` | `224` , `256`, `384` or `512` | Run SHA3 in SHA2 drop-in replacement mode and produce a digest this many bits long
 | `<cmd>` | `shake128` , `shake256` | Run SHA3 in XOF mode and produce `<output-length>` bytes of pseudo-random data
-| `<output-length>` | Some integer between 1 and 16777216 | Only specified with the `shake128` and `shake256` commands
+| `<output-length>` | An integer between 1 and 16777216 | Only relevant when using the `shake128` and `shake256` commands
 | `<filename>` | The filename to be hashed | This file must live in or below the `<local_directory>`
