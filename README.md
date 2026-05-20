@@ -17,6 +17,22 @@ The resulting binary is 5.3 Kb 😎
   - [Keccak Function](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/keccak.md)
   - [Inside the Keccak Function](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/keccak_internals.md)
 
+# Run The Published Version
+
+Assuming you have `wasmer` installed, you can run the published version of this program as follows:
+
+```bash
+wasmer run chriswhealy/sha3 --volume=<local_directory>:/. --command-name=<cmd> <output-length> <filename>
+```
+
+| Arg | Possible Values | Description
+|---|---|---|
+| `<local_directory>` | A local directory on your machine | The directory to be preopened for WASM
+| `<cmd>` | `224` , `256`, `384` or `512` | Run SHA3 in SHA3 drop-in replacement mode and produce a digest this many bits long
+| `<cmd>` | `shake128` , `shake256` | Run SHA3 in XOF mode and produce `<output-length>` bytes of pseudo-random data
+| `<output-length>` | Some integer between 0 and 16777216 | Only specified with the `shake128` and `shake256` commands
+| `<filename>` | The filename to be hashed | This file must live in or below the `<local_directory>`
+
 # Overview
 
 The SHA3 algorithm can be used in two modes:
