@@ -1,6 +1,6 @@
 [package]
 name = "chriswhealy/sha3"
-version = "1.3.3"
+version = "1.3.4"
 license = "MIT"
 description = "Calculates the SHA3 hash of a local file, implemented in WebAssembly Text"
 repository = "https://github.com/ChrisWhealy/wasm_sha3"

@@ -480,6 +480,7 @@
     (local $return_code     i32)
     (local $bytes_read      i32)
     (local $byte_offset     i32)
+
     (block $exit
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       ;; Step 0: Fetch argument count and total buffer size
@@ -553,6 +554,7 @@
                       (br $shake_ok)
                     )
                   )
+
                   (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 65))
                   (br $exit)
                 )
@@ -649,11 +651,8 @@
         )
       )
 
-      (if ;; $return_code > 0
-        (then
-          (br $exit)
-        )
-      )
+      ;; $return_code > 0?
+      (if (then (br $exit)))
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       ;; Step 3: Initialise Keccak state
@@ -689,19 +688,16 @@
 
           (if ;; EOF?
             (i32.eqz (local.tee $bytes_read (i32.load (memory $main) (global.get $NREAD_PTR))))
-            (then
-              (br $eof)
-            )
+            (then (br $eof))
           )
 
           (call $absorb (global.get $READ_BUFFER_PTR) (local.get $bytes_read))
-
           (br $read_chunk)
         )
       )
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 5: Apply SHA3 padding and run the final keccak round
+      ;; Step 5: Finalize the input state by applying the appropriatepadding and running the final keccak round
       (call $finalize)
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -758,7 +754,7 @@
           )
         )
         (else
-          ;; Just print a line feed
+          ;; Just print a line feed by telling $writeln to print a zero length string
           (call $writeln (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 0))
         )
       )
