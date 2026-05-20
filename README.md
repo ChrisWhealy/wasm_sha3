@@ -11,6 +11,7 @@ The resulting binary is 5.3 Kb 😎
   - [Drop-In Replacement Mode for SHA2](#drop-in-replacement-mode-for-sha2)
   - [Extendible Output Function (XOF) Mode](#extendible-output-function-xof-mode)
   - [How Does Drop-In Mode Differ From XOF Mode?](#how-does-drop-in-mode-differ-from-xof-mode)
+- [Run The Published Version](#run-the-published-version)
 - [Local Execution](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/local_execution.md)
 - [Development Usage](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/dev_usage.md)
 - [SHA3 Internals](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/sponge.md)
