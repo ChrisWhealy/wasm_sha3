@@ -86,6 +86,7 @@
   (import "log" "fnExitNth"      (func $log.fnExitNth    (type $type_i32*3)))
   (import "log" "singleI64"      (func $log.singleI64    (type $type_i32*3_i64)))
   (import "log" "singleI32"      (func $log.singleI32    (type $type_i32*4)))
+  (import "log" "singleFmtU8"    (func $log.singleFmtU8  (type $type_i32*4)))
   (import "log" "singleDec"      (func $log.singleDec    (type $type_i32*4)))
   (import "log" "singleBigInt"   (func $log.singleBigInt (type $type_i32*3_i64)))
   (import "log" "label"          (func $log.label        (type $type_i32*2)))
@@ -100,7 +101,7 @@
   ;;@debug-start
   ;; Build with "npm build:dev" to include debug messages.
   ;; $DEBUG_ACTIVE must also be set to 1 in order for step function trace statements to become visible
-  (global $DEBUG_ACTIVE       i32 (i32.const 0))
+  (global $DEBUG_ACTIVE       i32 (i32.const 1))
   ;;@debug-end
 
   (global $DEBUG_IO_BUFF_PTR  i32 (i32.const 0))
@@ -367,6 +368,18 @@
         (param $digest_len  i32)  ;; SHA3: 224|256|384|512; SHAKE: 128 (SHAKE128) or 256 (SHAKE256)
         (param $domain_byte i32)  ;; 0x06 = SHA3, 0x1f = SHAKE
 
+    ;;@debug-start
+    (local $debug_active i32)
+    (local $fn_id        i32)
+
+    (local.set $debug_active (i32.const 1))
+    (local.set $fn_id        (i32.const 10)) ;; See entry in debugMsgs array in ./utils/debug_msgs.mjs
+
+    (call $log.fnEnter     (local.get $debug_active) (local.get $fn_id))
+    (call $log.singleDec   (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $digest_len))
+    (call $log.singleFmtU8 (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $domain_byte))
+    ;;@debug-end
+
     (global.set $DOMAIN_BYTE    (local.get $domain_byte))
     (global.set $DIGEST_LEN     (local.get $digest_len))
     (global.set $PARTIAL_BYTES  (i32.const 0))
@@ -384,6 +397,12 @@
     (global.set $CAPACITY_PTR (i32.add (global.get $STATE_PTR) (i32.shl (global.get $RATE) (i32.const 3))))
 
     (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200))
+
+    ;;@debug-start
+    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 2) (global.get $RATE))
+    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 3) (global.get $CAPACITY))
+    (call $log.fnExit    (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -396,8 +415,22 @@
 
     (local $rate_bytes  i32)
     (local $fill_amount i32)
+    ;;@debug-start
+    (local $debug_active i32)
+    (local $fn_id        i32)
+
+    (local.set $debug_active (i32.const 1))
+    (local.set $fn_id        (i32.const 11)) ;; See entry in debugMsgs array in ./utils/debug_msgs.mjs
+
+    (call $log.fnEnter   (local.get $debug_active) (local.get $fn_id))
+    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $src_len))
+    ;;@debug-end
 
     (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
+
+    ;;@debug-start
+    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $rate_bytes))
+    ;;@debug-end
 
     ;; Complete any partial rate-block accumulated from a previous absorb call
     (if (global.get $PARTIAL_BYTES)
@@ -406,6 +439,9 @@
         (if (i32.gt_u (local.get $fill_amount) (local.get $src_len))
           (then (local.set $fill_amount (local.get $src_len)))
         )
+        ;;@debug-start
+        (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $fill_amount))
+        ;;@debug-end
         (memory.copy (memory $main) (memory $main)
           (i32.add (global.get $DATA_PTR) (global.get $PARTIAL_BYTES))
           (local.get $src_ptr)
@@ -451,6 +487,11 @@
         (global.set $PARTIAL_BYTES (local.get $src_len))
       )
     )
+
+    ;;@debug-start
+    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 3) (global.get $PARTIAL_BYTES))
+    (call $log.fnExit    (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -459,7 +500,23 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $finalize (export "finalize")
     (local $rate_bytes i32)
+    ;;@debug-start
+    (local $debug_active i32)
+    (local $fn_id        i32)
+
+    (local.set $debug_active (i32.const 1))
+    (local.set $fn_id        (i32.const 12))
+
+    (call $log.fnEnter   (local.get $debug_active) (local.get $fn_id))
+    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (global.get $PARTIAL_BYTES))
+    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 1) (global.get $DOMAIN_BYTE))
+    ;;@debug-end
+
     (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
+
+    ;;@debug-start
+    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $rate_bytes))
+    ;;@debug-end
 
     ;; Zero the portion of DATA_PTR that follows the last absorbed byte
     (memory.fill (memory $main)
@@ -486,6 +543,10 @@
     (call $keccak24)
 
     (global.set $SQUEEZE_OFFSET (i32.const 0))
+
+    ;;@debug-start
+    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -499,8 +560,22 @@
     (local $rate_bytes i32)
     (local $available  i32)
     (local $copy_len   i32)
+    ;;@debug-start
+    (local $debug_active i32)
+    (local $fn_id        i32)
+
+    (local.set $debug_active (i32.const 1))
+    (local.set $fn_id        (i32.const 13))
+
+    (call $log.fnEnter   (local.get $debug_active) (local.get $fn_id))
+    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $len))
+    ;;@debug-end
 
     (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
+
+    ;;@debug-start
+    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $rate_bytes))
+    ;;@debug-end
 
     (block $done
       (loop $squeeze_loop
@@ -515,6 +590,10 @@
             (else (local.get $available))
           )
         )
+        ;;@debug-start
+        (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $available))
+        (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 3) (local.get $copy_len))
+        ;;@debug-end
         (memory.copy (memory $main) (memory $main)
           (local.get $out_ptr)
           (i32.add (global.get $STATE_PTR) (global.get $SQUEEZE_OFFSET))
@@ -531,9 +610,17 @@
           )
         )
 
+        ;;@debug-start
+        (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 4) (global.get $SQUEEZE_OFFSET))
+        ;;@debug-end
+
         (br $squeeze_loop)
       )
     )
+
+    ;;@debug-start
+    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -571,16 +658,10 @@
     (local $return_code     i32)
     (local $bytes_read      i32)
     (local $byte_offset     i32)
-    ;;@debug-start
-    (local $step            i32)
-    ;;@debug-end
 
     (block $exit
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       ;; Step 0: Fetch argument count and total buffer size
-      ;;@debug-start
-      (local.set $step (i32.add (local.get $step) (i32.const 1)))
-      ;;@debug-end
       (drop
         (call $wasi.args_sizes_get (global.get $ARGS_COUNT_PTR) (global.get $ARGV_BUF_LEN_PTR))
       )
@@ -591,9 +672,6 @@
       ;; Avoid buffer overrun
       (if (i32.gt_u (local.get $argv_buf_len) (i32.const 256))
         (then
-          ;;@debug-start
-          (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
-          ;;@debug-end
           (call $writeln (i32.const 2) (global.get $ERR_ARGV_TOO_LONG) (i32.const 25))
           (br $exit)
         )
@@ -602,17 +680,10 @@
       ;; Minimum: needs at least hash/variant + filename (2 user args)
       (if (i32.lt_u (local.get $argc) (i32.const 2))
         (then
-          ;;@debug-start
-          (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
-          ;;@debug-end
           (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 65))
           (br $exit)
         )
       )
-
-      ;;@debug-start
-      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
-      ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       ;; Step 1: Parse algorithm argument to determine SHA3 or SHAKE mode.
@@ -622,16 +693,9 @@
       ;;   SHA3:   [..., hash_size, filename]      — hash_size at argc-1, filename at argc
       ;;   SHAKE:  [..., variant, bytes, filename] — variant at argc-2, bytes at argc-1, filename at argc
       ;;
-      ;;@debug-start
-      (local.set $step (i32.add (local.get $step) (i32.const 1)))
-      ;;@debug-end
       (drop
         (call $wasi.args_get (global.get $ARGV_PTRS_PTR) (global.get $ARGV_BUF_PTR))
       )
-
-      ;;@debug-start
-      (call $write_args)
-      ;;@debug-end
 
       (block $args_ok
         ;; SHAKE detection: check the third-to-last arg for "shak" (only when at least 3 args exist)
@@ -668,9 +732,7 @@
                       (br $shake_ok)
                     )
                   )
-                  ;;@debug-start
-                  (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
-                  ;;@debug-end
+
                   (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 65))
                   (br $exit)
                 )
@@ -690,9 +752,6 @@
                       (i32.gt_u (local.get $digest_bytes) (i32.const 0x01000000))
                     )
                   (then
-                    ;;@debug-start
-                    (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
-                    ;;@debug-end
                     (call $writeln (i32.const 2) (global.get $ERR_MSG_SHAKE_BYTES) (i32.const 49))
                     (br $exit)
                   )
@@ -738,16 +797,9 @@
           )
         )
 
-        ;;@debug-start
-        (call $write_step (i32.const 1) (local.get $step) (i32.const 4))
-        ;;@debug-end
         (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 65))
         (br $exit)
       ) ;; $args_ok
-
-      ;;@debug-start
-      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
-      ;;@debug-end
 
       ;; For SHA3 mode, derive output byte count from digest length; SHAKE already set it above
       (if (i32.ne (local.get $domain_byte) (global.get $SHAKE_BYTE))
@@ -758,9 +810,6 @@
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       ;; Step 2: Extract filename (last arg) and open the file
-      ;;@debug-start
-      (local.set $step (i32.add (local.get $step) (i32.const 1)))
-      ;;@debug-end
       (local.set $filename_len
         (local.set $filename_ptr
           (call $fetch_arg_n (local.get $argc)) ;; fetch_arg_n leaves two values on the stack, hence nested set calls
@@ -780,35 +829,15 @@
         )
       )
 
-      (if ;; $return_code > 0
-        (then
-          ;;@debug-start
-          (call $write_step (i32.const 1) (local.get $step) (local.get $return_code))
-          ;;@debug-end
-          (br $exit)
-        )
-      )
-
-      ;;@debug-start
-      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
-      ;;@debug-end
+      ;; $return_code > 0?
+      (if (then (br $exit)))
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       ;; Step 3: Initialise Keccak state
-      ;;@debug-start
-      (local.set $step (i32.add (local.get $step) (i32.const 1)))
-      ;;@debug-end
       (call $init_state (local.get $digest_len) (local.get $domain_byte))
-
-      ;;@debug-start
-      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
-      ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       ;; Step 4: Read file in 2 MB chunks and absorb into the sponge
-      ;;@debug-start
-      (local.set $step (i32.add (local.get $step) (i32.const 1)))
-      ;;@debug-end
       (i32.store (memory $main) (global.get $IOVEC_READ_BUF_PTR) (global.get $READ_BUFFER_PTR))
       (i32.store (memory $main)
         (i32.add (global.get $IOVEC_READ_BUF_PTR) (i32.const 4))
@@ -830,9 +859,6 @@
 
           (if ;; $return_code > 0
             (then
-              ;;@debug-start
-              (call $write_step (i32.const 1) (local.get $step) (local.get $return_code))
-              ;;@debug-end
               (call $writeln (i32.const 2) (global.get $ERR_READING_FILE) (i32.const 18))
               (br $exit)
             )
@@ -840,50 +866,25 @@
 
           (if ;; EOF?
             (i32.eqz (local.tee $bytes_read (i32.load (memory $main) (global.get $NREAD_PTR))))
-            (then
-              (br $eof)
-            )
+            (then (br $eof))
           )
 
           (call $absorb (global.get $READ_BUFFER_PTR) (local.get $bytes_read))
-
           (br $read_chunk)
         )
       )
 
-      ;;@debug-start
-      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
-      ;;@debug-end
-
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 5: Apply SHA3 padding and run the final keccak round
-      ;;@debug-start
-      (local.set $step (i32.add (local.get $step) (i32.const 1)))
-      ;;@debug-end
+      ;; Step 5: Finalize the input state by applying the appropriatepadding and running the final keccak round
       (call $finalize)
-
-      ;;@debug-start
-      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
-      ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       ;; Step 6: Close the file
-      ;;@debug-start
-      (local.set $step (i32.add (local.get $step) (i32.const 1)))
-      ;;@debug-end
       (local.set $return_code (call $wasi.fd_close (local.get $file_fd)))
-
-      ;;@debug-start
-      (call $write_step (i32.const 1) (local.get $step) (local.get $return_code))
-      ;;@debug-end
 
       ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       ;; Step 7: Squeeze digest_bytes in 64-byte chunks, hex-encode each chunk and write to stdout.
       ;;         Works for both fixed-length SHA3 digests and arbitrary-length SHAKE XOF output.
-      ;;@debug-start
-      (local.set $step (i32.add (local.get $step) (i32.const 1)))
-      (call $write_step (i32.const 1) (local.get $step) (i32.const 0))
-      ;;@debug-end
       (local.set $remaining (local.get $digest_bytes))
 
       (block $hex_done
@@ -931,7 +932,7 @@
           )
         )
         (else
-          ;; Just print a line feed
+          ;; Just print a line feed by telling $writeln to print a zero length string
           (call $writeln (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 0))
         )
       )
@@ -1288,7 +1289,7 @@
     (local $fn_id        i32)
 
     (local.set $debug_active (i32.const 0))
-    (local.set $fn_id        (i32.const 10))
+    (local.set $fn_id        (i32.const 6))
 
     (call $log.fnEnter   (local.get $debug_active) (local.get $fn_id))
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $digest_len))
@@ -1360,7 +1361,7 @@
     (local $fn_id        i32)
 
     (local.set $debug_active (i32.const 0))
-    (local.set $fn_id        (i32.const 11))
+    (local.set $fn_id        (i32.const 7))
 
     (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
     ;;@debug-end
@@ -1428,7 +1429,7 @@
     (local $fn_id        i32)
 
     (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 9))
+    (local.set $fn_id (i32.const 5))
 
     (call $log.fnEnterNth (local.get $debug_active) (local.get $fn_id) (local.get $round))
 
@@ -1473,7 +1474,7 @@
     (local $fn_id        i32)
 
     (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 15))
+    (local.set $fn_id (i32.const 0))
 
     (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
     ;;@debug-end
@@ -1736,7 +1737,7 @@
     (local $fn_id        i32)
 
     (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 5))
+    (local.set $fn_id (i32.const 1))
 
     (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
     ;;@debug-end
@@ -1896,7 +1897,7 @@
     (local $fn_id        i32)
 
     (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 6))
+    (local.set $fn_id (i32.const 2))
 
     (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
     ;;@debug-end
@@ -2073,7 +2074,7 @@
     (local $fn_id        i32)
 
     (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 7))
+    (local.set $fn_id (i32.const 3))
 
     (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
 
@@ -2461,7 +2462,7 @@
     (local $fn_id        i32)
 
     (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 8))
+    (local.set $fn_id (i32.const 4))
 
     (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $round))
@@ -2542,7 +2543,7 @@
     (local $fn_id        i32)
 
     (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 13))
+    (local.set $fn_id (i32.const 8))
 
     (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
     (call $prepare_state (i32.const 1) (local.get $digest_len))
@@ -2648,66 +2649,6 @@
 
         ;; Write i32 value as hex string
         (call $i32_to_hex_str (local.get $msg_val) (local.get $buf_ptr))
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 8)))
-
-        ;; Write LF
-        (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x0A))
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
-
-        (call $write
-          (local.get $fd)
-          (global.get $STR_WRITE_BUF_PTR)
-          (i32.sub (local.get $buf_ptr) (global.get $STR_WRITE_BUF_PTR)) ;; length = end address - start address
-        )
-      )
-    )
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Write the return code of the current processing step to the specified fd
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $write_step
-        (param $fd       i32)
-        (param $step_no  i32)
-        (param $ret_code i32)
-
-    (local $buf_ptr i32)
-
-    ;; Do nothing unless we are either writing to stderr or $DEBUG_ACTIVE is true
-    (if
-      (i32.or
-        (global.get $DEBUG_ACTIVE)
-        (i32.eq (local.get $fd) (i32.const 2))
-      )
-      (then
-        (local.set $buf_ptr (global.get $STR_WRITE_BUF_PTR))
-
-        ;; Write step text
-        (memory.copy (memory $main) (memory $main) (local.get $buf_ptr) (global.get $DBG_STEP) (i32.const 6))
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 6)))
-
-        ;; Write "0x" prefix
-        (i32.store16 (memory $main) (local.get $buf_ptr) (i32.const 0x7830)) ;; (little endian)
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
-
-        ;; Write step number as hex string
-        (call $i32_to_hex_str (local.get $step_no) (local.get $buf_ptr))
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 8)))
-
-        ;; Write "  " padding
-        (i32.store16 (memory $main) (local.get $buf_ptr) (i32.load16_u (memory $main) (global.get $ASCII_SPACES)))
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
-
-        ;; Write return code text
-        (memory.copy (memory $main) (memory $main) (local.get $buf_ptr) (global.get $DBG_RETURN_CODE) (i32.const 13))
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 13)))
-
-        ;; Write "0x" prefix
-        (i32.store16 (memory $main) (local.get $buf_ptr) (i32.const 0x7830)) ;; (little endian)
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
-
-        ;; Write return code as hex string
-        (call $i32_to_hex_str (local.get $ret_code) (local.get $buf_ptr))
         (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 8)))
 
         ;; Write LF

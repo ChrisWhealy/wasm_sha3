@@ -153,6 +153,8 @@ export class SHA3Sponge {
     // If we're running in dev mode, create a debug WASM instance and wire in its exports to the main module's imports
     // so that the hexdump() function is available for logging internal state.
     if (!isProd) {
+      console.log(`Loading SHA3 WASM module: ${isOpt ? '' : 'un'}optimised ${isProd ? 'production' : 'development'} build`)
+
       const debugWasi   = new WASI({ version: 'unstable' })
       const debugModule = await WebAssembly.instantiate(
         new Uint8Array(readFileSync(SHA3Sponge.#genDebugPath(isOpt))),

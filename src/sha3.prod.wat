@@ -291,6 +291,7 @@
     (global.set $CAPACITY_PTR (i32.add (global.get $STATE_PTR) (i32.shl (global.get $RATE) (i32.const 3))))
 
     (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200))
+
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -303,7 +304,6 @@
 
     (local $rate_bytes  i32)
     (local $fill_amount i32)
-
     (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
 
     ;; Complete any partial rate-block accumulated from a previous absorb call
@@ -358,6 +358,7 @@
         (global.set $PARTIAL_BYTES (local.get $src_len))
       )
     )
+
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -393,6 +394,7 @@
     (call $keccak24)
 
     (global.set $SQUEEZE_OFFSET (i32.const 0))
+
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -406,7 +408,6 @@
     (local $rate_bytes i32)
     (local $available  i32)
     (local $copy_len   i32)
-
     (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
 
     (block $done
@@ -441,6 +442,7 @@
         (br $squeeze_loop)
       )
     )
+
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

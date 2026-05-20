@@ -1,83 +1,73 @@
 export const debugMsgs = [
   // FnId 0
   {
-    fnName: "theta_c",
-    msgId: ["$inner_result"]
+    fnName: "theta",
+    msgId: ["",]
   },
   // FnId 1
-  {
-    fnName: "theta_c_inner",
-    msgId: ["$w0", "$w1", "$w2", "$w3", "$w4"]
-  },
-  // FnId 2
-  {
-    fnName: "theta_d",
-    msgId: ["$w0", "$w1", "i64.rotr($w1, 1)"]
-  },
-  // FnId 3
-  {
-    fnName: "theta_d_inner",
-    msgId: ["$w0", "$w1", "i64.rotr($w1, 1)"]
-  },
-  // FnId 4
-  {
-    fnName: "theta_xor_loop",
-    msgId: ["$d_fn_word ", "$a_blk_word", "$a_blk_idx", "$a_blk_offset", 'XOR result ']
-  },
-  // FnId 5
   {
     fnName: "rho",
     msgId: ["$w0", "$w0 rotated", "$rot_amt"]
   },
-  // FnId 6
+  // FnId 2
   {
     fnName: "pi",
     msgId: ["Old (x,y)", "New (x,y)", "rho_offset", "pi_offset"]
   },
-  // FnId 7
+  // FnId 3
   {
     fnName: "chi",
     msgId: ["($col,$row)", "($col,$row+1)", "($col,$row+2)", "$w0", "$w1", "$w2", "result", "round"]
   },
-  // FnId 8
+  // FnId 4
   {
     fnName: "iota",
     msgId: ["round", "round constant", "word 0", "XOR Result"]
   },
-  // FnId 9
+  // FnId 5
   {
     fnName: "keccak",
     msgId: []
   },
-  // FnId 10
+  // FnId 6
   {
     fnName: "prepare_state",
     msgId: ["RATE", "CAPACITY", "Received digest length"]
   },
-  // FnId 11
+  // FnId 7
   {
     fnName: "xor_data_with_rate",
     msgId: ["Data index -> Rate offset",]
   },
-  // FnId 12
-  {
-    fnName: "test_keccak",
-    msgId: ["",]
-  },
-  // FnId 13
+  // FnId 8
   {
     fnName: "sponge",
     msgId: ["",]
   },
-  // FnId 14
+  // FnId 9
   {
     fnName: "_start",
     msgId: ["",]
   },
-  // FnId 15
+  // FnId 10
   {
-    fnName: "theta",
-    msgId: ["",]
+    fnName: "init_state",
+    msgId: ["digest_len", "domain_byte", "RATE", "CAPACITY"]
+  },
+  // FnId 11
+  {
+    fnName: "absorb",
+    msgId: ["src_len", "rate_bytes", "fill_amount", "PARTIAL_BYTES"]
+  },
+  // FnId 12
+  {
+    fnName: "finalize",
+    msgId: ["PARTIAL_BYTES", "domain_byte", "rate_bytes"]
+  },
+  // FnId 13
+  {
+    fnName: "squeeze",
+    msgId: ["len", "rate_bytes", "available", "copy_len", "SQUEEZE_OFFSET"]
   },
 ]
 

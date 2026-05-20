@@ -1,4 +1,4 @@
-import { u64AsHexStr, u32AsHexStr } from "./binary_utils.mjs"
+import { u64AsHexStr, u32AsHexStr, u8AsHexStr } from "./binary_utils.mjs"
 import { debugLabels, debugMsgs } from "./debug_msgs.mjs"
 
 const fnEnterMark = "===>"
@@ -18,6 +18,8 @@ const fnEnterNth = (isDebug, fnId, n) => isDebug && console.log(`${fnEnterMsg(fn
 const fnExitNth = (isDebug, fnId, n) => isDebug && console.log(`${fnExitMsg(fnId)} ${n}`)
 const singleI64 = (isDebug, fnId, msgId, i64) => isDebug && console.log(`${getMsgHdr(fnId, msgId)} = ${u64AsHexStr(i64)}`)
 const singleI32 = (isDebug, fnId, msgId, i32) => isDebug && console.log(`${getMsgHdr(fnId, msgId)} = ${u32AsHexStr(i32)}`)
+const singleU8 = (isDebug, fnId, msgId, i8) => isDebug && console.log(`${getMsgHdr(fnId, msgId)} = ${u8AsHexStr(i8)}`)
+const singleFmtU8 = (isDebug, fnId, msgId, i8) => isDebug && console.log(`${getMsgHdr(fnId, msgId)} = 0x${u8AsHexStr(i8)}`)
 const singleDec = (isDebug, fnId, msgId, dec) => isDebug && console.log(`${getMsgHdr(fnId, msgId)} = ${dec}`)
 const mappedPair = (isDebug, fnId, msgId, v1, v2) => isDebug && console.log(`${getMsgHdr(fnId, msgId)}: ${v1} -> ${v2}`)
 const coordinatePair = (isDebug, fnId, msgId, v1, v2) => isDebug && console.log(`${getMsgHdr(fnId, msgId)} = (${v1},${v2})`)
@@ -31,6 +33,8 @@ export {
   fnExitNth,
   singleI64,
   singleI32,
+  singleU8,
+  singleFmtU8,
   singleDec,
   mappedPair,
   coordinatePair,

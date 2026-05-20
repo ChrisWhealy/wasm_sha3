@@ -15,7 +15,8 @@ const USAGE = 'Usage: sha3sum.mjs <224|256|384|512> <file>\n'
 
 const argv = process.argv.slice(2)
 const dev = argv.includes('--dev')
-const args = argv.filter(a => a !== '--dev')
+const noOpt = argv.includes('--no-opt')
+const args = argv.filter(a => a !== '--dev' && a !== '--no-opt')
 const [algo, ...rest] = args
 
 if (!algo) {
@@ -24,7 +25,7 @@ if (!algo) {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const sponge = await SHA3Sponge.create(!dev)
+const sponge = await SHA3Sponge.create(!dev, !noOpt)
 
 // Parse and then validate the arguments
 if (algo === 'shake128' || algo === 'shake256') {
