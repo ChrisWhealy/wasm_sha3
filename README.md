@@ -39,8 +39,10 @@ When used in XOF mode, the SHA3 function can produce an arbitrary quantity of ps
 
 Internally, the same hashing function is used in both modes; but with the following differences:
 
-1. The data in the last block is terminated with `0x06` in drop-in mode, but `0x1111` in XOF mode
-2. In drop-in mode, the output must be exactly 224, 256, 384 or 512 bits long.<br>In XOF mode, the output can be of any arbitrary length
+| Mode | Data In Last Block<br>Terminated With | Output Length
+|---|--:|---
+| Drop-in | `0x06` | One of 224, 256, 384 or 512 bits
+| XOF | `0x1111` | Any length between 1 and 16,777,216
 
 # Run The Published Version
 
