@@ -413,6 +413,7 @@
         (param $src_ptr  i32)
         (param $src_len  i32)
 
+    (local $rate        i32)
     (local $rate_bytes  i32)
     (local $fill_amount i32)
     ;;@debug-start
@@ -426,7 +427,12 @@
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $src_len))
     ;;@debug-end
 
-    (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
+
+    ;; The value of the global $RATE is fetched on each iteration of the $full_blocks loop.  But since this field is
+    ;; mutable, wasm-opt can't hoist the value outside the loop.  Moving it into a local variable allows wasm-opt to
+    ;; avoid fetching on every loop iteration
+    (local.set $rate       (global.get $RATE))
+    (local.set $rate_bytes (i32.shl (local.get $rate) (i32.const 3)))
 
     ;;@debug-start
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $rate_bytes))
@@ -453,7 +459,7 @@
 
         (if (i32.eq (global.get $PARTIAL_BYTES) (local.get $rate_bytes))
           (then
-            (call $xor_data_with_rate (global.get $RATE) (global.get $DATA_PTR))
+            (call $xor_data_with_rate (local.get $rate) (global.get $DATA_PTR))
             (call $keccak24)
             (global.set $PARTIAL_BYTES (i32.const 0))
           )
@@ -466,7 +472,7 @@
       (loop $full_blocks
         (br_if $no_full_blocks (i32.lt_u (local.get $src_len) (local.get $rate_bytes)))
 
-        (call $xor_data_with_rate (global.get $RATE) (local.get $src_ptr))
+        (call $xor_data_with_rate (local.get $rate) (local.get $src_ptr))
         (call $keccak24)
 
         (local.set $src_ptr (i32.add (local.get $src_ptr) (local.get $rate_bytes)))
