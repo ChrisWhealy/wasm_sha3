@@ -19,7 +19,7 @@ The resulting binary is 5.3 Kb 😎
 
 # Run The Published Version
 
-Assuming you have `wasmer` installed, you can run the published version of this program as follows:
+Assuming you have [`wasmer`](https://docs.wasmer.io/install/) installed, you can run the published version of this program as follows:
 
 ```bash
 wasmer run chriswhealy/sha3 --volume=<local_directory>:/. --command-name=<cmd> <output-length> <filename>
