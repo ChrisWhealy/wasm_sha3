@@ -52,7 +52,7 @@
 ;; V2 changes:
 ;;   - Although NIST FIPS 202 describes Rho and Pi as separate step functions, for the sake of runtime efficiency, they
 ;;     have been fused into a single rho_pi function.  This eliminates one full 200-byte buffer copy per Keccak round
-;;     compared to executing the rho function followed by the pi function.
+;;     compared to executing the rho and pi functions sequentially.
 ;;   - Chi now operates in-place on STATE.  Loading each row of 5 lanes into local variables before writing back avoids
 ;;     needing a second buffer.
 ;;   - Vestigial memory tables (rotation table, theta C/D scratch buffers, state index table, XOR-D offset table) have
