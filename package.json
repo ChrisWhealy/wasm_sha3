@@ -5,19 +5,19 @@
   "type": "module",
   "main": "SHA3Sponge.mjs",
   "scripts": {
-    "compile_sha3:prod": "./utils/strip_debug.mjs && wat2wasm               --enable-multi-memory ./src/sha3.prod.wat -o ./bin/sha3.prod.wasm",
-    "compile_sha3:dev": "                           wat2wasm --debug-names --enable-multi-memory ./src/sha3.wat      -o ./bin/sha3.dev.wasm",
-    "compile_debug": "                           wat2wasm --debug-names --enable-multi-memory ./src/debug.wat     -o ./bin/debug.wasm",
-    "compile_tests": "                           wat2wasm --debug-names --enable-multi-memory ./src/tests.wat     -o ./bin/tests.wasm",
+    "compile_sha3:prod": "./utils/prepare_src.mjs debug test && wat2wasm --enable-multi-memory ./src/sha3.prod.wat -o ./bin/sha3.prod.wasm",
+    "compile_sha3:dev": "./utils/prepare_src.mjs debug && wat2wasm --debug-names --enable-multi-memory ./src/sha3.dev.wat  -o ./bin/sha3.dev.wasm",
+    "compile_debug": "wat2wasm --debug-names --enable-multi-memory ./src/debug.wat -o ./bin/debug.wasm",
+    "compile_tests": "wat2wasm --debug-names --enable-multi-memory ./src/tests.wat -o ./bin/tests.wasm",
     "opt_sha3:prod": "wasm-opt ./bin/sha3.prod.wasm --enable-simd --enable-multimemory --enable-multivalue --enable-bulk-memory -O4 -o ./bin/sha3.prod.opt.wasm",
     "opt_sha3:dev": "wasm-opt ./bin/sha3.dev.wasm  --enable-simd --enable-multimemory --enable-multivalue --enable-bulk-memory -O4 -o ./bin/sha3.dev.opt.wasm",
-    "opt_debug": "wasm-opt ./bin/debug.wasm     --enable-simd --enable-multimemory --enable-multivalue                      -O4 -o ./bin/debug.opt.wasm",
-    "opt_tests": "wasm-opt ./bin/tests.wasm     --enable-simd --enable-multimemory --enable-multivalue                      -O4 -o ./bin/tests.opt.wasm",
-    "build:prod": "npm run compile_sha3:prod && npm run compile_tests                          && npm run opt_sha3:prod && npm run opt_tests",
-    "build:dev": "npm run compile_sha3:dev  && npm run compile_tests && npm run compile_debug && npm run opt_sha3:dev  && npm run opt_tests && npm run opt_debug",
+    "opt_debug": "wasm-opt ./bin/debug.wasm --enable-simd --enable-multimemory --enable-multivalue -O4 -o ./bin/debug.opt.wasm",
+    "opt_tests": "wasm-opt ./bin/tests.wasm --enable-simd --enable-multimemory --enable-multivalue -O4 -o ./bin/tests.opt.wasm",
+    "build:prod": "npm run compile_sha3:prod && npm run compile_tests && npm run opt_sha3:prod && npm run opt_tests",
+    "build:dev": "npm run compile_sha3:dev && npm run compile_tests && npm run compile_debug && npm run opt_sha3:dev  && npm run opt_tests && npm run opt_debug",
     "clean": "rm -f ./bin/*.wasm",
     "test:prod": "npm run clean && npm run build:prod && ./test.mjs prod",
-    "test:dev": "                 npm run build:dev  && ./test.mjs dev"
+    "test:dev": "npm run build:dev && ./test.mjs dev"
   },
   "keywords": [
     "SHA3",

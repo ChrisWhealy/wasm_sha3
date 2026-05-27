@@ -31,7 +31,7 @@ $ npm run build:prod
 
 
 > wasm_sha3@0.1.0 compile_sha3:prod
-> ./utils/strip_debug.mjs && wat2wasm --enable-multi-memory ./src/sha3.prod.wat -o ./bin/sha3.prod.wasm
+> ./utils/prepare_src.mjs && wat2wasm --enable-multi-memory ./src/sha3.prod.wat -o ./bin/sha3.prod.wasm
 
 
 > wasm_sha3@0.1.0 compile_tests

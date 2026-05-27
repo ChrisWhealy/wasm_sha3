@@ -52,7 +52,7 @@
 ;; V2 changes:
 ;;   - Although NIST FIPS 202 describes Rho and Pi as separate step functions, for the sake of runtime efficiency, they
 ;;     have been fused into a single rho_pi function.  This eliminates one full 200-byte buffer copy per Keccak round
-;;     compared to executing the rho function followed by the pi function.
+;;     compared to executing the rho and pi functions sequentially.
 ;;   - Chi now operates in-place on STATE.  Loading each row of 5 lanes into local variables before writing back avoids
 ;;     needing a second buffer.
 ;;   - Vestigial memory tables (rotation table, theta C/D scratch buffers, state index table, XOR-D offset table) have
@@ -486,10 +486,7 @@
       (if (i32.eq (local.get $domain_byte) (global.get $DOMAIN_SHA3))
         (then
           (call $write   (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 2))
-          (call $writeln (global.get $FD_STDOUT)
-            (local.get $filename_ptr)
-            (local.get $filename_len)
-          )
+          (call $writeln (global.get $FD_STDOUT) (local.get $filename_ptr) (local.get $filename_len))
         )
         (else
           ;; Write a LF by telling $writeln() to write a zero length string
@@ -1304,58 +1301,5 @@
 
     (local.get $return_code)
     (local.get $file_fd)
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Test-only: prepare STATE for a Keccak test by optionally zeroing it, computing RATE/CAPACITY for $digest_len,
-  ;; and XORing the first rate-block from PAD_PTR into STATE.
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $prepare_state (export "prepare_state")
-        (param $init_mem   i32)
-        (param $digest_len i32)
-    (block $digest_ok
-      (br_if $digest_ok (i32.eq (local.get $digest_len) (i32.const 224)))
-      (br_if $digest_ok (i32.eq (local.get $digest_len) (i32.const 256)))
-      (br_if $digest_ok (i32.eq (local.get $digest_len) (i32.const 384)))
-      (br_if $digest_ok (i32.eq (local.get $digest_len) (i32.const 512)))
-      ;; Default to $digest_len = 256 if invalid value received
-      (local.set $digest_len (i32.const 256))
-    )
-
-    (if (local.get $init_mem)
-      (then (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200)))
-    )
-
-    (global.set $RATE
-      (i32.shr_u (i32.sub (i32.const 1600) (i32.shl (local.get $digest_len) (i32.const 1))) (i32.const 6))
-    )
-    (global.set $CAPACITY (i32.sub (i32.const 25) (global.get $RATE)))
-
-    (call $xor_block_into_state (global.get $RATE) (global.get $PAD_PTR))
-
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Test-only: call prepare_state then run $n rounds starting from round index 0 (ascending order, matching v1).
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $sponge (export "sponge")
-        (param $digest_len i32)
-        (param $n          i32)
-
-    (local $round i32)
-    (call $prepare_state (i32.const 1) (local.get $digest_len))
-
-    (if (local.get $n)
-      (then
-        (loop $rounds
-          (call $keccak (local.get $round))
-          (local.set $round (i32.add (local.get $round) (i32.const 1)))
-          (br_if $rounds
-            (local.tee $n (i32.sub (local.get $n) (i32.const 1)))
-          )
-        )
-      )
-    )
-
   )
 )

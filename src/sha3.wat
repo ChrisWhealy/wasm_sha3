@@ -1441,7 +1441,7 @@
     (local.get $return_code)
     (local.get $file_fd)
   )
-
+  ;;@test-start
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Test-only: prepare STATE for a Keccak test by optionally zeroing it, computing RATE/CAPACITY for $digest_len,
   ;; and XORing the first rate-block from PAD_PTR into STATE.
@@ -1519,4 +1519,5 @@
     (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
     ;;@debug-end
   )
+  ;;@test-end
 )
