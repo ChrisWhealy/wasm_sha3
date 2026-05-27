@@ -1,23 +1,12 @@
 ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-;; An implementation of the SHA3 algorithm based on the specification published as NIST FIPS 202
+;; An implementation of the SHA3 algorithm based on NIST FIPS 202
 ;; https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
 ;;
-;; The SHA3 algorithm uses an internal state size (in bits) is treated a s 3-dimensional matrix whose size is given by
-;; b = 5 * 5 * w, where w = 2^l and l is 0..6
+;; The internal state is 1600 bits treated as a 5×5×64 matrix.  The state is split into a rate (r) and a capacity (c)
+;; where r + c = 1600.  For SHA2 drop-in mode, the digest size d must be one of the SHA2 digest lengths and determines
+;; the rate/capacity split: r = 1600 - 2d bits.
 ;;
-;; When SHA3 is being used as a drop-in replacement for SHA2, l is fixed at 6
-;;
-;; Thus b = 5 * 5 * 2^6
-;;      b = 1600
-;;
-;; The state is partioned into 2 regions known as the "rate" (r) and the "capacity" (c) where r + c = b.
-;;
-;; Further, the size (in bits) of the rate is fixed at r = 2 * d, where d is the digest size (in bits) produced by the
-;; hash function. Given that SHA3 is being used as a SHA2 replacement, SHA3 must produce digests of exactly the same
-;; size as those produced by SHA2. Therefore d may only be one of 224, 256, 384 or 512.
-;;
-;; Given that the internal state size (b) is fixed at 1600 and b = c + 2d, the rate/capacity partition sizes may only be
-;; one of the pairs listed in the table below:
+;; Supported digest lengths and their rate/capacity partitions:
 ;;
 ;; +--------+--------------+--------------+
 ;; |        | Size in bits | Size in u64s |
@@ -30,7 +19,14 @@
 ;; |    512 |   576 | 1024 |     9 |   16 |
 ;; +--------+-------+------+-------+------+
 ;;
-;; This module follows the indexing convention described in section 3.1.4 of the above document
+;; In Extendible Output Function (XOF) mode (known as SHAKE128 or SHAKE256), the same state size is used but with
+;; digest_len=128 or 256, giving rate=18 or 17 64-bit words respectively. The key difference here is that the output
+;; length is unlimited and can be obtained by repeatedly performing the squeeze operation.
+;;
+;; The 5×5 state matrix is stored in the order described in FIPS 202 §3.1.2.  Lane (x,y) lives at byte offset
+;; (5y + x) × 8 in linear memory.  The rate occupies the first r lanes (sequential byte order).
+;;
+;; This module follows the indexing convention described in FIPS 202 §3.1.2 of the above document
 ;;                     ___ ___ ___ ___ ___
 ;;                   /___/___/___/___/___/|
 ;;                 /___/___/___/___/___/| |
@@ -52,14 +48,27 @@
 ;;
 ;; The linear offset of the data written to the internal state starts at the centre of the matrix and follows a wrapped,
 ;; left-to-right, bottom-to-top ordering.
+;;
+;; V2 changes:
+;;   - Although NIST FIPS 202 describes Rho and Pi as separate step functions, for the sake of runtime efficiency, they
+;;     have been fused into a single rho_pi function.  This eliminates one full 200-byte buffer copy per Keccak round
+;;     compared to executing the rho function followed by the pi function.
+;;   - Chi now operates in-place on STATE.  Loading each row of 5 lanes into local variables before writing back avoids
+;;     needing a second buffer.
+;;   - Vestigial memory tables (rotation table, theta C/D scratch buffers, state index table, XOR-D offset table) have
+;;     been removed, shrinking the static data footprint by just over 300 bytes.
+;;   - Memory layout reorganised so all WASI i64 output targets are naturally 8-byte aligned.
+;;   - All loops use test-to-continue rather than test-to-exit.  That is, the br_if at the end of the loop must succeed
+;;     in order for the loop to repeat.  Failure causes the loop exit naturally.
 ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 (module
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Function types
   (type $type_i32*1          (func (param i32)))
   (type $type_i32*2          (func (param i32 i32)))
   (type $type_i32*3          (func (param i32 i32 i32)))
   (type $type_i32*4          (func (param i32 i32 i32 i32)))
-  (type $type_i32*5          (func (param i32 i32 i32 i32 i32)))
   (type $type_i32*3_i64      (func (param i32 i32 i32 i64)))
   (type $type_wasi_fd_close  (func (param i32)                                 (result i32)))
   (type $type_wasi_args      (func (param i32 i32)                             (result i32)))
@@ -67,7 +76,7 @@
   (type $type_wasi_fd_io     (func (param i32 i32 i32 i32)                     (result i32)))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Import WASI preview 1 OS system calls
+  ;; WASI preview 1 imports
   (import "wasi_snapshot_preview1" "args_sizes_get" (func $wasi.args_sizes_get (type $type_wasi_args)))
   (import "wasi_snapshot_preview1" "args_get"       (func $wasi.args_get       (type $type_wasi_args)))
   (import "wasi_snapshot_preview1" "path_open"      (func $wasi.path_open      (type $type_wasi_path_open)))
@@ -80,301 +89,446 @@
   (import "debug" "memory"  (memory $debug 16))
   (import "debug" "hexdump" (func $debug.hexdump (type $type_i32*3)))
 
-  (import "log" "fnEnter"        (func $log.fnEnter      (type $type_i32*2)))
-  (import "log" "fnExit"         (func $log.fnExit       (type $type_i32*2)))
-  (import "log" "fnEnterNth"     (func $log.fnEnterNth   (type $type_i32*3)))
-  (import "log" "fnExitNth"      (func $log.fnExitNth    (type $type_i32*3)))
-  (import "log" "singleI64"      (func $log.singleI64    (type $type_i32*3_i64)))
-  (import "log" "singleI32"      (func $log.singleI32    (type $type_i32*4)))
-  (import "log" "singleFmtU8"    (func $log.singleFmtU8  (type $type_i32*4)))
-  (import "log" "singleDec"      (func $log.singleDec    (type $type_i32*4)))
-  (import "log" "singleBigInt"   (func $log.singleBigInt (type $type_i32*3_i64)))
-  (import "log" "label"          (func $log.label        (type $type_i32*2)))
-  (import "log" "coordinatePair" (func $log.coords       (type $type_i32*5)))
-  (import "log" "mappedPair"     (func $log.mappedPair   (type $type_i32*5)))
+  (import "log" "fnEnter"     (func $log.fnEnter     (type $type_i32*2)))
+  (import "log" "fnExit"      (func $log.fnExit      (type $type_i32*2)))
+  (import "log" "fnEnterNth"  (func $log.fnEnterNth  (type $type_i32*3)))
+  (import "log" "fnExitNth"   (func $log.fnExitNth   (type $type_i32*3)))
+  (import "log" "singleI64"   (func $log.singleI64   (type $type_i32*3_i64)))
+  (import "log" "singleI32"   (func $log.singleI32   (type $type_i32*4)))
+  (import "log" "singleFmtU8" (func $log.singleFmtU8 (type $type_i32*4)))
+  (import "log" "singleDec"   (func $log.singleDec   (type $type_i32*4)))
+  (import "log" "label"       (func $log.label       (type $type_i32*2)))
   ;;@debug-end
 
-  ;; Memory page   1     Internal stuff
-  ;; Memory pages  2     File IO pointers and buffers
+  ;; Page 1: algorithm state and IO metadata
+  ;; Pages 2-33: 2 MB file read buffer
   (memory $main (export "memory") 33)
 
   ;;@debug-start
-  ;; Build with "npm build:dev" to include debug messages.
-  ;; $DEBUG_ACTIVE must also be set to 1 in order for step function trace statements to become visible
-  (global $DEBUG_ACTIVE       i32 (i32.const 1))
+  (global $DEBUG_ACTIVE i32 (i32.const 1))
   ;;@debug-end
 
-  (global $DEBUG_IO_BUFF_PTR  i32 (i32.const 0))
-  (global $FD_STDOUT          i32 (i32.const 1))
-  (global $FD_STDERR          i32 (i32.const 2))
+  (global $FD_STDOUT i32 (i32.const 1))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; $main Memory Map: Page 1
-  ;;     Offset  Length   Type    Description
-  ;; 0x00000000     200   i64x24  24 Keccak round constants
-  ;; 0x000000C8     100   i32x25  Rotation table for Rho function
-  ;; 0x0000012C     200   i64x25  Ping-pong BUF_0 — theta input / rho output / chi+iota output  (THETA_A_BLK_PTR = RHO_RESULT_PTR = CHI_RESULT_PTR)
-  ;; 0x000001F4     200   i64x25  Ping-pong BUF_1 — theta output / pi output                    (THETA_RESULT_PTR = PI_RESULT_PTR)
-  ;; 0x000002BC      40   i64x5   Theta C function output
-  ;; 0x000002E4      40   i64x5   Theta D function output
-  ;; 0x0000030C     100   i32x25  State index table
-  ;; 0x00000370      25   i8x25   Theta XOR D offset table
-  ;; 0x00000389       3           Padding (32-bit alignment)
-  ;; 0x0000038C     200   bytes   DATA_PTR scratch buffer (rate-block staging; max 168 bytes for SHAKE128)
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; File IO  (all i64 output pointers must be 8-byte aligned otherwise wasmtime throws its toys out of the pram)
-  ;; 0x000004E4       4   i32     file_fd
-  ;; 0x000004F0       8   i64     Bytes transferred by fd_read [8-byte aligned]
-  ;; 0x000004F8       8   i32x2   Read  iovec (ptr + len)
-  ;; 0x00000500       8   i32x2   Write iovec (ptr + len)
-  ;; 0x00000508       4   i32     Pointer to file path name
-  ;; 0x0000050C       4   i32     Pointer to file path length
-  ;; 0x00000510       4   i32     Number of command line arguments
-  ;; 0x00000514       4   i32     Command line buffer size
-  ;; 0x00000518       ?   i32[]   Array of argument pointers (needs double dereferencing)
-  ;; Unused
-  ;; 0x000005E4     256   data    Command line args buffer
-  ;; Unused
-  ;; 0x00000A44     128   data    ASCII representation of SHA value (up to 512 bits = 128 hex chars)
-  ;; 0x00000AC4      16   data    Nybble-to-ASCII lookup table
-  ;; 0x00000AE4       2   data    Two ASCII spaces
-  ;; 0x00000AE7       5   data    Error message prefix "Err: "
-  ;; 0x00000AEC      63           Error message "Bad args. Expected one of 224, 256, 384, or 512 plus <filename>"
-  ;; 0x00000B30      25           Error message "No such file or directory"
-  ;; 0x00000B50      24           Error message "Unable to read file size"
-  ;; 0x00000B68      21           Error message "File too large (>4Gb)"
-  ;; 0x00000B88      18           Error message "Error reading file"
-  ;; 0x00000BA8      48           Error message "Neither a directory nor a symlink to a directory"
-  ;; 0x00000BD8      19           Error message "Bad file descriptor"
-  ;; 0x00000BF8      26           Error message "Memory allocation failed: "
-  ;; 0x00000C18      23           Error message "Operation not permitted"
-  ;; 0x00000C38      25           Error message "Filename too long (>=256)"
-  ;; 0x00000C58      17           Error message "Permission denied"
-  ;; 0x00000C78      21           Error message "IO error opening file"
-  ;; The following debug messages are declared within debug start/end comment markers
-  ;; These are stripped from the production build
-  ;; 0x00000C90       6           "argc: "
-  ;; 0x00000CA0      14           "argv_buf_len: "
-  ;; 0x00000CB0       6           "Step: "
-  ;; 0x00000CB8      13           "Return code: "
-  ;; 0x00000CD0      15           "msg_blk_count: "
-  ;; 0x00000CE0      19           "File size (bytes): "
-  ;; 0x00000D00      28           "Bytes read by wasi.fd_read: "
-  ;; 0x00000D20      20           "wasi.fd_read count: "
-  ;; 0x00000D40      18           "Copy to new addr: "
-  ;; 0x00000D60      18           "Copy length     : "
-  ;; 0x00000D80      30           "Allocated extra memory pages: "
-  ;; 0x00000DB0      27           "No memory allocation needed"
-  ;; 0x00000DD0      32           "Current memory page allocation: "
-  ;; 0x00000DF0      25           "wasi.fd_read chunk size: "
-  ;; 0x00000E10      22           "Processing full buffer"
-  ;; 0x00000E30      19           "Hit EOF (Partial): "
-  ;; 0x00000E60      16           "Hit EOF (Zero): "
-  ;; 0x00000E70      22           "Building empty msg blk"
-  ;; 0x00000E90      18           "File size (bits): "
-  ;; 0x00000EB0      17           "Distance to EOB: "
-  ;; 0x00000ED0      12           "EOD offset: "
-  ;; 0x00000EE0       9           "SHA arg: "
-  ;; Unused
-  ;; 0x00001DE4       ?   data    Buffer for strings being written to the console
   ;;
+  ;;     Offset  Length  Type    Description
+  ;; 0x00000000     192  i64x24  ROUND_CONSTANTS: 24 Keccak round constants (RC[0]..RC[23])
+  ;; 0x000000C0     200  i64x25  STATE (BUF_0): Keccak state — theta input, rho_pi output, chi/iota target
+  ;; 0x00000188     200  i64x25  WORK  (BUF_1): theta output, rho_pi input
+  ;; 0x00000250     168  bytes   PAD: rate-block staging buffer (max 168 bytes for SHAKE128)
+  ;;
+  ;; IO section — all WASI i64 output targets must be 8-byte aligned
+  ;; 0x00000300       4  i32     file_fd
+  ;; 0x00000304       4          (alignment padding)
+  ;; 0x00000308       8  i64     nread — WASI fd_read byte-count output (8-byte aligned)
+  ;; 0x00000310       8  i32×2   read_iovec  [ptr(4) | len(4)]
+  ;; 0x00000318       8  i32×2   write_iovec [ptr(4) | len(4)]
+  ;; 0x00000320       4  i32     argc
+  ;; 0x00000324       4  i32     argv_buf_len
+  ;; 0x00000328      64  i32×16  argv pointer array (supports up to 16 arguments)
+  ;; 0x00000368     256  bytes   argv string buffer
+  ;; 0x00000468     128  bytes   ascii_hash: hex-encoded digest (512 bits → 128 hex chars)
+  ;; 0x000004E8      16  bytes   nybble_table: "0123456789abcdef"
+  ;; 0x000004F8       2  bytes   ascii_spaces: "  "
+  ;; 0x00000500     128  bytes   str_write_buf: scratch buffer for assembling output strings
+  ;; 0x00000580      65  bytes   err_bad_args
+  ;; 0x000005C4      25  bytes   err_noent
+  ;; 0x000005E0      18  bytes   err_reading_file
+  ;; 0x000005F8      48  bytes   err_not_dir_symlink
+  ;; 0x00000630      19  bytes   err_bad_fd
+  ;; 0x00000648      17  bytes   err_access
+  ;; 0x00000660      23  bytes   err_not_permitted
+  ;; 0x00000678      25  bytes   err_filename_too_long
+  ;; 0x00000698      21  bytes   err_gen_io
+  ;; 0x000006B0       5  bytes   err_prefix ("Err: ")
+  ;; 0x000006B8      49  bytes   err_shake_bytes
+  ;;
+  ;; $main Memory Map: Pages 2-33
+  ;; 0x00010000  0x200000  READ_BUFFER: 2 MB file read staging area
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-  (global $KECCAK_ROUND_CONSTANTS_PTR i32 (i32.const 0x00000000))
-  ;; Round constants stored in little-endian byte order to match the LE state lanes
-  (data $keccak_round_constants (memory $main) (i32.const 0x00000000)
-    "\01\00\00\00\00\00\00\00" (; Round  0;) "\82\80\00\00\00\00\00\00" (; Round  1;)
-    "\8a\80\00\00\00\00\00\80" (; Round  2;) "\00\80\00\80\00\00\00\80" (; Round  3;)
-    "\8b\80\00\00\00\00\00\00" (; Round  4;) "\01\00\00\80\00\00\00\00" (; Round  5;)
-    "\81\80\00\80\00\00\00\80" (; Round  6;) "\09\80\00\00\00\00\00\80" (; Round  7;)
-    "\8a\00\00\00\00\00\00\00" (; Round  8;) "\88\00\00\00\00\00\00\00" (; Round  9;)
-    "\09\80\00\80\00\00\00\00" (; Round 10;) "\0a\00\00\80\00\00\00\00" (; Round 11;)
-    "\8b\80\00\80\00\00\00\00" (; Round 12;) "\8b\00\00\00\00\00\00\80" (; Round 13;)
-    "\89\80\00\00\00\00\00\80" (; Round 14;) "\03\80\00\00\00\00\00\80" (; Round 15;)
-    "\02\80\00\00\00\00\00\80" (; Round 16;) "\80\00\00\00\00\00\00\80" (; Round 17;)
-    "\0a\80\00\00\00\00\00\00" (; Round 18;) "\0a\00\00\80\00\00\00\80" (; Round 19;)
-    "\81\80\00\80\00\00\00\80" (; Round 20;) "\80\80\00\00\00\00\00\80" (; Round 21;)
-    "\01\00\00\80\00\00\00\00" (; Round 22;) "\08\80\00\80\00\00\00\80" (; Round 23;)
+  (global $ROUND_CONSTANTS_PTR i32 (i32.const 0x00000000))
+  (data (memory $main) (i32.const 0x00000000)
+    "\01\00\00\00\00\00\00\00" (; RC[ 0] ;) "\82\80\00\00\00\00\00\00" (; RC[ 1] ;)
+    "\8a\80\00\00\00\00\00\80" (; RC[ 2] ;) "\00\80\00\80\00\00\00\80" (; RC[ 3] ;)
+    "\8b\80\00\00\00\00\00\00" (; RC[ 4] ;) "\01\00\00\80\00\00\00\00" (; RC[ 5] ;)
+    "\81\80\00\80\00\00\00\80" (; RC[ 6] ;) "\09\80\00\00\00\00\00\80" (; RC[ 7] ;)
+    "\8a\00\00\00\00\00\00\00" (; RC[ 8] ;) "\88\00\00\00\00\00\00\00" (; RC[ 9] ;)
+    "\09\80\00\80\00\00\00\00" (; RC[10] ;) "\0a\00\00\80\00\00\00\00" (; RC[11] ;)
+    "\8b\80\00\80\00\00\00\00" (; RC[12] ;) "\8b\00\00\00\00\00\00\80" (; RC[13] ;)
+    "\89\80\00\00\00\00\00\80" (; RC[14] ;) "\03\80\00\00\00\00\00\80" (; RC[15] ;)
+    "\02\80\00\00\00\00\00\80" (; RC[16] ;) "\80\00\00\00\00\00\00\80" (; RC[17] ;)
+    "\0a\80\00\00\00\00\00\00" (; RC[18] ;) "\0a\00\00\80\00\00\00\80" (; RC[19] ;)
+    "\81\80\00\80\00\00\00\80" (; RC[20] ;) "\80\80\00\00\00\00\00\80" (; RC[21] ;)
+    "\01\00\00\80\00\00\00\00" (; RC[22] ;) "\08\80\00\80\00\00\00\80" (; RC[23] ;)
   )
 
-  ;; Memory areas used by the inner Keccak functions
-  ;; Ping-pong buffer pointers — BUF_0 and BUF_1 are adjacent; aliases share the same address
-  (global $THETA_A_BLK_PTR  (export "THETA_A_BLK_PTR")  i32 (i32.const 0x0000012C))  ;; BUF_0 — 200 bytes
-  (global $RHO_RESULT_PTR   (export "RHO_RESULT_PTR")   i32 (i32.const 0x0000012C))  ;; BUF_0 alias
-  (global $CHI_RESULT_PTR   (export "CHI_RESULT_PTR")   i32 (i32.const 0x0000012C))  ;; BUF_0 alias
-  (global $THETA_RESULT_PTR (export "THETA_RESULT_PTR") i32 (i32.const 0x000001F4))  ;; BUF_1 — 200 bytes
-  (global $PI_RESULT_PTR    (export "PI_RESULT_PTR")    i32 (i32.const 0x000001F4))  ;; BUF_1 alias
-  (global $THETA_C_OUT_PTR  (export "THETA_C_OUT_PTR")  i32 (i32.const 0x000002BC))  ;; 40 bytes
-  (global $THETA_D_OUT_PTR  (export "THETA_D_OUT_PTR")  i32 (i32.const 0x000002E4))  ;; 40 bytes
+  ;; Keccak state buffers
+  (global $STATE_PTR (export "STATE_PTR") i32 (i32.const 0x000000C0))  ;; BUF_0: 200 bytes
+  (global $WORK_PTR  (export "WORK_PTR")  i32 (i32.const 0x00000188))  ;; BUF_1: 200 bytes
 
-  ;; STATE_PTR/RATE_PTR alias BUF_0: state lives permanently in the permutation working buffer
-  (global $STATE_PTR    (export "STATE_PTR")    i32 (i32.const 0x0000012C))  ;; BUF_0 alias — 200 bytes
-  (global $DATA_PTR     (export "DATA_PTR")     i32 (i32.const 0x0000038C))  ;; length = rate bytes (up to 168 bytes for SHAKE128)
+  ;; Aliases used by the JS test harness for backward-compatible export names
+  (global $RATE_PTR          (export "RATE_PTR")          i32 (i32.const 0x000000C0))
+  (global $THETA_RESULT_PTR  (export "THETA_RESULT_PTR")  i32 (i32.const 0x00000188))
+  (global $RHO_PI_RESULT_PTR (export "RHO_PI_RESULT_PTR") i32 (i32.const 0x000000C0))
+  (global $CHI_RESULT_PTR    (export "CHI_RESULT_PTR")    i32 (i32.const 0x000000C0))
 
-  ;; Default digest size = 256 bits, so in 64-bit words, rate = 17 and capacity = 8
-  (global $RATE         (export "RATE")         (mut i32) (i32.const 17))
-  (global $CAPACITY     (export "CAPACITY")     (mut i32) (i32.const 8))
-  (global $RATE_PTR     (export "RATE_PTR")          i32  (i32.const 0x0000012C))  ;; BUF_0 alias
-  (global $CAPACITY_PTR (export "CAPACITY_PTR") (mut i32) (i32.const 0x0000012C))  ;; set at runtime: STATE_PTR + RATE*8
+  ;; Rate-block staging buffer
+  (global $PAD_PTR (export "PAD_PTR") i32 (i32.const 0x00000250))
 
-  (global $FD_FILE_PTR         i32 (i32.const 0x000004E4))
-  (global $NREAD_PTR           i32 (i32.const 0x000004F0))  ;; 8-byte aligned for fd_read i64 output
-  (global $IOVEC_READ_BUF_PTR  i32 (i32.const 0x000004F8))
-  (global $IOVEC_WRITE_BUF_PTR i32 (i32.const 0x00000500))
-  (global $FILE_PATH_PTR       i32 (i32.const 0x00000508))
-  (global $FILE_PATH_LEN_PTR   i32 (i32.const 0x0000050C))
-  (global $ARGS_COUNT_PTR      i32 (i32.const 0x00000510))
-  (global $ARGV_BUF_LEN_PTR    i32 (i32.const 0x00000514))
-  (global $ARGV_PTRS_PTR       i32 (i32.const 0x00000518))
-  (global $ARGV_BUF_PTR        i32 (i32.const 0x000005E4))
-  (global $ASCII_HASH_PTR      i32 (i32.const 0x00000A44))  ;; Will need at most 128 bytes (SHA3-512 = 128 hex chars)
+  ;; IO metadata
+  (global $FILE_FD_PTR         i32 (i32.const 0x00000300))
+  (global $NREAD_PTR           i32 (i32.const 0x00000308))  ;; 8-byte aligned for WASI i64 output
+  (global $IOVEC_READ_BUF_PTR  i32 (i32.const 0x00000310))
+  (global $IOVEC_WRITE_BUF_PTR i32 (i32.const 0x00000318))
+  (global $ARGS_COUNT_PTR      i32 (i32.const 0x00000320))
+  (global $ARGV_BUF_LEN_PTR    i32 (i32.const 0x00000324))
+  (global $ARGV_PTRS_PTR       i32 (i32.const 0x00000328))
+  (global $ARGV_BUF_PTR        i32 (i32.const 0x00000368))
+  (global $ASCII_HASH_PTR      i32 (i32.const 0x00000468))
+  (global $NYBBLE_TABLE        i32 (i32.const 0x000004E8))
+  (global $ASCII_SPACES        i32 (i32.const 0x000004F8))
+  (global $STR_WRITE_BUF_PTR   i32 (i32.const 0x00000500))
 
-  (global $NYBBLE_TABLE        i32 (i32.const 0x00000AC4))  ;; Length = 16
-  (data (memory $main) (i32.const 0x00000AC4) "0123456789abcdef")
+  (data (memory $main) (i32.const 0x000004E8) "0123456789abcdef")
+  (data (memory $main) (i32.const 0x000004F8) "  ")
 
-  (global $DIGEST_LEN     (mut i32) (i32.const 256))  ;; Set by init_state; default 256
-  (global $PARTIAL_BYTES  (mut i32) (i32.const 0))    ;; absorb: bytes accumulated in current partial rate-block
-  (global $DOMAIN_BYTE    (mut i32) (i32.const 0x06)) ;; 0x06 = SHA3, 0x1f = SHAKE
-  (global $SQUEEZE_OFFSET (mut i32) (i32.const 0))    ;; squeeze: byte offset within current rate-block
-
-  ;; Rate block domain suffixes for SHA3 and SHAKE functions
-  (global $SHAKE_BYTE (export "DOMAIN_SHAKE") i32 (i32.const 0x1f))
-  (global $SHA3_BYTE  (export "DOMAIN_SHA3")  i32 (i32.const 0x06))
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Error messages
-  (global $ASCII_SPACES        i32 (i32.const 0x00000AE4))  ;; Length = 2
-  (data (memory $main) (i32.const 0x00000AE4) "  ")
+  (global $ERR_BAD_ARGS        i32 (i32.const 0x00000580)) ;; Length = 65
+  (data  (memory $main)            (i32.const 0x00000580) "Bad args: 224|256|384|512 <file>  or  shake128|256 <bytes> <file>")
 
-  (global $ERR_MSG_PREFIX      i32 (i32.const 0x00000AE7))  ;; Length = 5
-  (data (memory $main) (i32.const 0x00000AE7) "Err: ")
+  (global $ERR_NOENT           i32 (i32.const 0x000005C4)) ;; Length = 25
+  (data  (memory $main)            (i32.const 0x000005C4) "No such file or directory")
 
-  (global $ERR_MSG_BAD_ARGS    i32 (i32.const 0x00000AEC))  ;; Length = 65
-  (data (memory $main) (i32.const 0x00000AEC) "Bad args: 224|256|384|512 <file>  or  shake128|256 <bytes> <file>")
+  (global $ERR_READING_FILE    i32 (i32.const 0x000005E0)) ;; Length = 18
+  (data  (memory $main)            (i32.const 0x000005E0) "Error reading file")
 
-  (global $ERR_MSG_NOENT       i32 (i32.const 0x00000B30))  ;; Length = 25
-  (data (memory $main) (i32.const 0x00000B30) "No such file or directory")
+  (global $ERR_NOT_DIR_SYMLINK i32 (i32.const 0x000005F8)) ;; Length = 48
+  (data  (memory $main)            (i32.const 0x000005F8) "Neither a directory nor a symlink to a directory")
 
-  (global $ERR_READING_FILE    i32 (i32.const 0x00000B88))  ;; Length = 18
-  (data (memory $main) (i32.const 0x00000B88) "Error reading file")
+  (global $ERR_BAD_FD          i32 (i32.const 0x00000630)) ;; Length = 19
+  (data  (memory $main)            (i32.const 0x00000630) "Bad file descriptor")
 
-  (global $ERR_NOT_DIR_SYMLINK i32 (i32.const 0x00000BA8))  ;; Length = 48
-  (data (memory $main) (i32.const 0x00000BA8) "Neither a directory nor a symlink to a directory")
+  (global $ERR_ACCESS          i32 (i32.const 0x00000648)) ;; Length = 17
+  (data  (memory $main)            (i32.const 0x00000648) "Permission denied")
 
-  (global $ERR_BAD_FD          i32 (i32.const 0x00000BD8))  ;; Length = 19
-  (data (memory $main) (i32.const 0x00000BD8) "Bad file descriptor")
+  (global $ERR_NOT_PERMITTED   i32 (i32.const 0x00000660)) ;; Length = 23
+  (data  (memory $main)            (i32.const 0x00000660) "Operation not permitted")
 
-  (global $ERR_MEM_ALLOC       i32 (i32.const 0x00000BF8))  ;; Length = 26
-  (data (memory $main) (i32.const 0x00000BF8) "Memory allocation failed: ")
+  (global $ERR_FILENAME_LONG   i32 (i32.const 0x00000678)) ;; Length = 25
+  (data  (memory $main)            (i32.const 0x00000678) "Filename too long (>=256)")
 
-  (global $ERR_NOT_PERMITTED   i32 (i32.const 0x00000C18))  ;; Length = 23
-  (data (memory $main) (i32.const 0x00000C18) "Operation not permitted")
+  (global $ERR_GEN_IO          i32 (i32.const 0x00000698)) ;; Length = 21
+  (data  (memory $main)            (i32.const 0x00000698) "IO error opening file")
 
-  (global $ERR_ARGV_TOO_LONG   i32 (i32.const 0x00000C38))  ;; Length = 25
-  (data (memory $main) (i32.const 0x00000C38) "Filename too long (>=256)")
+  (global $ERR_PREFIX          i32 (i32.const 0x000006B0)) ;; Length = 5
+  (data  (memory $main)            (i32.const 0x000006B0) "Err: ")
 
-  (global $ERR_ACCESS          i32 (i32.const 0x00000C58))  ;; Length = 17
-  (data (memory $main) (i32.const 0x00000C58) "Permission denied")
+  (global $ERR_SHAKE_BYTES     i32 (i32.const 0x000006B8)) ;; Length = 49
+  (data  (memory $main)            (i32.const 0x000006B8) "SHAKE byte count must be in the range 1..16777216")
 
-  (global $ERR_GEN_IO          i32 (i32.const 0x00000C78))  ;; Length = 21
-  (data (memory $main) (i32.const 0x00000C78) "IO error opening file")
+  ;; 2 MB file read buffer (pages 2-33)
+  (global $READ_BUFFER_PTR  (export "READ_BUFFER_PTR")  i32 (i32.const 0x00010000))
+  (global $READ_BUFFER_SIZE (export "READ_BUFFER_SIZE") i32 (i32.const 0x00200000))
 
-  (global $ERR_MSG_SHAKE_BYTES i32 (i32.const 0x00000F00))  ;; Length = 49
-  (data (memory $main) (i32.const 0x00000F00) "SHAKE byte count must be in the range 1..16777216")
+  ;; Domain suffix bytes (FIPS 202 §6.1 and §6.2)
+  (global $DOMAIN_SHA3     (export "DOMAIN_SHA3")   i32 (i32.const 0x06))
+  (global $DOMAIN_SHAKE    (export "DOMAIN_SHAKE")  i32 (i32.const 0x1f))
 
-  ;;@debug-start
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Debug messages
-  (global $DBG_MSG_ARGC        i32 (i32.const 0x00000C90))  ;; Length = 6
-  (data (memory $main) (i32.const 0x00000C90) "argc: ")
-
-  (global $DBG_MSG_ARGV_LEN    i32 (i32.const 0x00000CA0))  ;; Length = 14
-  (data (memory $main) (i32.const 0x00000CA0) "argv_buf_len: ")
-
-  (global $DBG_STEP            i32 (i32.const 0x00000CB0))  ;; Length = 6
-  (data (memory $main) (i32.const 0x00000CB0) "Step: ")
-
-  (global $DBG_RETURN_CODE     i32 (i32.const 0x00000CB8))  ;; Length = 13
-  (data (memory $main) (i32.const 0x00000CB8) "Return code: ")
-
-  (global $DBG_MSG_BLK_COUNT   i32 (i32.const 0x00000CD0))  ;; Length = 15
-  (data (memory $main) (i32.const 0x00000CD0) "msg_blk_count: ")
-
-  (global $DBG_FILE_SIZE       i32 (i32.const 0x00000CE0))  ;; Length = 19
-  (data (memory $main) (i32.const 0x00000CE0) "File size (bytes): ")
-
-  (global $DBG_BYTES_READ      i32 (i32.const 0x00000D00))  ;; Length = 28
-  (data (memory $main) (i32.const 0x00000D00) "Bytes read by wasi.fd_read: ")
-
-  (global $DBG_READ_COUNT      i32 (i32.const 0x00000D20))  ;; Length = 20
-  (data (memory $main) (i32.const 0x00000D20) "wasi.fd_read count: ")
-
-  (global $DBG_COPY_MEM_TO     i32 (i32.const 0x00000D40))  ;; Length = 18
-  (data (memory $main) (i32.const 0x00000D40) "Copy to new addr: ")
-
-  (global $DBG_COPY_MEM_LEN    i32 (i32.const 0x00000D60))  ;; Length = 18
-  (data (memory $main) (i32.const 0x00000D60) "Copy length     : ")
-
-  (global $DBG_MEM_GROWN       i32 (i32.const 0x00000D80))  ;; Length = 30
-  (data (memory $main) (i32.const 0x00000D80) "Allocated extra memory pages: ")
-
-  (global $DBG_NO_MEM_ALLOC    i32 (i32.const 0x00000DB0))  ;; Length = 27
-  (data (memory $main) (i32.const 0x00000DB0) "No memory allocation needed")
-
-  (global $DBG_MEM_SIZE        i32 (i32.const 0x00000DD0))  ;; Length = 32
-  (data (memory $main) (i32.const 0x00000DD0) "Current memory page allocation: ")
-
-  (global $DBG_CHUNK_SIZE      i32 (i32.const 0x00000DF0))  ;; Length = 25
-  (data (memory $main) (i32.const 0x00000DF0) "wasi.fd_read chunk size: ")
-
-  (global $DBG_FULL_BUFFER     i32 (i32.const 0x00000E10))  ;; Length = 22
-  (data (memory $main) (i32.const 0x00000E10) "Processing full buffer")
-
-  (global $DBG_EOF_PARTIAL     i32 (i32.const 0x00000E30))  ;; Length = 19
-  (data (memory $main) (i32.const 0x00000E30) "Hit EOF (Partial): ")
-
-  (global $DBG_EOF_ZERO        i32 (i32.const 0x00000E60))  ;; Length = 16
-  (data (memory $main) (i32.const 0x00000E60) "Hit EOF (Zero): ")
-
-  (global $DBG_EMPTY_MSG_BLK   i32 (i32.const 0x00000E70))  ;; Length = 22
-  (data (memory $main) (i32.const 0x00000E70) "Building empty msg blk")
-
-  (global $DBG_FILE_SIZE_BITS  i32 (i32.const 0x00000E90))  ;; Length = 18
-  (data (memory $main) (i32.const 0x00000E90) "File size (bits): ")
-
-  (global $DBG_EOB_DISTANCE    i32 (i32.const 0x00000EB0))  ;; Length = 17
-  (data (memory $main) (i32.const 0x00000EB0) "Distance to EOB: ")
-
-  (global $DBG_EOD_OFFSET      i32 (i32.const 0x00000ED0))  ;; Length = 12
-  (data (memory $main) (i32.const 0x00000ED0) "EOD offset: ")
-
-  (global $DBG_SHA_ARG         i32 (i32.const 0x00000EE0))  ;; Length = 9
-  (data (memory $main) (i32.const 0x00000EE0) "SHA arg: ")
-  ;;@debug-end
-
-  (global $STR_WRITE_BUF_PTR   i32 (i32.const 0x00001DE4))
-
-  ;; $main Memory Map: Pages 2-33
-  (global $READ_BUFFER_PTR  (export "READ_BUFFER_PTR")  i32 (i32.const 0x00010000))  ;; Start of memory page 2
-  (global $READ_BUFFER_SIZE (export "READ_BUFFER_SIZE") i32 (i32.const 0x00200000))  ;; fd_read buffer size = 2Mb
-
-  ;; If you change the value of $READ_BUFFER_SIZE, you must manually update $MSG_BLKS_PER_BUFFER!
-  (global $MSG_BLKS_PER_BUFFER i32 (i32.const 0x00008000))  ;; $READ_BUFFER_SIZE / 64
+  ;; Mutable sponge state
+  (global $RATE            (export "RATE")     (mut i32) (i32.const 17))
+  (global $CAPACITY        (export "CAPACITY") (mut i32) (i32.const 8))
+  (global $DIGEST_LEN                          (mut i32) (i32.const 256))
+  (global $DOMAIN_BYTE                         (mut i32) (i32.const 0x06))
+  (global $PARTIAL_BYTES                       (mut i32) (i32.const 0))
+  (global $SQUEEZE_OFFSET                      (mut i32) (i32.const 0))
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Initialise module state for a new hash/XOF computation.
-  ;; Sets rate, capacity, domain byte; zeros the Keccak state; resets the absorb and squeeze cursors.
+  ;; Entry point for standalone WASI runtime execution (E.G. from wasmtime or wasmer).
+  ;;
+  ;; Usage depends on the mode in which the module is operating:
+  ;;   SHA2 Drop-in Replacement Mode:        <cmd> 224|256|384|512 <file>
+  ;;   SHA3 Extensible Output Function Mode: <cmd> shake128|shake256 <bytes> <file>
+  ;;
+  ;; Since the runtime may prepend its own argv items (E.G. --dev for development mode), all arguments are addressed
+  ;; from the end.
+  ;;
+  ;; Steps:
+  ;;   0) Parse argc/argv — validate argument count and buffer length.
+  ;;   1) Identify mode (SHA3 or SHAKE) from the second- or third-last arguments.
+  ;;   2) Open the target file from the directory preopened by the WASI runtime (will be fd 3).
+  ;;   3) Initialise the sponge state.
+  ;;   4) Read the file in 2 MB chunks, absorbing each chunk.
+  ;;   5) Repeat step 4 until we hit EOF, at which point we finalize the internal state.
+  ;;   6) Close the file.
+  ;;   7) Squeeze the digest zero or more times and write the required length of data to stdout.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func (export "_start")
+    (local $argc          i32)
+    (local $argv_buf_len  i32)
+    (local $hash_len_ptr  i32)
+    (local $hash_len_val  i32)
+    (local $digest_len    i32)
+    (local $digest_bytes  i32)
+    (local $domain_byte   i32)
+    (local $filename_ptr  i32)
+    (local $filename_len  i32)
+    (local $file_fd       i32)
+    (local $return_code   i32)
+    (local $bytes_read    i32)
+    (local $remaining     i32)
+    (local $chunk         i32)
+    (local $byte_offset   i32)
+
+    (block $exit
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 0: Fetch argument count and total buffer length
+      (drop (call $wasi.args_sizes_get (global.get $ARGS_COUNT_PTR) (global.get $ARGV_BUF_LEN_PTR)))
+
+      (local.set $argc         (i32.load (memory $main) (global.get $ARGS_COUNT_PTR)))
+      (local.set $argv_buf_len (i32.load (memory $main) (global.get $ARGV_BUF_LEN_PTR)))
+
+      (if (i32.gt_u (local.get $argv_buf_len) (i32.const 256))
+        (then (call $writeln (i32.const 2) (global.get $ERR_FILENAME_LONG) (i32.const 25)) (br $exit))
+      )
+
+      ;; Need at least: module-name + hash-variant + filename = 3 items; argc must be >= 2 user args
+      (if (i32.lt_u (local.get $argc) (i32.const 2))
+        (then (call $writeln (i32.const 2) (global.get $ERR_BAD_ARGS) (i32.const 65)) (br $exit))
+      )
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 1: Identify algorithm from the end of argv
+      (drop (call $wasi.args_get (global.get $ARGV_PTRS_PTR) (global.get $ARGV_BUF_PTR)))
+
+      (block $args_ok
+        ;; XOF (SHAKE) detection
+        ;; Look for "shak" as the first four bytes of the third-last argument
+        (if (i32.ge_u (local.get $argc) (i32.const 3))
+          (then
+            (drop
+              (local.set $hash_len_ptr (call $fetch_arg_n (i32.sub (local.get $argc) (i32.const 2))))
+            )
+            (if
+              (i32.eq
+                (i32.load (memory $main) (local.get $hash_len_ptr))
+                (i32.const 0x6B616873) ;; ASCII "shak" in LE format
+              )
+              (then
+                (block $shake_ok
+                  (if ;; Have we found "shake128"?
+                    (i32.eq
+                      (i32.load (memory $main) (i32.add (local.get $hash_len_ptr) (i32.const 4)))
+                      (i32.const 0x38323165) ;; ASCII "e128" in LE format
+                    )
+                    (then
+                      (local.set $digest_len  (i32.const 128))
+                      (local.set $domain_byte (global.get $DOMAIN_SHAKE))
+                      (br $shake_ok)
+                    )
+                  )
+                  (if ;; Have we found "shake256"?
+                    (i32.eq
+                      (i32.load (memory $main) (i32.add (local.get $hash_len_ptr) (i32.const 4)))
+                      (i32.const 0x36353265) ;; ASCII "e256" in LE format
+                    )
+                    (then
+                      (local.set $digest_len  (i32.const 256))
+                      (local.set $domain_byte (global.get $DOMAIN_SHAKE))
+                      (br $shake_ok)
+                    )
+                  )
+                  ;; Nope, so some other value has been received.
+                  ;; Write error message and exit
+                  (call $writeln (i32.const 2) (global.get $ERR_BAD_ARGS) (i32.const 65))
+                  (br $exit)
+                )
+
+                ;; Parse output byte count from second-last arg
+                (local.set $hash_len_val
+                  (local.set $hash_len_ptr (call $fetch_arg_n (i32.sub (local.get $argc) (i32.const 1))))
+                )
+                (local.set $digest_bytes (call $parse_decimal (local.get $hash_len_ptr) (local.get $hash_len_val)))
+
+                ;; Check that 0 < $digest_bytes < 16 Mb
+                ;; This is an arbitrary sanity limit to prevent infinite overrun in the squeeze loop
+                (if
+                  (i32.or
+                    (i32.eqz  (local.get $digest_bytes))
+                    (i32.gt_u (local.get $digest_bytes) (i32.const 0x01000000))
+                  )
+                  (then
+                    (call $writeln (i32.const 2) (global.get $ERR_SHAKE_BYTES) (i32.const 49))
+                    (br $exit)
+                  )
+                )
+                (br $args_ok) ;; SHAKE args OK, so no further parsing needed
+              )
+            )
+          )
+        )
+
+        ;; SHA2 Drop-in replacement mode
+        ;; The second-last argument should contain the digest length in bits
+        (drop (local.set $hash_len_ptr (call $fetch_arg_n (i32.sub (local.get $argc) (i32.const 1)))))
+        (local.set $hash_len_val (i32.load (memory $main) (local.get $hash_len_ptr)))
+
+        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00343232)) ;; ASCII "224\0" in LE format
+          (then
+            (local.set $digest_len  (i32.const 224))
+            (local.set $domain_byte (global.get $DOMAIN_SHA3))
+            (br $args_ok)
+          )
+        )
+        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00363532)) ;; ASCII "256\0" in LE format
+          (then
+            (local.set $digest_len  (i32.const 256))
+            (local.set $domain_byte (global.get $DOMAIN_SHA3))
+            (br $args_ok)
+          )
+        )
+        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00343833)) ;; ASCII "384\0" in LE format
+          (then
+            (local.set $digest_len  (i32.const 384))
+            (local.set $domain_byte (global.get $DOMAIN_SHA3))
+            (br $args_ok)
+          )
+        )
+        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00323135)) ;; ASCII "512\0" in LE format
+          (then
+            (local.set $digest_len  (i32.const 512))
+            (local.set $domain_byte (global.get $DOMAIN_SHA3))
+            (br $args_ok)
+          )
+        )
+
+        ;; If we get to here, an invalid value has been received for the digest length.
+        ;; Write error message and exit
+        (call $writeln (i32.const 2) (global.get $ERR_BAD_ARGS) (i32.const 65))
+        (br $exit)
+      ) ;; $args_ok
+
+      ;; For SHA2 drop-in replacement mode, the output byte count equals digest_len / 8
+      ;; SHAKE coding has already parsed it above
+      (if (i32.ne (local.get $domain_byte) (global.get $DOMAIN_SHAKE))
+        (then (local.set $digest_bytes (i32.shr_u (local.get $digest_len) (i32.const 3))))
+      )
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 2: Open the file (last arg) from the preopened directory (fd 3)
+      (local.set $filename_len
+        (local.set $filename_ptr (call $fetch_arg_n (local.get $argc)))
+      )
+
+      (local.tee $return_code
+        (local.set $file_fd
+          (call $file_open (i32.const 3) (local.get $filename_ptr) (local.get $filename_len))
+        )
+      )
+      (if (then (br $exit)))
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 3: Initialise sponge
+      (call $init_state (local.get $digest_len) (local.get $domain_byte))
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 4: Read the file in 2 MB chunks, absorbing each chunk
+      (i32.store (memory $main) (global.get $IOVEC_READ_BUF_PTR) (global.get $READ_BUFFER_PTR))
+      (i32.store (memory $main)
+        (i32.add (global.get $IOVEC_READ_BUF_PTR) (i32.const 4))
+        (global.get $READ_BUFFER_SIZE)
+      )
+
+      (loop $read_chunk
+        (local.tee $return_code
+          (call $wasi.fd_read
+            (local.get $file_fd)
+            (global.get $IOVEC_READ_BUF_PTR)
+            (i32.const 1)
+            (global.get $NREAD_PTR)
+          )
+        )
+        (if (then (call $writeln (i32.const 2) (global.get $ERR_READING_FILE) (i32.const 18)) (br $exit)))
+
+        (local.set $bytes_read (i32.load (memory $main) (global.get $NREAD_PTR)))
+
+        (if (local.get $bytes_read)
+          (then (call $absorb (global.get $READ_BUFFER_PTR) (local.get $bytes_read)))
+        )
+        (br_if $read_chunk (local.get $bytes_read))
+      )
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 5: Finalise
+      (call $finalize)
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 6: Close the file
+      (drop (call $wasi.fd_close (local.get $file_fd)))
+
+      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      ;; Step 7: Squeeze the digest in 64-byte chunks, hex-encode, and write to stdout
+      (local.set $remaining (local.get $digest_bytes))
+
+      (loop $hex_chunk
+        (local.set $chunk
+          (if (result i32) (i32.lt_u (local.get $remaining) (i32.const 64))
+            (then (local.get $remaining))
+            (else (i32.const 64))
+          )
+        )
+        (call $squeeze (global.get $PAD_PTR) (local.get $chunk))
+
+        (local.set $byte_offset (i32.const 0))
+        (loop $to_hex
+          (call $to_hex_pair
+            (i32.load8_u (memory $main) (i32.add (global.get $PAD_PTR) (local.get $byte_offset)))
+            (i32.add (global.get $ASCII_HASH_PTR) (i32.shl (local.get $byte_offset) (i32.const 1)))
+          )
+          (br_if $to_hex
+            (i32.lt_u
+              (local.tee $byte_offset (i32.add (local.get $byte_offset) (i32.const 1)))
+              (local.get $chunk)
+            )
+          )
+        )
+
+        (call $write (global.get $FD_STDOUT) (global.get $ASCII_HASH_PTR) (i32.shl (local.get $chunk) (i32.const 1)))
+        (local.set $remaining (i32.sub (local.get $remaining) (local.get $chunk)))
+        (br_if $hex_chunk (local.get $remaining))
+      )
+
+      ;; In SHA2 drop-in replacement mode, additionally print "  <filename>\n"
+      ;; In XOF mode, just print a newline
+      (if (i32.eq (local.get $domain_byte) (global.get $DOMAIN_SHA3))
+        (then
+          (call $write   (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 2))
+          (call $writeln (global.get $FD_STDOUT) (local.get $filename_ptr) (local.get $filename_len))
+        )
+        (else
+          ;; Write a LF by telling $writeln() to write a zero length string
+          (call $writeln (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 0))
+        )
+      )
+    ) ;; $exit
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Initialise the sponge for a new computation.
+  ;;   * Sets RATE, CAPACITY, DOMAIN_BYTE
+  ;;   * Zeros the Keccak state
+  ;;   * Resets the absorb and squeeze cursors
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $init_state (export "init_state")
         (param $digest_len  i32)  ;; SHA3: 224|256|384|512; SHAKE: 128 (SHAKE128) or 256 (SHAKE256)
         (param $domain_byte i32)  ;; 0x06 = SHA3, 0x1f = SHAKE
-
     ;;@debug-start
     (local $debug_active i32)
     (local $fn_id        i32)
-
     (local.set $debug_active (i32.const 1))
-    (local.set $fn_id        (i32.const 10)) ;; See entry in debugMsgs array in ./utils/debug_msgs.mjs
-
+    (local.set $fn_id        (i32.const 9))
     (call $log.fnEnter     (local.get $debug_active) (local.get $fn_id))
     (call $log.singleDec   (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $digest_len))
     (call $log.singleFmtU8 (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $domain_byte))
@@ -384,20 +538,12 @@
     (global.set $DIGEST_LEN     (local.get $digest_len))
     (global.set $PARTIAL_BYTES  (i32.const 0))
     (global.set $SQUEEZE_OFFSET (i32.const 0))
-
-    ;; Both $RATE and $CAPACITY hold the number of u64 words in each portion of the state
-    ;; $RATE + $CAPACITY must always equal 25
     (global.set $RATE
-      (i32.shr_u
-        (i32.sub (i32.const 1600) (i32.shl (local.get $digest_len) (i32.const 1)))
-        (i32.const 6)
-      )
+      (i32.shr_u (i32.sub (i32.const 1600) (i32.shl (local.get $digest_len) (i32.const 1))) (i32.const 6))
     )
-    (global.set $CAPACITY     (i32.sub (i32.const 25) (global.get $RATE)))
-    (global.set $CAPACITY_PTR (i32.add (global.get $STATE_PTR) (i32.shl (global.get $RATE) (i32.const 3))))
+    (global.set $CAPACITY (i32.sub (i32.const 25) (global.get $RATE)))
 
     (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200))
-
     ;;@debug-start
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 2) (global.get $RATE))
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 3) (global.get $CAPACITY))
@@ -406,60 +552,52 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Absorb $src_len bytes at $src_ptr into the sponge state.
-  ;; Handles partial-block accumulation across calls; call finalize() when all input has been absorbed.
+  ;; Absorb $src_len bytes at $src_ptr into the sponge.
+  ;; Accumulates partial rate-blocks across calls;
+  ;; When file IO hits EOF, call finalize() instead of absorb().
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $absorb (export "absorb")
         (param $src_ptr  i32)
         (param $src_len  i32)
 
-    (local $rate        i32)
-    (local $rate_bytes  i32)
-    (local $fill_amount i32)
+    (local $rate       i32)
+    (local $rate_bytes i32)
+    (local $fill_len   i32)
     ;;@debug-start
     (local $debug_active i32)
     (local $fn_id        i32)
-
     (local.set $debug_active (i32.const 1))
-    (local.set $fn_id        (i32.const 11)) ;; See entry in debugMsgs array in ./utils/debug_msgs.mjs
-
+    (local.set $fn_id        (i32.const 10))
     (call $log.fnEnter   (local.get $debug_active) (local.get $fn_id))
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $src_len))
     ;;@debug-end
 
-
-    ;; The value of the global $RATE is fetched on each iteration of the $full_blocks loop.  But since this field is
-    ;; mutable, wasm-opt can't hoist the value outside the loop.  Moving it into a local variable allows wasm-opt to
-    ;; avoid fetching on every loop iteration
+    ;; Cache RATE into a local so the optimiser can hoist it out of loops
     (local.set $rate       (global.get $RATE))
     (local.set $rate_bytes (i32.shl (local.get $rate) (i32.const 3)))
 
-    ;;@debug-start
-    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $rate_bytes))
-    ;;@debug-end
-
-    ;; Complete any partial rate-block accumulated from a previous absorb call
+    ;; Complete any partial rate-block carried over from a previous absorb() call
     (if (global.get $PARTIAL_BYTES)
       (then
-        (local.set $fill_amount (i32.sub (local.get $rate_bytes) (global.get $PARTIAL_BYTES)))
-        (if (i32.gt_u (local.get $fill_amount) (local.get $src_len))
-          (then (local.set $fill_amount (local.get $src_len)))
+        (local.set $fill_len
+          (if (result i32) (i32.lt_u (local.get $src_len)
+                             (i32.sub (local.get $rate_bytes) (global.get $PARTIAL_BYTES)))
+            (then (local.get $src_len))
+            (else (i32.sub (local.get $rate_bytes) (global.get $PARTIAL_BYTES)))
+          )
         )
-        ;;@debug-start
-        (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $fill_amount))
-        ;;@debug-end
         (memory.copy (memory $main) (memory $main)
-          (i32.add (global.get $DATA_PTR) (global.get $PARTIAL_BYTES))
+          (i32.add (global.get $PAD_PTR) (global.get $PARTIAL_BYTES))
           (local.get $src_ptr)
-          (local.get $fill_amount)
+          (local.get $fill_len)
         )
-        (global.set $PARTIAL_BYTES (i32.add (global.get $PARTIAL_BYTES) (local.get $fill_amount)))
-        (local.set $src_ptr        (i32.add (local.get $src_ptr)        (local.get $fill_amount)))
-        (local.set $src_len        (i32.sub (local.get $src_len)        (local.get $fill_amount)))
+        (global.set $PARTIAL_BYTES (i32.add (global.get $PARTIAL_BYTES) (local.get $fill_len)))
+        (local.set $src_ptr        (i32.add (local.get $src_ptr)        (local.get $fill_len)))
+        (local.set $src_len        (i32.sub (local.get $src_len)        (local.get $fill_len)))
 
         (if (i32.eq (global.get $PARTIAL_BYTES) (local.get $rate_bytes))
           (then
-            (call $xor_data_with_rate (local.get $rate) (global.get $DATA_PTR))
+            (call $xor_block_into_state (local.get $rate) (global.get $PAD_PTR))
             (call $keccak24)
             (global.set $PARTIAL_BYTES (i32.const 0))
           )
@@ -468,32 +606,29 @@
     )
 
     ;; Absorb complete rate-blocks directly from the source buffer
-    (block $no_full_blocks
-      (loop $full_blocks
-        (br_if $no_full_blocks (i32.lt_u (local.get $src_len) (local.get $rate_bytes)))
-
-        (call $xor_data_with_rate (local.get $rate) (local.get $src_ptr))
-        (call $keccak24)
-
-        (local.set $src_ptr (i32.add (local.get $src_ptr) (local.get $rate_bytes)))
-        (local.set $src_len (i32.sub (local.get $src_len) (local.get $rate_bytes)))
-
-        (br $full_blocks)
+    (if (i32.ge_u (local.get $src_len) (local.get $rate_bytes))
+      (then
+        (loop $full_blocks
+          (call $xor_block_into_state (local.get $rate) (local.get $src_ptr))
+          (call $keccak24)
+          (local.set $src_ptr (i32.add (local.get $src_ptr) (local.get $rate_bytes)))
+          (local.set $src_len (i32.sub (local.get $src_len) (local.get $rate_bytes)))
+          (br_if $full_blocks (i32.ge_u (local.get $src_len) (local.get $rate_bytes)))
+        )
       )
     )
 
-    ;; Save any leftover bytes into DATA_PTR for the next absorb call or for finalize
+    ;; Save any leftover bytes for the next absorb() call or for finalize()
     (if (local.get $src_len)
       (then
         (memory.copy (memory $main) (memory $main)
-          (global.get $DATA_PTR)
+          (global.get $PAD_PTR)
           (local.get $src_ptr)
           (local.get $src_len)
         )
         (global.set $PARTIAL_BYTES (local.get $src_len))
       )
     )
-
     ;;@debug-start
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 3) (global.get $PARTIAL_BYTES))
     (call $log.fnExit    (local.get $debug_active) (local.get $fn_id))
@@ -501,18 +636,21 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Complete the absorb phase by appling the correct padding byte (0x06 for SHA3 or 0x1f for SHAKE) in the remainder of
-  ;; the rate block, then run the final Keccak round
+  ;; Complete the absorb phase:
+  ;;
+  ;; 1) Apply the pad10*1 padding function (FIPS 202 §5.1)
+  ;; 2) Terminate the data in the current rate block:
+  ;;    2.1) Write the appropriate domain separator (0x06 = SHA3, 0x1f = SHAKE) after the last data byte
+  ;;    2.2) In the last byte in the rate block, set the senior bit to 1
+  ;; 3) Run the final Keccak round
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $finalize (export "finalize")
     (local $rate_bytes i32)
     ;;@debug-start
     (local $debug_active i32)
     (local $fn_id        i32)
-
     (local.set $debug_active (i32.const 1))
-    (local.set $fn_id        (i32.const 12))
-
+    (local.set $fn_id        (i32.const 11))
     (call $log.fnEnter   (local.get $debug_active) (local.get $fn_id))
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (global.get $PARTIAL_BYTES))
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 1) (global.get $DOMAIN_BYTE))
@@ -520,36 +658,34 @@
 
     (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
 
-    ;;@debug-start
-    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $rate_bytes))
-    ;;@debug-end
-
-    ;; Zero the portion of DATA_PTR that follows the last absorbed byte
+    ;; Zero the portion of PAD_PTR that follows the last absorbed byte
     (memory.fill (memory $main)
-      (i32.add (global.get $DATA_PTR) (global.get $PARTIAL_BYTES))
+      (i32.add (global.get $PAD_PTR) (global.get $PARTIAL_BYTES))
       (i32.const 0)
       (i32.sub (local.get $rate_bytes) (global.get $PARTIAL_BYTES))
     )
+
     ;; Write domain separator immediately after the last absorbed byte
     (i32.store8 (memory $main)
-      (i32.add (global.get $DATA_PTR) (global.get $PARTIAL_BYTES))
+      (i32.add (global.get $PAD_PTR) (global.get $PARTIAL_BYTES))
       (global.get $DOMAIN_BYTE)
     )
-    ;; Set the high bit of the last byte in the rate block (pad10*1 rule)
+
+    ;; Set the high bit of the last byte in the rate block (pad10*1 closing bit)
     (i32.store8 (memory $main)
-      (i32.add (global.get $DATA_PTR) (i32.sub (local.get $rate_bytes) (i32.const 1)))
+      (i32.add (global.get $PAD_PTR) (i32.sub (local.get $rate_bytes) (i32.const 1)))
       (i32.or
         (i32.load8_u (memory $main)
-          (i32.add (global.get $DATA_PTR) (i32.sub (local.get $rate_bytes) (i32.const 1)))
+          (i32.add (global.get $PAD_PTR) (i32.sub (local.get $rate_bytes) (i32.const 1)))
         )
-        (i32.const 0x80)
+        (i32.const 0x80) ;; Set the high bit
       )
     )
-    (call $xor_data_with_rate (global.get $RATE) (global.get $DATA_PTR))
+
+    ;; Absorb the final block and run the last Keccak round
+    (call $xor_block_into_state (global.get $RATE) (global.get $PAD_PTR))
     (call $keccak24)
-
     (global.set $SQUEEZE_OFFSET (i32.const 0))
-
     ;;@debug-start
     (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
     ;;@debug-end
@@ -557,7 +693,14 @@
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Squeeze $len bytes from the sponge state into the buffer at $out_ptr.
-  ;; May be called repeatedly; applies an additional Keccak permutation whenever the rate block is exhausted.
+  ;; If $len exceeds the number of bytes remaining in the current rate block, an additional Keccak permutation is
+  ;; performed and squeezing continues from the start of the rate block.
+  ;;
+  ;; When using SHAKE128 or SHAKE256, the squeeze function can be called an unlimited number of times to generate an
+  ;; arbitrary-length output stream of psuedo-random data
+  ;;
+  ;; When SHA3 is used as a SHA2 drop-in replacement, the squeeze function does not need to be called since after
+  ;; calling finalise(), the first DIGEST_LEN bytes of the state already contain the required hash value
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $squeeze (export "squeeze")
         (param $out_ptr i32)
@@ -569,380 +712,441 @@
     ;;@debug-start
     (local $debug_active i32)
     (local $fn_id        i32)
-
     (local.set $debug_active (i32.const 1))
-    (local.set $fn_id        (i32.const 13))
-
+    (local.set $fn_id        (i32.const 12))
     (call $log.fnEnter   (local.get $debug_active) (local.get $fn_id))
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $len))
     ;;@debug-end
 
     (local.set $rate_bytes (i32.shl (global.get $RATE) (i32.const 3)))
 
-    ;;@debug-start
-    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $rate_bytes))
-    ;;@debug-end
-
-    (block $done
-      (loop $squeeze_loop
-        (br_if $done (i32.eqz (local.get $len)))
-
-        (local.set $available
-          (i32.sub (local.get $rate_bytes) (global.get $SQUEEZE_OFFSET))
-        )
-        (local.set $copy_len
-          (if (result i32) (i32.lt_u (local.get $len) (local.get $available))
-            (then (local.get $len))
-            (else (local.get $available))
+    (if (local.get $len)
+      (then
+        (loop $squeeze_loop
+          (local.set $available (i32.sub (local.get $rate_bytes) (global.get $SQUEEZE_OFFSET)))
+          (local.set $copy_len
+            (if (result i32) (i32.lt_u (local.get $len) (local.get $available))
+              (then (local.get $len))
+              (else (local.get $available))
+            )
           )
-        )
-        ;;@debug-start
-        (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $available))
-        (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 3) (local.get $copy_len))
-        ;;@debug-end
-        (memory.copy (memory $main) (memory $main)
-          (local.get $out_ptr)
-          (i32.add (global.get $STATE_PTR) (global.get $SQUEEZE_OFFSET))
-          (local.get $copy_len)
-        )
-        (global.set $SQUEEZE_OFFSET (i32.add (global.get $SQUEEZE_OFFSET) (local.get $copy_len)))
-        (local.set $out_ptr         (i32.add (local.get $out_ptr)         (local.get $copy_len)))
-        (local.set $len             (i32.sub (local.get $len)             (local.get $copy_len)))
 
-        (if (i32.eq (global.get $SQUEEZE_OFFSET) (local.get $rate_bytes))
-          (then
-            (call $keccak24)
-            (global.set $SQUEEZE_OFFSET (i32.const 0))
+          (memory.copy (memory $main) (memory $main)
+            (local.get $out_ptr)
+            (i32.add (global.get $STATE_PTR) (global.get $SQUEEZE_OFFSET))
+            (local.get $copy_len)
           )
+          (global.set $SQUEEZE_OFFSET (i32.add (global.get $SQUEEZE_OFFSET) (local.get $copy_len)))
+          (local.set $out_ptr         (i32.add (local.get $out_ptr)         (local.get $copy_len)))
+          (local.set $len             (i32.sub (local.get $len)             (local.get $copy_len)))
+
+          (if (i32.eq (global.get $SQUEEZE_OFFSET) (local.get $rate_bytes))
+            (then
+              (call $keccak24)
+              (global.set $SQUEEZE_OFFSET (i32.const 0))
+            )
+          )
+
+          (br_if $squeeze_loop (local.get $len))
         )
-
-        ;;@debug-start
-        (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 4) (global.get $SQUEEZE_OFFSET))
-        ;;@debug-end
-
-        (br $squeeze_loop)
       )
     )
-
     ;;@debug-start
     (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
     ;;@debug-end
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; This entry point is only called when the WASI instance is started - E.G. in JavaScript, by calling wasi.start().
-  ;;
-  ;; Expects two command line arguments:
-  ;;   <digest-bits>  one of 224, 256, 384, or 512
-  ;;   <file>         a path to the file to be hashed.
-  ;;                  This pathname is relative to directory preopened when the WASI instance is created.
-  ;;
-  ;; Step 0) Parse the command line arguments using wasi.args_sizes_get and wasi.args_get
-  ;;         Validate that argument count is correct and that total argument length does not exceed some arbitrary limit
-  ;;         (i.e., is not > 256 bytes)
-  ;; Step 1) Parse digest bit length argument
-  ;; Step 2) Parse filename argument and open file
-  ;; Step 3) Initialise Keccak state
-  ;; Step 4) While bytes_read > 0, read the file in 2 MB chunks, absorbing each rate-sized block into the Keccak state.
-  ;; Step 5) Once we hit EOF, finalize the last block by applying domain specific padding (FIPS 202 §B.2)
-  ;; Step 6) Close the file
-  ;; Step 7) Squeeze digest_bytes from the state and write the result as "<hex>  <filename>\n" to stdout.
+  ;; Run all 24 Keccak rounds on the state at STATE_PTR.
+  ;; Loop has been unrolled to improve optimization
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "_start")
-    (local $argc            i32)
-    (local $argv_buf_len    i32)
-    (local $hash_len_ptr    i32)
-    (local $hash_len_val    i32)  ;; 4-byte LE load of the algo argument
-    (local $digest_len      i32)  ;; SHA3: 224|256|384|512  SHAKE: 128|256
-    (local $digest_bytes    i32)  ;; SHA3: digest_len/8; SHAKE: user-supplied output byte count
-    (local $domain_byte     i32)  ;; 0x06 = SHA3, 0x1f = SHAKE
-    (local $remaining       i32)  ;; bytes still to output in the hex-squeeze loop
-    (local $chunk           i32)  ;; current chunk size in the hex-squeeze loop
-    (local $filename_ptr    i32)
-    (local $filename_len    i32)
-    (local $file_fd         i32)
-    (local $return_code     i32)
-    (local $bytes_read      i32)
-    (local $byte_offset     i32)
+  (func $keccak24 (export "keccak24")
+    (call $keccak (i32.const  0)) (call $keccak (i32.const  1)) (call $keccak (i32.const  2))
+    (call $keccak (i32.const  3)) (call $keccak (i32.const  4)) (call $keccak (i32.const  5))
+    (call $keccak (i32.const  6)) (call $keccak (i32.const  7)) (call $keccak (i32.const  8))
+    (call $keccak (i32.const  9)) (call $keccak (i32.const 10)) (call $keccak (i32.const 11))
+    (call $keccak (i32.const 12)) (call $keccak (i32.const 13)) (call $keccak (i32.const 14))
+    (call $keccak (i32.const 15)) (call $keccak (i32.const 16)) (call $keccak (i32.const 17))
+    (call $keccak (i32.const 18)) (call $keccak (i32.const 19)) (call $keccak (i32.const 20))
+    (call $keccak (i32.const 21)) (call $keccak (i32.const 22)) (call $keccak (i32.const 23))
+  )
 
-    (block $exit
-      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 0: Fetch argument count and total buffer size
-      (drop
-        (call $wasi.args_sizes_get (global.get $ARGS_COUNT_PTR) (global.get $ARGV_BUF_LEN_PTR))
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Execute one round of the Keccak step functions.
+  ;; State lives in STATE (BUF_0) before and after the round.
+  ;; Function $theta reads the data at STATE (buf_0) then writes it to WORK (buf_1)
+  ;; Function $rho_pi reads the data at WORK (buf_1) then writes it back to STATE (buf_0)
+  ;; Functions $chi and $iota modify the data at STATE in-place.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func $keccak (export "keccak")
+        (param $round i32)
+    ;;@debug-start
+    (local $debug_active i32)
+    (local $fn_id        i32)
+    (local.set $debug_active (i32.const 1))
+    (local.set $fn_id        (i32.const 4))
+    (call $log.fnEnterNth (local.get $debug_active) (local.get $fn_id) (local.get $round))
+    ;;@debug-end
+
+    (call $theta)
+    (call $rho_pi)
+    (call $chi)
+    (call $iota (local.get $round))
+
+    ;;@debug-start
+    (call $log.fnExitNth (local.get $debug_active) (local.get $fn_id) (local.get $round))
+    ;;@debug-end
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Theta: column-parity mixing (FIPS 202 §3.2.1)
+  ;;
+  ;; C[x] = Collapse all 5 lanes in column x down to a single i64 by XORing them together.
+  ;; D[x] = C[x-1] XOR rotl(C[x+1], 1).
+  ;; A'[x,y] = A[x,y] XOR D[x], stored to WORK_PTR.
+  ;;
+  ;; C and D are held in local i64s to avoid the THETA_C/D_OUT memory round-trips present in V1.
+  ;; The 25 output writes are grouped by D-value used (D2, D3, D4, D0, D1 per group) so that each D is live when
+  ;; the compiler processes the group, enabling better register allocation.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func $theta (export "theta")
+    (local $c0 i64) (local $c1 i64) (local $c2 i64) (local $c3 i64) (local $c4 i64)
+    (local $d0 i64) (local $d1 i64) (local $d2 i64) (local $d3 i64) (local $d4 i64)
+
+    ;;@debug-start
+    (local $debug_active i32)
+    (local $fn_id        i32)
+    (local.set $debug_active (i32.const 1))
+    (local.set $fn_id        (i32.const 0))
+    (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
+
+    ;; C[x] = lane(x,0) XOR lane(x,1) XOR lane(x,2) XOR lane(x,3) XOR lane(x,4)
+    ;; Row stride = 40 bytes (5 lanes × 8 bytes)
+    (local.set $c0
+      (i64.xor (i64.xor (i64.xor (i64.xor
+        (i64.load (memory $main) offset=0   (global.get $STATE_PTR))
+        (i64.load (memory $main) offset=40  (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=80  (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=120 (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=160 (global.get $STATE_PTR))
       )
+    )
+    (local.set $c1
+      (i64.xor (i64.xor (i64.xor (i64.xor
+        (i64.load (memory $main) offset=8   (global.get $STATE_PTR))
+        (i64.load (memory $main) offset=48  (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=88  (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=128 (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=168 (global.get $STATE_PTR))
+      )
+    )
+    (local.set $c2
+      (i64.xor (i64.xor (i64.xor (i64.xor
+        (i64.load (memory $main) offset=16  (global.get $STATE_PTR))
+        (i64.load (memory $main) offset=56  (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=96  (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=136 (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=176 (global.get $STATE_PTR))
+      )
+    )
+    (local.set $c3
+      (i64.xor (i64.xor (i64.xor (i64.xor
+        (i64.load (memory $main) offset=24  (global.get $STATE_PTR))
+        (i64.load (memory $main) offset=64  (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=104 (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=144 (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=184 (global.get $STATE_PTR))
+      )
+    )
+    (local.set $c4
+      (i64.xor (i64.xor (i64.xor (i64.xor
+        (i64.load (memory $main) offset=32  (global.get $STATE_PTR))
+        (i64.load (memory $main) offset=72  (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=112 (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=152 (global.get $STATE_PTR)))
+        (i64.load (memory $main) offset=192 (global.get $STATE_PTR))
+      )
+    )
 
-      (local.set $argc         (i32.load (memory $main) (global.get $ARGS_COUNT_PTR)))
-      (local.set $argv_buf_len (i32.load (memory $main) (global.get $ARGV_BUF_LEN_PTR)))
+    ;; D[x] = C[x-1] XOR rotl(C[x+1], 1) — indices mod 5
+    (local.set $d0 (i64.xor (local.get $c4) (i64.rotl (local.get $c1) (i64.const 1))))
+    (local.set $d1 (i64.xor (local.get $c0) (i64.rotl (local.get $c2) (i64.const 1))))
+    (local.set $d2 (i64.xor (local.get $c1) (i64.rotl (local.get $c3) (i64.const 1))))
+    (local.set $d3 (i64.xor (local.get $c2) (i64.rotl (local.get $c4) (i64.const 1))))
+    (local.set $d4 (i64.xor (local.get $c3) (i64.rotl (local.get $c0) (i64.const 1))))
 
-      ;; Avoid buffer overrun
-      (if (i32.gt_u (local.get $argv_buf_len) (i32.const 256))
-        (then
-          (call $writeln (i32.const 2) (global.get $ERR_ARGV_TOO_LONG) (i32.const 25))
-          (br $exit)
+    ;; A'[x,y] = A[x,y] XOR D[x].  Grouped by D value; within each group the y-row order matches the traversal pattern
+    ;; so adjacent writes share the same D local.
+
+    ;; D2 group: columns x=2 across all rows (offsets 16, 56, 96, 136, 176)
+    (i64.store (memory $main) offset=16  (global.get $WORK_PTR)(i64.xor (local.get $d2) (i64.load (memory $main) offset=16  (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=56  (global.get $WORK_PTR)(i64.xor (local.get $d2) (i64.load (memory $main) offset=56  (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=96  (global.get $WORK_PTR)(i64.xor (local.get $d2) (i64.load (memory $main) offset=96  (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=136 (global.get $WORK_PTR)(i64.xor (local.get $d2) (i64.load (memory $main) offset=136 (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=176 (global.get $WORK_PTR)(i64.xor (local.get $d2) (i64.load (memory $main) offset=176 (global.get $STATE_PTR))))
+
+    ;; D3 group: columns x=3 across all rows (offsets 24, 64, 104, 144, 184)
+    (i64.store (memory $main) offset=24  (global.get $WORK_PTR) (i64.xor (local.get $d3) (i64.load (memory $main) offset=24  (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=64  (global.get $WORK_PTR) (i64.xor (local.get $d3) (i64.load (memory $main) offset=64  (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=104 (global.get $WORK_PTR) (i64.xor (local.get $d3) (i64.load (memory $main) offset=104 (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=144 (global.get $WORK_PTR) (i64.xor (local.get $d3) (i64.load (memory $main) offset=144 (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=184 (global.get $WORK_PTR) (i64.xor (local.get $d3) (i64.load (memory $main) offset=184 (global.get $STATE_PTR))))
+
+    ;; D4 group: columns x=4 across all rows (offsets 32, 72, 112, 152, 192)
+    (i64.store (memory $main) offset=32  (global.get $WORK_PTR) (i64.xor (local.get $d4) (i64.load (memory $main) offset=32  (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=72  (global.get $WORK_PTR) (i64.xor (local.get $d4) (i64.load (memory $main) offset=72  (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=112 (global.get $WORK_PTR) (i64.xor (local.get $d4) (i64.load (memory $main) offset=112 (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=152 (global.get $WORK_PTR) (i64.xor (local.get $d4) (i64.load (memory $main) offset=152 (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=192 (global.get $WORK_PTR) (i64.xor (local.get $d4) (i64.load (memory $main) offset=192 (global.get $STATE_PTR))))
+
+    ;; D0 group: columns x=0 across all rows (offsets 0, 40, 80, 120, 160)
+    (i64.store (memory $main) offset=0   (global.get $WORK_PTR) (i64.xor (local.get $d0) (i64.load (memory $main) offset=0   (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=40  (global.get $WORK_PTR) (i64.xor (local.get $d0) (i64.load (memory $main) offset=40  (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=80  (global.get $WORK_PTR) (i64.xor (local.get $d0) (i64.load (memory $main) offset=80  (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=120 (global.get $WORK_PTR) (i64.xor (local.get $d0) (i64.load (memory $main) offset=120 (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=160 (global.get $WORK_PTR) (i64.xor (local.get $d0) (i64.load (memory $main) offset=160 (global.get $STATE_PTR))))
+
+    ;; D1 group: columns x=1 across all rows (offsets 8, 48, 88, 128, 168)
+    (i64.store (memory $main) offset=8   (global.get $WORK_PTR) (i64.xor (local.get $d1) (i64.load (memory $main) offset=8   (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=48  (global.get $WORK_PTR) (i64.xor (local.get $d1) (i64.load (memory $main) offset=48  (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=88  (global.get $WORK_PTR) (i64.xor (local.get $d1) (i64.load (memory $main) offset=88  (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=128 (global.get $WORK_PTR) (i64.xor (local.get $d1) (i64.load (memory $main) offset=128 (global.get $STATE_PTR))))
+    (i64.store (memory $main) offset=168 (global.get $WORK_PTR) (i64.xor (local.get $d1) (i64.load (memory $main) offset=168 (global.get $STATE_PTR))))
+    ;;@debug-start
+    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Implement the rho and pi step functions (FIPS 202 §3.2.2 and §3.2.3) as a fused pair
+  ;;
+  ;; Rho rotates each of the 25 lanes by a lane-specific constant.
+  ;; Pi then permutes the lanes using a fixed calculation whose outcome can be hardcoded: A'[x,y] = A[(x+3y) mod 5][x].
+  ;;
+  ;; Instead of executing them in sequence (each requiring a full 200-byte buffer copy), both transforms are applied in
+  ;; a single pass: for each destination position d, the correct source lane s is read from WORK_PTR, rhotated (😃) by
+  ;; fixed, pre-calculated amount for that source lane, then written directly to d in STATE_PTR.
+  ;;
+  ;; The mapping table (dst_offset ← rotl(WORK[src_offset], rho_amount)) grouped by destination row:
+  ;;
+  ;;  Dst row y=0:  STATE[0]   ←       WORK[0]        Dst row y=1:  STATE[40]  ← rotl(WORK[24],  28)
+  ;;                STATE[8]   ← rotl(WORK[48],  44)                STATE[48]  ← rotl(WORK[72],  20)
+  ;;                STATE[16]  ← rotl(WORK[96],  43)                STATE[56]  ← rotl(WORK[80],   3)
+  ;;                STATE[24]  ← rotl(WORK[144], 21)                STATE[64]  ← rotl(WORK[128], 45)
+  ;;                STATE[32]  ← rotl(WORK[192], 14)                STATE[72]  ← rotl(WORK[176], 61)
+  ;;
+  ;;  Dst row y=2:  STATE[80]  ←  rotl(WORK[8],    1) Dst row y=3:  STATE[120] ← rotl(WORK[32],  27)
+  ;;                STATE[88]  ←  rotl(WORK[56],   6)               STATE[128] ← rotl(WORK[40],  36)
+  ;;                STATE[96]  ←  rotl(WORK[104], 25)               STATE[136] ← rotl(WORK[88],  10)
+  ;;                STATE[104] ←  rotl(WORK[152],  8)               STATE[144] ← rotl(WORK[136], 15)
+  ;;                STATE[112] ←  rotl(WORK[160], 18)               STATE[152] ← rotl(WORK[184], 56)
+  ;;
+  ;;  Dst row y=4:  STATE[160] ← rotl(WORK[16],  62)
+  ;;                STATE[168] ← rotl(WORK[64],  55)
+  ;;                STATE[176] ← rotl(WORK[112], 39)
+  ;;                STATE[184] ← rotl(WORK[120], 41)
+  ;;                STATE[192] ← rotl(WORK[168],  2)
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func $rho_pi (export "rho_pi")
+    ;;@debug-start
+    (local $debug_active i32)
+    (local $fn_id        i32)
+    (local.set $debug_active (i32.const 1))
+    (local.set $fn_id        (i32.const 1))
+    (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
+
+    ;; Row y=0
+    (i64.store (memory $main) offset=0   (global.get $STATE_PTR)            (i64.load (memory $main) offset=0   (global.get $WORK_PTR)))
+    (i64.store (memory $main) offset=8   (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=48  (global.get $WORK_PTR)) (i64.const 44)))
+    (i64.store (memory $main) offset=16  (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=96  (global.get $WORK_PTR)) (i64.const 43)))
+    (i64.store (memory $main) offset=24  (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=144 (global.get $WORK_PTR)) (i64.const 21)))
+    (i64.store (memory $main) offset=32  (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=192 (global.get $WORK_PTR)) (i64.const 14)))
+
+    ;; Row y=1
+    (i64.store (memory $main) offset=40  (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=24  (global.get $WORK_PTR)) (i64.const 28)))
+    (i64.store (memory $main) offset=48  (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=72  (global.get $WORK_PTR)) (i64.const 20)))
+    (i64.store (memory $main) offset=56  (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=80  (global.get $WORK_PTR)) (i64.const  3)))
+    (i64.store (memory $main) offset=64  (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=128 (global.get $WORK_PTR)) (i64.const 45)))
+    (i64.store (memory $main) offset=72  (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=176 (global.get $WORK_PTR)) (i64.const 61)))
+
+    ;; Row y=2
+    (i64.store (memory $main) offset=80  (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=8   (global.get $WORK_PTR)) (i64.const  1)))
+    (i64.store (memory $main) offset=88  (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=56  (global.get $WORK_PTR)) (i64.const  6)))
+    (i64.store (memory $main) offset=96  (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=104 (global.get $WORK_PTR)) (i64.const 25)))
+    (i64.store (memory $main) offset=104 (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=152 (global.get $WORK_PTR)) (i64.const  8)))
+    (i64.store (memory $main) offset=112 (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=160 (global.get $WORK_PTR)) (i64.const 18)))
+
+    ;; Row y=3
+    (i64.store (memory $main) offset=120 (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=32  (global.get $WORK_PTR)) (i64.const 27)))
+    (i64.store (memory $main) offset=128 (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=40  (global.get $WORK_PTR)) (i64.const 36)))
+    (i64.store (memory $main) offset=136 (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=88  (global.get $WORK_PTR)) (i64.const 10)))
+    (i64.store (memory $main) offset=144 (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=136 (global.get $WORK_PTR)) (i64.const 15)))
+    (i64.store (memory $main) offset=152 (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=184 (global.get $WORK_PTR)) (i64.const 56)))
+
+    ;; Row y=4
+    (i64.store (memory $main) offset=160 (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=16  (global.get $WORK_PTR)) (i64.const 62)))
+    (i64.store (memory $main) offset=168 (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=64  (global.get $WORK_PTR)) (i64.const 55)))
+    (i64.store (memory $main) offset=176 (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=112 (global.get $WORK_PTR)) (i64.const 39)))
+    (i64.store (memory $main) offset=184 (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=120 (global.get $WORK_PTR)) (i64.const 41)))
+    (i64.store (memory $main) offset=192 (global.get $STATE_PTR) (i64.rotl  (i64.load (memory $main) offset=168 (global.get $WORK_PTR)) (i64.const  2)))
+    ;;@debug-start
+    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Chi: non-linear mixing (FIPS 202 §3.2.4)
+  ;;
+  ;; A'[x,y] = A[x,y] XOR (NOT A[x+1 mod 5, y] AND A[x+2 mod 5, y])
+  ;;
+  ;; Operates in-place on the data at STATE_PTR.
+  ;; Each of the five lanes in a row are loaded into locals before any writes, so original values are preserved for the
+  ;; duration of the row computation without the need for a second buffer.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func $chi (export "chi")
+    (local $a0 i64) (local $a1 i64) (local $a2 i64) (local $a3 i64) (local $a4 i64)
+    ;;@debug-start
+    (local $debug_active i32)
+    (local $fn_id        i32)
+    (local.set $debug_active (i32.const 1))
+    (local.set $fn_id        (i32.const 2))
+    (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
+
+    ;; Row y=0 (offsets 0..32)
+    (local.set $a0 (i64.load (memory $main) offset=0  (global.get $STATE_PTR)))
+    (local.set $a1 (i64.load (memory $main) offset=8  (global.get $STATE_PTR)))
+    (local.set $a2 (i64.load (memory $main) offset=16 (global.get $STATE_PTR)))
+    (local.set $a3 (i64.load (memory $main) offset=24 (global.get $STATE_PTR)))
+    (local.set $a4 (i64.load (memory $main) offset=32 (global.get $STATE_PTR)))
+
+    (i64.store (memory $main) offset=0  (global.get $STATE_PTR) (i64.xor (local.get $a0) (i64.and (i64.xor (local.get $a1) (i64.const -1)) (local.get $a2))))
+    (i64.store (memory $main) offset=8  (global.get $STATE_PTR) (i64.xor (local.get $a1) (i64.and (i64.xor (local.get $a2) (i64.const -1)) (local.get $a3))))
+    (i64.store (memory $main) offset=16 (global.get $STATE_PTR) (i64.xor (local.get $a2) (i64.and (i64.xor (local.get $a3) (i64.const -1)) (local.get $a4))))
+    (i64.store (memory $main) offset=24 (global.get $STATE_PTR) (i64.xor (local.get $a3) (i64.and (i64.xor (local.get $a4) (i64.const -1)) (local.get $a0))))
+    (i64.store (memory $main) offset=32 (global.get $STATE_PTR) (i64.xor (local.get $a4) (i64.and (i64.xor (local.get $a0) (i64.const -1)) (local.get $a1))))
+
+    ;; Row y=1 (offsets 40..72)
+    (local.set $a0 (i64.load (memory $main) offset=40  (global.get $STATE_PTR)))
+    (local.set $a1 (i64.load (memory $main) offset=48  (global.get $STATE_PTR)))
+    (local.set $a2 (i64.load (memory $main) offset=56  (global.get $STATE_PTR)))
+    (local.set $a3 (i64.load (memory $main) offset=64  (global.get $STATE_PTR)))
+    (local.set $a4 (i64.load (memory $main) offset=72  (global.get $STATE_PTR)))
+
+    (i64.store (memory $main) offset=40  (global.get $STATE_PTR) (i64.xor (local.get $a0) (i64.and (i64.xor (local.get $a1) (i64.const -1)) (local.get $a2))))
+    (i64.store (memory $main) offset=48  (global.get $STATE_PTR) (i64.xor (local.get $a1) (i64.and (i64.xor (local.get $a2) (i64.const -1)) (local.get $a3))))
+    (i64.store (memory $main) offset=56  (global.get $STATE_PTR) (i64.xor (local.get $a2) (i64.and (i64.xor (local.get $a3) (i64.const -1)) (local.get $a4))))
+    (i64.store (memory $main) offset=64  (global.get $STATE_PTR) (i64.xor (local.get $a3) (i64.and (i64.xor (local.get $a4) (i64.const -1)) (local.get $a0))))
+    (i64.store (memory $main) offset=72  (global.get $STATE_PTR) (i64.xor (local.get $a4) (i64.and (i64.xor (local.get $a0) (i64.const -1)) (local.get $a1))))
+
+    ;; Row y=2 (offsets 80..112)
+    (local.set $a0 (i64.load (memory $main) offset=80  (global.get $STATE_PTR)))
+    (local.set $a1 (i64.load (memory $main) offset=88  (global.get $STATE_PTR)))
+    (local.set $a2 (i64.load (memory $main) offset=96  (global.get $STATE_PTR)))
+    (local.set $a3 (i64.load (memory $main) offset=104 (global.get $STATE_PTR)))
+    (local.set $a4 (i64.load (memory $main) offset=112 (global.get $STATE_PTR)))
+
+    (i64.store (memory $main) offset=80  (global.get $STATE_PTR) (i64.xor (local.get $a0) (i64.and (i64.xor (local.get $a1) (i64.const -1)) (local.get $a2))))
+    (i64.store (memory $main) offset=88  (global.get $STATE_PTR) (i64.xor (local.get $a1) (i64.and (i64.xor (local.get $a2) (i64.const -1)) (local.get $a3))))
+    (i64.store (memory $main) offset=96  (global.get $STATE_PTR) (i64.xor (local.get $a2) (i64.and (i64.xor (local.get $a3) (i64.const -1)) (local.get $a4))))
+    (i64.store (memory $main) offset=104 (global.get $STATE_PTR) (i64.xor (local.get $a3) (i64.and (i64.xor (local.get $a4) (i64.const -1)) (local.get $a0))))
+    (i64.store (memory $main) offset=112 (global.get $STATE_PTR) (i64.xor (local.get $a4) (i64.and (i64.xor (local.get $a0) (i64.const -1)) (local.get $a1))))
+
+    ;; Row y=3 (offsets 120..152)
+    (local.set $a0 (i64.load (memory $main) offset=120 (global.get $STATE_PTR)))
+    (local.set $a1 (i64.load (memory $main) offset=128 (global.get $STATE_PTR)))
+    (local.set $a2 (i64.load (memory $main) offset=136 (global.get $STATE_PTR)))
+    (local.set $a3 (i64.load (memory $main) offset=144 (global.get $STATE_PTR)))
+    (local.set $a4 (i64.load (memory $main) offset=152 (global.get $STATE_PTR)))
+
+    (i64.store (memory $main) offset=120 (global.get $STATE_PTR) (i64.xor (local.get $a0) (i64.and (i64.xor (local.get $a1) (i64.const -1)) (local.get $a2))))
+    (i64.store (memory $main) offset=128 (global.get $STATE_PTR) (i64.xor (local.get $a1) (i64.and (i64.xor (local.get $a2) (i64.const -1)) (local.get $a3))))
+    (i64.store (memory $main) offset=136 (global.get $STATE_PTR) (i64.xor (local.get $a2) (i64.and (i64.xor (local.get $a3) (i64.const -1)) (local.get $a4))))
+    (i64.store (memory $main) offset=144 (global.get $STATE_PTR) (i64.xor (local.get $a3) (i64.and (i64.xor (local.get $a4) (i64.const -1)) (local.get $a0))))
+    (i64.store (memory $main) offset=152 (global.get $STATE_PTR) (i64.xor (local.get $a4) (i64.and (i64.xor (local.get $a0) (i64.const -1)) (local.get $a1))))
+
+    ;; Row y=4 (offsets 160..192)
+    (local.set $a0 (i64.load (memory $main) offset=160 (global.get $STATE_PTR)))
+    (local.set $a1 (i64.load (memory $main) offset=168 (global.get $STATE_PTR)))
+    (local.set $a2 (i64.load (memory $main) offset=176 (global.get $STATE_PTR)))
+    (local.set $a3 (i64.load (memory $main) offset=184 (global.get $STATE_PTR)))
+    (local.set $a4 (i64.load (memory $main) offset=192 (global.get $STATE_PTR)))
+
+    (i64.store (memory $main) offset=160 (global.get $STATE_PTR) (i64.xor (local.get $a0) (i64.and (i64.xor (local.get $a1) (i64.const -1)) (local.get $a2))))
+    (i64.store (memory $main) offset=168 (global.get $STATE_PTR) (i64.xor (local.get $a1) (i64.and (i64.xor (local.get $a2) (i64.const -1)) (local.get $a3))))
+    (i64.store (memory $main) offset=176 (global.get $STATE_PTR) (i64.xor (local.get $a2) (i64.and (i64.xor (local.get $a3) (i64.const -1)) (local.get $a4))))
+    (i64.store (memory $main) offset=184 (global.get $STATE_PTR) (i64.xor (local.get $a3) (i64.and (i64.xor (local.get $a4) (i64.const -1)) (local.get $a0))))
+    (i64.store (memory $main) offset=192 (global.get $STATE_PTR) (i64.xor (local.get $a4) (i64.and (i64.xor (local.get $a0) (i64.const -1)) (local.get $a1))))
+    ;;@debug-start
+    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; Iota: round constant injection (FIPS 202 §3.2.5)
+  ;; XORs the round constant RC[$round] into lane A[0,0] at STATE_PTR offset 0.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func $iota (export "iota")
+        (param $round i32)
+    ;;@debug-start
+    (local $debug_active i32)
+    (local $fn_id        i32)
+    (local.set $debug_active (i32.const 1))
+    (local.set $fn_id        (i32.const 3))
+    (call $log.fnEnter   (local.get $debug_active) (local.get $fn_id))
+    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $round))
+    ;;@debug-end
+
+    (i64.store (memory $main) offset=0 (global.get $STATE_PTR)
+      (i64.xor
+        (i64.load (memory $main) offset=0 (global.get $STATE_PTR))
+        (i64.load (memory $main) (i32.add (global.get $ROUND_CONSTANTS_PTR) (i32.shl (local.get $round) (i32.const 3))))
+      )
+    )
+    ;;@debug-start
+    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
+  )
+
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  ;; XOR $rate_words i64 lanes of data at $src_ptr (I.E. read from file) with the first $rate_words lanes of the data at
+  ;; STATE_PTR.
+  ;; FIPS 202 §3.1.2: lane (x,y) is at sequential byte offset (5y+x)×8; absorb follows this order.
+  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (func $xor_block_into_state (export "xor_block_into_state")
+        (param $rate_words i32)
+        (param $src_ptr    i32)
+
+    (local $state_ptr    i32)
+    ;;@debug-start
+    (local $debug_active i32)
+    (local $fn_id        i32)
+    (local.set $debug_active (i32.const 1))
+    (local.set $fn_id        (i32.const 6))
+    (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
+
+    (local.set $state_ptr (global.get $STATE_PTR))
+
+    (loop $xor_loop
+      (i64.store (memory $main) (local.get $state_ptr)
+        (i64.xor
+          (i64.load (memory $main) (local.get $state_ptr))
+          (i64.load (memory $main) (local.get $src_ptr))
         )
       )
+      (local.set $state_ptr  (i32.add (local.get $state_ptr)  (i32.const 8)))
+      (local.set $src_ptr    (i32.add (local.get $src_ptr)    (i32.const 8)))
 
-      ;; Minimum: needs at least hash/variant + filename (2 user args)
-      (if (i32.lt_u (local.get $argc) (i32.const 2))
-        (then
-          (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 65))
-          (br $exit)
-        )
+      (br_if $xor_loop
+        (local.tee $rate_words (i32.sub (local.get $rate_words) (i32.const 1)))
       )
-
-      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 1: Parse algorithm argument to determine SHA3 or SHAKE mode.
-      ;;
-      ;; Uses relative indexing from the end of argv so that the module works regardless of how many leading args the
-      ;; host runtime prepends (argv[0], script path, etc.):
-      ;;   SHA3:  [..., hash_size, filename]      — hash_size at argc-1, filename at argc
-      ;;   SHAKE: [..., variant, bytes, filename] — variant at argc-2, bytes at argc-1, filename at argc
-      ;;
-      (drop
-        (call $wasi.args_get (global.get $ARGV_PTRS_PTR) (global.get $ARGV_BUF_PTR))
-      )
-
-      (block $args_ok
-        ;; SHAKE detection: check the third-to-last arg for "shak" (only when at least 3 args exist)
-        (if (i32.ge_u (local.get $argc) (i32.const 3))
-          (then
-            (drop
-              (local.set $hash_len_ptr (call $fetch_arg_n (i32.sub (local.get $argc) (i32.const 2))))
-            )
-            ;; Does the third last argument start with "shak"?
-            (if (i32.eq
-                  (i32.load (memory $main) (local.get $hash_len_ptr))
-                  (i32.const 0x6B616873) ;; "shak"
-                )
-              (then
-                (block $shake_ok
-                  ;; Bytes 4-7 distinguish the variant: "e128" (LE 0x38323165) or "e256" (LE 0x36353265)
-                  (if (i32.eq
-                        (i32.load (memory $main) (i32.add (local.get $hash_len_ptr) (i32.const 4)))
-                        (i32.const 0x38323165) ;; "e128"
-                      )
-                    (then
-                      (local.set $digest_len  (i32.const 128))
-                      (local.set $domain_byte (global.get $SHAKE_BYTE))
-                      (br $shake_ok)
-                    )
-                  )
-                  (if (i32.eq
-                        (i32.load (memory $main) (i32.add (local.get $hash_len_ptr) (i32.const 4)))
-                        (i32.const 0x36353265) ;; "e256"
-                      )
-                    (then
-                      (local.set $digest_len  (i32.const 256))
-                      (local.set $domain_byte (global.get $SHAKE_BYTE))
-                      (br $shake_ok)
-                    )
-                  )
-
-                  (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 65))
-                  (br $exit)
-                )
-
-                ;; Parse output_bytes from the second last arg (argc-1)
-                (local.set $hash_len_val
-                  (local.set $hash_len_ptr
-                    (call $fetch_arg_n (i32.sub (local.get $argc) (i32.const 1)))
-                  )
-                )
-                (local.set $digest_bytes
-                  (call $parse_decimal (local.get $hash_len_ptr) (local.get $hash_len_val))
-                )
-                ;; Reject values < 1 or > 16 Mb (0x01000000)
-                (if (i32.or
-                      (i32.eqz  (local.get $digest_bytes))
-                      (i32.gt_u (local.get $digest_bytes) (i32.const 0x01000000))
-                    )
-                  (then
-                    (call $writeln (i32.const 2) (global.get $ERR_MSG_SHAKE_BYTES) (i32.const 49))
-                    (br $exit)
-                  )
-                )
-                (br $args_ok)
-              )
-            )
-          )
-        )
-
-        ;; SHA3 mode: second last arg should hold the number of digest bits
-        (drop
-          (local.set $hash_len_ptr (call $fetch_arg_n (i32.sub (local.get $argc) (i32.const 1))))
-        )
-        (local.set $hash_len_val (i32.load (memory $main) (local.get $hash_len_ptr)))
-
-        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00343232)) ;; "224\0"
-          (then
-            (local.set $digest_len  (i32.const 224))
-            (local.set $domain_byte (global.get $SHA3_BYTE))
-            (br $args_ok)
-          )
-        )
-        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00363532)) ;; "256\0"
-          (then
-            (local.set $digest_len  (i32.const 256))
-            (local.set $domain_byte (global.get $SHA3_BYTE))
-            (br $args_ok)
-          )
-        )
-        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00343833)) ;; "384\0"
-          (then
-            (local.set $digest_len  (i32.const 384))
-            (local.set $domain_byte (global.get $SHA3_BYTE))
-            (br $args_ok)
-          )
-        )
-        (if (i32.eq (local.get $hash_len_val) (i32.const 0x00323135)) ;; "512\0"
-          (then
-            (local.set $digest_len  (i32.const 512))
-            (local.set $domain_byte (global.get $SHA3_BYTE))
-            (br $args_ok)
-          )
-        )
-
-        (call $writeln (i32.const 2) (global.get $ERR_MSG_BAD_ARGS) (i32.const 65))
-        (br $exit)
-      ) ;; $args_ok
-
-      ;; For SHA3 mode, derive output byte count from digest length; SHAKE already set it above
-      (if (i32.ne (local.get $domain_byte) (global.get $SHAKE_BYTE))
-        (then
-          (local.set $digest_bytes (i32.shr_u (local.get $digest_len) (i32.const 3)))
-        )
-      )
-
-      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 2: Extract filename (last arg) and open the file
-      (local.set $filename_len
-        (local.set $filename_ptr
-          (call $fetch_arg_n (local.get $argc)) ;; fetch_arg_n leaves two values on the stack, hence nested set calls
-        )
-      )
-
-      (i32.store (memory $main) (global.get $FILE_PATH_PTR)     (local.get $filename_ptr))
-      (i32.store (memory $main) (global.get $FILE_PATH_LEN_PTR) (local.get $filename_len))
-
-      (local.tee $return_code
-        (local.set $file_fd
-          (call $file_open
-            (i32.const 3)              ;; preopened fd for the directory
-            (local.get $filename_ptr)
-            (local.get $filename_len)
-          )
-        )
-      )
-
-      ;; $return_code > 0?
-      (if (then (br $exit)))
-
-      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 3: Initialise Keccak state
-      (call $init_state (local.get $digest_len) (local.get $domain_byte))
-
-      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 4: Read file in 2 MB chunks and absorb into the sponge
-      (i32.store (memory $main) (global.get $IOVEC_READ_BUF_PTR) (global.get $READ_BUFFER_PTR))
-      (i32.store (memory $main)
-        (i32.add (global.get $IOVEC_READ_BUF_PTR) (i32.const 4))
-        (global.get $READ_BUFFER_SIZE)
-      )
-
-      (block $eof
-        (loop $read_chunk
-          (local.tee $return_code
-            ;; Returns errno: i32
-            ;; The bytes read is discovered by reading the i32 pointed to by $NREAD_PTR
-            (call $wasi.fd_read
-              (local.get $file_fd)
-              (global.get $IOVEC_READ_BUF_PTR)
-              (i32.const 1)
-              (global.get $NREAD_PTR)
-            )
-          )
-
-          (if ;; $return_code > 0
-            (then
-              (call $writeln (i32.const 2) (global.get $ERR_READING_FILE) (i32.const 18))
-              (br $exit)
-            )
-          )
-
-          (if ;; EOF?
-            (i32.eqz (local.tee $bytes_read (i32.load (memory $main) (global.get $NREAD_PTR))))
-            (then (br $eof))
-          )
-
-          (call $absorb (global.get $READ_BUFFER_PTR) (local.get $bytes_read))
-          (br $read_chunk)
-        )
-      )
-
-      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 5: Finalize the input state by applying the appropriate padding and running the final keccak round
-      (call $finalize)
-
-      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 6: Close the file
-      (local.set $return_code (call $wasi.fd_close (local.get $file_fd)))
-
-      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-      ;; Step 7: Squeeze digest_bytes in 64-byte chunks, hex-encode each chunk and write to stdout.
-      ;;         Works for both fixed-length SHA3 digests and arbitrary-length SHAKE XOF output.
-      (local.set $remaining (local.get $digest_bytes))
-
-      (block $hex_done
-        (loop $hex_chunk
-          (br_if $hex_done (i32.eqz (local.get $remaining)))
-
-          (local.set $chunk
-            (if (result i32) (i32.lt_u (local.get $remaining) (i32.const 64))
-              (then (local.get $remaining))
-              (else (i32.const 64))
-            )
-          )
-
-          (call $squeeze (global.get $DATA_PTR) (local.get $chunk))
-
-          (local.set $byte_offset (i32.const 0))
-          (loop $to_hex
-            (call $to_asc_pair
-              (i32.load8_u (memory $main) (i32.add (global.get $DATA_PTR) (local.get $byte_offset)))
-              (i32.add (global.get $ASCII_HASH_PTR) (i32.shl (local.get $byte_offset) (i32.const 1)))
-            )
-            (br_if $to_hex
-              (i32.lt_u
-                (local.tee $byte_offset (i32.add (local.get $byte_offset) (i32.const 1)))
-                (local.get $chunk)
-              )
-            )
-          )
-
-          (call $write (global.get $FD_STDOUT) (global.get $ASCII_HASH_PTR) (i32.shl (local.get $chunk) (i32.const 1)))
-
-          (local.set $remaining (i32.sub (local.get $remaining) (local.get $chunk)))
-          (br $hex_chunk)
-        ) ;; Loop $hex_chunk
-      ) ;; Block $hex_done
-
-      ;; Only print the file name when running in SHA2 drop-in replacement mode
-      (if (i32.eq (local.get $domain_byte) (global.get $SHA3_BYTE))
-        (then
-          (call $write   (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 2))
-          (call $writeln
-            (global.get $FD_STDOUT)
-            (i32.load (memory $main) (global.get $FILE_PATH_PTR))
-            (i32.load (memory $main) (global.get $FILE_PATH_LEN_PTR))
-          )
-        )
-        (else
-          ;; Just print a line feed by telling $writeln to print a zero length string
-          (call $writeln (global.get $FD_STDOUT) (global.get $ASCII_SPACES) (i32.const 0))
-        )
-      )
-    ) ;; Block $exit
+    )
+    ;;@debug-start
+    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -958,20 +1162,14 @@
       (i32.add (global.get $IOVEC_WRITE_BUF_PTR) (i32.const 4))
       (local.get $str_len)
     )
-
     (drop ;; Don't care about the number of bytes written
-      (call $wasi.fd_write
-        (local.get $fd)
-        (global.get $IOVEC_WRITE_BUF_PTR)
-        (i32.const 1)
-        (global.get $NREAD_PTR)
-      )
+      (call $wasi.fd_write (local.get $fd) (global.get $IOVEC_WRITE_BUF_PTR) (i32.const 1) (global.get $NREAD_PTR))
     )
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Write optional "Err: " prefix (when fd=2) then $str_len bytes from $str_ptr into STR_WRITE_BUF_PTR.
-  ;; Returns $buf_ptr positioned immediately after the message, ready for further appending.
+  ;; Assemble an optional "Err: " prefix followed by $str_len bytes into STR_WRITE_BUF_PTR.
+  ;; Returns the address one byte past the last byte written.
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $format_msg
         (param $fd      i32)
@@ -982,20 +1180,14 @@
     (local $buf_ptr i32)
     (local.set $buf_ptr (global.get $STR_WRITE_BUF_PTR))
 
-    ;; Are we writing to stderr?
+    ;; If writing to stderr, prefix the message with "Err: "
     (if (i32.eq (local.get $fd) (i32.const 2))
-      (then ;; prefix the message with "Err: "
-        (memory.copy (memory $main) (memory $main)
-          (local.get $buf_ptr) (global.get $ERR_MSG_PREFIX) (i32.const 5)
-        )
+      (then
+        (memory.copy (memory $main) (memory $main) (local.get $buf_ptr) (global.get $ERR_PREFIX) (i32.const 5))
         (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 5)))
       )
     )
-
-    (memory.copy (memory $main) (memory $main)
-      (local.get $buf_ptr) (local.get $str_ptr) (local.get $str_len)
-    )
-
+    (memory.copy (memory $main) (memory $main) (local.get $buf_ptr) (local.get $str_ptr) (local.get $str_len))
     (i32.add (local.get $buf_ptr) (local.get $str_len))
   )
 
@@ -1008,12 +1200,8 @@
         (param $str_len i32)
 
     (local $buf_ptr i32)
-    (local.set $buf_ptr
-      (call $format_msg (local.get $fd) (local.get $str_ptr) (local.get $str_len))
-    )
-
-    (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x0A))
-
+    (local.set $buf_ptr (call $format_msg (local.get $fd) (local.get $str_ptr) (local.get $str_len)))
+    (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x0A))  ;; Line feed
     (call $write
       (local.get $fd)
       (global.get $STR_WRITE_BUF_PTR)
@@ -1022,7 +1210,7 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Write $str_len bytes followed by " 0x<hex_val>" and a line feed; prefix with "Err: " when writing to stderr
+  ;; Write message followed by " 0x<hex_val>\n"; prefix with "Err: " when writing to stderr
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $writeln_with_value
         (param $fd      i32)
@@ -1031,21 +1219,17 @@
         (param $val     i32)
 
     (local $buf_ptr i32)
-    (local.set $buf_ptr
-      (call $format_msg (local.get $fd) (local.get $str_ptr) (local.get $str_len))
-    )
 
-    (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x20)) ;; ASCII space
-    (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
+    ;; Write message into buffer
+    (local.set $buf_ptr (call $format_msg (local.get $fd) (local.get $str_ptr) (local.get $str_len)))
 
-    (i32.store16 (memory $main) (local.get $buf_ptr) (i32.const 0x7830)) ;; ASCII "0x" as LE integer
-    (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
-
-    (call $i32_to_hex_str (local.get $val) (local.get $buf_ptr))
-    (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 8)))
-
-    (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x0A)) ;; ASCII line feed
-
+    (i32.store8   (memory $main) (local.get $buf_ptr) (i32.const 0x20))   ;; ASCII space
+    (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))     ;; Bump pointer past space
+    (i32.store16  (memory $main) (local.get $buf_ptr) (i32.const 0x7830)) ;; ASCII "0x" in LE format
+    (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))     ;; Bump pointer past "0x"
+    (call $i32_to_hex_str (local.get $val) (local.get $buf_ptr))          ;; Convert to 8 ASCII hex chars and write
+    (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 8)))     ;; Bump pointer past hex string
+    (i32.store8  (memory $main) (local.get $buf_ptr) (i32.const 0x0A))    ;; Line feed
     (call $write
       (local.get $fd)
       (global.get $STR_WRITE_BUF_PTR)
@@ -1056,54 +1240,55 @@
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   ;; Convert one byte to two hex ASCII characters and write them to $out_ptr
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $to_asc_pair
+  (func $to_hex_pair
         (param $byte    i32)
         (param $out_ptr i32)
 
-    (i32.store8 (memory $main)
-      (local.get $out_ptr)
-      (i32.load8_u (memory $main)
-        (i32.add (global.get $NYBBLE_TABLE) (i32.shr_u (local.get $byte) (i32.const 4)))
-      )
+    ;; Senior nybble
+    (i32.store8 (memory $main) (local.get $out_ptr)
+      (i32.load8_u (memory $main) (i32.add (global.get $NYBBLE_TABLE) (i32.shr_u (local.get $byte) (i32.const 4))))
     )
-    (i32.store8 (memory $main)
-      (i32.add (local.get $out_ptr) (i32.const 1))
-      (i32.load8_u (memory $main)
-        (i32.add (global.get $NYBBLE_TABLE) (i32.and (local.get $byte) (i32.const 0x0F)))
-      )
+    ;; Junior nybble
+    (i32.store8 (memory $main) (i32.add (local.get $out_ptr) (i32.const 1))
+      (i32.load8_u (memory $main) (i32.add (global.get $NYBBLE_TABLE) (i32.and (local.get $byte) (i32.const 0x0F))))
     )
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Convert an i32 to 8 ASCII hex characters in network (big-endian) byte order, write to $str_ptr
+  ;; Convert an i32 to 8 ASCII hex characters in big-endian order and write to $str_ptr
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $i32_to_hex_str
-        (param $i32_val i32)
+        (param $val     i32)
         (param $str_ptr i32)
 
-    (call $to_asc_pair
-      (i32.shr_u (local.get $i32_val) (i32.const 24))
+    ;; First byte (0xFF000000)
+    (call $to_hex_pair
+      (i32.shr_u (local.get $val) (i32.const 24))
       (local.get $str_ptr)
     )
-    (call $to_asc_pair
-      (i32.and (i32.shr_u (local.get $i32_val) (i32.const 16)) (i32.const 0xFF))
+
+    ;; Second byte (0x00FF0000)
+    (call $to_hex_pair
+      (i32.and (i32.shr_u (local.get $val) (i32.const 16)) (i32.const 0xFF))
       (i32.add (local.get $str_ptr) (i32.const 2))
     )
-    (call $to_asc_pair
-      (i32.and (i32.shr_u (local.get $i32_val) (i32.const 8)) (i32.const 0xFF))
+
+    ;; Third byte (0x0000FF00)
+    (call $to_hex_pair
+      (i32.and (i32.shr_u (local.get $val) (i32.const 8)) (i32.const 0xFF))
       (i32.add (local.get $str_ptr) (i32.const 4))
     )
-    (call $to_asc_pair
-      (i32.and (local.get $i32_val) (i32.const 0xFF))
+
+    ;; Fourth byte (0x000000FF)
+    (call $to_hex_pair
+      (i32.and (local.get $val) (i32.const 0xFF))
       (i32.add (local.get $str_ptr) (i32.const 6))
     )
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Return the pointer and byte length of the n'th (1-based) command line argument.
-  ;; $wasi.args_get must have been called before this function.
-  ;;
-  ;; Returns: (ptr: i32, len: i32)
+  ;; Return (ptr: i32, len: i32) for the n'th (1-based) command line argument.
+  ;; wasi.args_get must have been called before this function.
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $fetch_arg_n
         (param $arg_num i32)
@@ -1128,8 +1313,7 @@
 
     (local.tee $arg_n_len
       (i32.sub
-        (if (result i32)
-          (i32.eq (local.get $arg_num) (local.get $argc))
+        (if (result i32) (i32.eq (local.get $arg_num) (local.get $argc))
           (then
             (i32.sub
               (i32.add (i32.load (memory $main) (global.get $ARGV_PTRS_PTR)) (local.get $argv_buf_len))
@@ -1145,7 +1329,7 @@
             )
           )
         )
-        (i32.const 1)  ;; subtract null terminator
+        (i32.const 1)
       )
     )
 
@@ -1153,8 +1337,7 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Parse an ASCII decimal string at $ptr/$len into an i32
-  ;; Stops at the first non-digit byte
+  ;; Parse an ASCII decimal string at $ptr/$len into an i32 (stops at first non-digit byte)
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $parse_decimal
         (param $ptr i32)
@@ -1162,27 +1345,22 @@
         (result i32)
 
     (local $result i32)
-    (local $i      i32)
-    (local $ch     i32)
+    (local $idx    i32)
+    (local $digit  i32)
 
-    (block $done
-      (loop $digits
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (local.set $ch
-          (i32.sub
-            (i32.load8_u (memory $main) (i32.add (local.get $ptr) (local.get $i)))
-            (i32.const 48) ;; All ASCII digits start at 0x30
+    (if (local.get $len)
+      (then
+        (loop $digits
+          (local.set $digit
+            (i32.sub (i32.load8_u (memory $main) (i32.add (local.get $ptr) (local.get $idx))) (i32.const 48))
           )
-        )
-        (br_if $done (i32.gt_u (local.get $ch) (i32.const 9)))
-        (local.set $result
-          (i32.add
-            (i32.mul (local.get $result) (i32.const 10))
-            (local.get $ch)
+          (if (i32.gt_u (local.get $digit) (i32.const 9))
+            (then (return (local.get $result)))
           )
+          (local.set $result (i32.add (i32.mul (local.get $result) (i32.const 10)) (local.get $digit)))
+          (local.set $idx    (i32.add          (local.get $idx)    (i32.const 1)))
+          (br_if $digits (i32.lt_u (local.get $idx) (local.get $len)))
         )
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $digits)
       )
     )
 
@@ -1190,9 +1368,8 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Open the file at $path_offset/$path_len inside the preopened directory $fd_dir.
-  ;;
-  ;; Returns: (return_code: i32, file_fd: i32)
+  ;; Open the file at $path_offset/$path_len in the preopened directory $fd_dir.
+  ;; Returns: (return_code: i32, file_fd: i32) — return_code 0 = success, else WASI errno
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   (func $file_open
         (param $fd_dir      i32)
@@ -1207,43 +1384,58 @@
       (local.tee $return_code
         (call $wasi.path_open
           (local.get $fd_dir)
-          (i32.const 0)             ;; dirflags
+          (i32.const 0)
           (local.get $path_offset)
           (local.get $path_len)
-          (i32.const 0)             ;; oflags (O_RDONLY)
-          (i64.const 2)             ;; rights: FD_READ
-          (i64.const 0)             ;; inherited rights
-          (i32.const 0)             ;; fdflags
-          (global.get $FD_FILE_PTR)
+          (i32.const 0)
+          (i64.const 2)   ;; rights: FD_READ
+          (i64.const 0)
+          (i32.const 0)
+          (global.get $FILE_FD_PTR)
         )
       )
-
-      (if ;; some sort of IO error occurred
+      (if
         (then
           (block $error_handled
-            (if (i32.eq (local.get $return_code) (i32.const 0x02))  ;; Permission denied
-              (then (call $writeln (i32.const 2) (global.get $ERR_ACCESS)         (i32.const 17)) (br $error_handled))
+            (if (i32.eq (local.get $return_code) (i32.const 0x02)) ;; Permission denied
+              (then
+                (call $writeln (i32.const 2) (global.get $ERR_ACCESS) (i32.const 17))
+                (br $error_handled)
+              )
             )
-            (if (i32.eq (local.get $return_code) (i32.const 0x08))  ;; Bad file descriptor
-              (then (call $writeln (i32.const 2) (global.get $ERR_BAD_FD)          (i32.const 19)) (br $error_handled))
+            (if (i32.eq (local.get $return_code) (i32.const 0x08)) ;; Bad file descriptor
+              (then
+                (call $writeln (i32.const 2) (global.get $ERR_BAD_FD) (i32.const 19))
+                (br $error_handled)
+              )
             )
-            (if (i32.eq (local.get $return_code) (i32.const 0x2C))  ;; No such file or directory
-              (then (call $writeln (i32.const 2) (global.get $ERR_MSG_NOENT)       (i32.const 25)) (br $error_handled))
+            (if (i32.eq (local.get $return_code) (i32.const 0x2C)) ;; No such file or directory
+              (then
+                (call $writeln (i32.const 2) (global.get $ERR_NOENT) (i32.const 25))
+                (br $error_handled)
+              )
             )
-            (if (i32.eq (local.get $return_code) (i32.const 0x36))  ;; Neither a directory nor a symlink
-              (then (call $writeln (i32.const 2) (global.get $ERR_NOT_DIR_SYMLINK) (i32.const 48)) (br $error_handled))
+            (if (i32.eq (local.get $return_code) (i32.const 0x36)) ;; Not a directory
+              (then
+                (call $writeln (i32.const 2) (global.get $ERR_NOT_DIR_SYMLINK) (i32.const 48))
+                (br $error_handled)
+              )
             )
-            (if (i32.eq (local.get $return_code) (i32.const 0x3F))  ;; Operation not permitted
-              (then (call $writeln (i32.const 2) (global.get $ERR_NOT_PERMITTED)   (i32.const 23)) (br $error_handled))
+            (if (i32.eq (local.get $return_code) (i32.const 0x3F)) ;; Filename too long
+              (then
+                (call $writeln (i32.const 2) (global.get $ERR_NOT_PERMITTED)(i32.const 23))
+                (br $error_handled)
+              )
             )
-            ;; Generic fallback: unrecognised WASI errno — display message and return code
+
+            ;; Generic IO error message for all other error values
             (call $writeln_with_value (i32.const 2) (global.get $ERR_GEN_IO) (i32.const 21) (local.get $return_code))
           )
           (br $exit)
         )
       )
 
-      (local.set $file_fd (i32.load (memory $main) (global.get $FD_FILE_PTR)))
+      (local.set $file_fd (i32.load (memory $main) (global.get $FILE_FD_PTR)))
     )
 
     (local.get $return_code)
@@ -1251,1465 +1443,80 @@
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Run 24 Keccak rounds in-place on BUF_0 (STATE_PTR = THETA_A_BLK_PTR = CHI_RESULT_PTR)
-  ;; The loop has been unrolled to improve optimisation
+  ;; Test-only: prepare STATE for a Keccak test by optionally zeroing it, computing RATE/CAPACITY for $digest_len,
+  ;; and XORing the first rate-block from PAD_PTR into STATE.
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $keccak24
-    (call $keccak (i32.const 0))
-    (call $keccak (i32.const 1))
-    (call $keccak (i32.const 2))
-    (call $keccak (i32.const 3))
-    (call $keccak (i32.const 4))
-    (call $keccak (i32.const 5))
-    (call $keccak (i32.const 6))
-    (call $keccak (i32.const 7))
-    (call $keccak (i32.const 8))
-    (call $keccak (i32.const 9))
-    (call $keccak (i32.const 10))
-    (call $keccak (i32.const 11))
-    (call $keccak (i32.const 12))
-    (call $keccak (i32.const 13))
-    (call $keccak (i32.const 14))
-    (call $keccak (i32.const 15))
-    (call $keccak (i32.const 16))
-    (call $keccak (i32.const 17))
-    (call $keccak (i32.const 18))
-    (call $keccak (i32.const 19))
-    (call $keccak (i32.const 20))
-    (call $keccak (i32.const 21))
-    (call $keccak (i32.const 22))
-    (call $keccak (i32.const 23))
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Prepare the Keccak internal state, partitioning it according to the specified digest length and absorbing the first
-  ;; input block
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $prepare_state
-        (export "prepare_state")
-        (param $init_mem   i32) ;; Initialise state memory?
-        (param $digest_len i32) ;; Defaults to 256
-
+  (func $prepare_state (export "prepare_state")
+        (param $init_mem   i32)
+        (param $digest_len i32)
     ;;@debug-start
     (local $debug_active i32)
     (local $fn_id        i32)
-
-    (local.set $debug_active (i32.const 0))
-    (local.set $fn_id        (i32.const 6))
-
+    (local.set $debug_active (i32.const 1))
+    (local.set $fn_id        (i32.const 5))
     (call $log.fnEnter   (local.get $debug_active) (local.get $fn_id))
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $digest_len))
     ;;@debug-end
 
-    ;; If $digest_len is not one of 224, 256, 384 or 512, then default to 256
     (block $digest_ok
       (br_if $digest_ok (i32.eq (local.get $digest_len) (i32.const 224)))
       (br_if $digest_ok (i32.eq (local.get $digest_len) (i32.const 256)))
       (br_if $digest_ok (i32.eq (local.get $digest_len) (i32.const 384)))
       (br_if $digest_ok (i32.eq (local.get $digest_len) (i32.const 512)))
-
+      ;; Default to $digest_len = 256 if invalid value received
       (local.set $digest_len (i32.const 256))
-      ;;@debug-start
-      (call $log.label (local.get $debug_active) (i32.const 14))
-      ;;@debug-end
     )
 
-    ;; Initialise the internal state?
     (if (local.get $init_mem)
-      (then
-        (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200))
-        ;;@debug-start
-        (call $log.label (local.get $debug_active) (i32.const 15))
-        ;;@debug-end
-      )
+      (then (memory.fill (memory $main) (global.get $STATE_PTR) (i32.const 0) (i32.const 200)))
     )
 
-    ;; Calculate rate and capacity sizes as i64 words
-    ;; rate     = (1600 - (digest_size * 2)) / 64
-    ;; capacity = 25 - rate
     (global.set $RATE
-      (i32.shr_u
-        (i32.sub (i32.const 1600) (i32.shl (local.get $digest_len) (i32.const 1)))
-        (i32.const 6)
-      )
+      (i32.shr_u (i32.sub (i32.const 1600) (i32.shl (local.get $digest_len) (i32.const 1))) (i32.const 6))
     )
     (global.set $CAPACITY (i32.sub (i32.const 25) (global.get $RATE)))
 
-    ;; Partition the internal state for the given rate/capacity
-    (global.set $CAPACITY_PTR (i32.add (global.get $STATE_PTR) (i32.shl (global.get $RATE) (i32.const 3))))
+    (call $xor_block_into_state (global.get $RATE) (global.get $PAD_PTR))
 
     ;;@debug-start
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (global.get $RATE))
     (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 1) (global.get $CAPACITY))
-    ;;@debug-end
-
-    ;; XOR first input block with the rate
-    (call $xor_data_with_rate (global.get $RATE) (global.get $DATA_PTR))
-
-    ;;@debug-start
-    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
-    ;;@debug-end
-)
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; In place XOR the data at $RATE_PTR with the data at $DATA_PTR
-  ;; Data is absorbed in FIPS 202 lane order: A[0,0], A[1,0], ..., A[4,0], A[0,1], ...
-  ;; i.e. sequential byte offsets 0, 8, 16, ... from RATE_PTR (FIPS 202 §3.1.2)
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $xor_data_with_rate
-        (param $rate_words i32)
-        (param $src_ptr    i32)
-
-    (local $data_idx     i32)
-    (local $rate_ptr     i32)
-    ;;@debug-start
-    (local $debug_active i32)
-    (local $fn_id        i32)
-
-    (local.set $debug_active (i32.const 0))
-    (local.set $fn_id        (i32.const 7))
-
-    (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
-    ;;@debug-end
-
-    (loop $xor_loop
-      ;; FIPS 202 §3.1.2: lane(x,y) is at byte offset (5y+x)*8; absorb sequentially from lane(0,0)
-      (local.set $rate_ptr
-        (i32.add (global.get $RATE_PTR) (i32.shl (local.get $data_idx) (i32.const 3)))
-      )
-
-      ;;@debug-start
-      (call $log.mappedPair
-        (local.get $debug_active)
-        (local.get $fn_id)
-        (i32.const 0)
-        (local.get $data_idx)
-        (local.get $rate_ptr)
-      )
-      ;;@debug-end
-
-      (i64.store
-        (memory $main)
-        (local.get $rate_ptr)
-        (i64.xor
-          (i64.load (memory $main) (local.get $rate_ptr))
-          (i64.load (memory $main) (i32.add (local.get $src_ptr) (i32.shl (local.get $data_idx) (i32.const 3))))
-        )
-      )
-
-      (local.set $data_idx (i32.add (local.get $data_idx) (i32.const 1)))
-
-      (br_if $xor_loop
-        (local.tee $rate_words (i32.sub (local.get $rate_words) (i32.const 1)))
-      )
-    )
-
-    ;;@debug-start
-    (if (local.get $debug_active)
-      (then
-        (memory.copy
-          (memory $debug)                 ;; Copy to memory
-          (memory $main)                  ;; Copy from memory
-          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-          (global.get $STATE_PTR)         ;; Copy from address
-          (i32.const 200)                 ;; Length
-        )
-        (call $log.label (local.get $debug_active) (i32.const 3))
-        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-      )
-    )
-
-    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
+    (call $log.fnExit    (local.get $debug_active) (local.get $fn_id))
     ;;@debug-end
   )
 
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Perform a single round of the Keccak function
-  ;; The output lives at $CHI_RESULT_PTR because the the last step function (iota) performs an in-place modification
+  ;; Test-only: call prepare_state then run $n rounds starting from round index 0 (ascending order, matching v1).
   ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $keccak (export "keccak")
-        (param $round i32)
-
-    ;;@debug-start
-    (local $debug_active i32)
-    (local $fn_id        i32)
-
-    (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 5))
-
-    (call $log.fnEnterNth (local.get $debug_active) (local.get $fn_id) (local.get $round))
-
-    (if (local.get $debug_active)
-      (then
-        (memory.copy
-          (memory $debug)                 ;; Copy to memory
-          (memory $main)                  ;; Copy from memory
-          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-          (global.get $THETA_A_BLK_PTR)   ;; Copy from address
-          (i32.const 200)                 ;; Length
-        )
-        (call $log.label (local.get $debug_active) (i32.const 4))
-        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-      )
-    )
-    ;;@debug-end
-
-    (call $theta)
-    (call $rho)
-    (call $pi)
-    (call $chi)
-    (call $iota (local.get $round))
-
-    ;;@debug-start
-    (call $log.fnExitNth (local.get $debug_active) (local.get $fn_id) (local.get $round))
-    ;;@debug-end
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Theta function — merged C/D/XOR stages: C[0..4] and D[0..4] held as i64 locals, eliminating the
-  ;; THETA_C_OUT_PTR and THETA_D_OUT_PTR memory round-trips that the three-sub-function pipeline required.
-  ;;
-  ;; Reads 200 bytes starting at $THETA_A_BLK_PTR
-  ;; Writes 200 bytes to $THETA_RESULT_PTR
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $theta (export "theta")
-    (local $c0 i64) (local $c1 i64) (local $c2 i64) (local $c3 i64) (local $c4 i64)
-    (local $d0 i64) (local $d1 i64) (local $d2 i64) (local $d3 i64) (local $d4 i64)
-    ;;@debug-start
-    (local $debug_active i32)
-    (local $fn_id        i32)
-
-    (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 0))
-
-    (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
-    ;;@debug-end
-
-    ;; C[x] = XOR of all 5 rows in column x (inter-row stride = 40, inter-column stride = 8)
-    (local.set $c0
-      (i64.xor
-        (i64.xor
-          (i64.xor
-            (i64.xor
-              (i64.load (memory $main) offset=0  (global.get $THETA_A_BLK_PTR)) ;; y=0
-              (i64.load (memory $main) offset=40 (global.get $THETA_A_BLK_PTR)) ;; y=1
-            )
-            (i64.load (memory $main) offset=80 (global.get $THETA_A_BLK_PTR))   ;; y=2
-          )
-          (i64.load (memory $main) offset=120 (global.get $THETA_A_BLK_PTR))    ;; y=3
-        )
-        (i64.load (memory $main) offset=160 (global.get $THETA_A_BLK_PTR))      ;; y=4
-      )
-    )
-    (local.set $c1
-      (i64.xor
-        (i64.xor
-          (i64.xor
-            (i64.xor
-              (i64.load (memory $main) offset=8  (global.get $THETA_A_BLK_PTR)) ;; y=0
-              (i64.load (memory $main) offset=48 (global.get $THETA_A_BLK_PTR)) ;; y=1
-            )
-            (i64.load (memory $main) offset=88 (global.get $THETA_A_BLK_PTR))   ;; y=2
-          )
-          (i64.load (memory $main) offset=128 (global.get $THETA_A_BLK_PTR))    ;; y=3
-        )
-        (i64.load (memory $main) offset=168 (global.get $THETA_A_BLK_PTR))      ;; y=4
-      )
-    )
-    (local.set $c2
-      (i64.xor
-        (i64.xor
-          (i64.xor
-            (i64.xor
-              (i64.load (memory $main) offset=16  (global.get $THETA_A_BLK_PTR)) ;; y=0
-              (i64.load (memory $main) offset=56  (global.get $THETA_A_BLK_PTR)) ;; y=1
-            )
-            (i64.load (memory $main) offset=96  (global.get $THETA_A_BLK_PTR))   ;; y=2
-          )
-          (i64.load (memory $main) offset=136 (global.get $THETA_A_BLK_PTR))     ;; y=3
-        )
-        (i64.load (memory $main) offset=176 (global.get $THETA_A_BLK_PTR))       ;; y=4
-      )
-    )
-    (local.set $c3
-      (i64.xor
-        (i64.xor
-          (i64.xor
-            (i64.xor
-              (i64.load (memory $main) offset=24 (global.get $THETA_A_BLK_PTR)) ;; y=0
-              (i64.load (memory $main) offset=64 (global.get $THETA_A_BLK_PTR)) ;; y=1
-            )
-            (i64.load (memory $main) offset=104 (global.get $THETA_A_BLK_PTR))  ;; y=2
-          )
-          (i64.load (memory $main) offset=144 (global.get $THETA_A_BLK_PTR))    ;; y=3
-        )
-        (i64.load (memory $main) offset=184 (global.get $THETA_A_BLK_PTR))      ;; y=4
-      )
-    )
-    (local.set $c4
-      (i64.xor
-        (i64.xor
-          (i64.xor
-            (i64.xor
-              (i64.load (memory $main) offset=32 (global.get $THETA_A_BLK_PTR)) ;; y=0
-              (i64.load (memory $main) offset=72 (global.get $THETA_A_BLK_PTR)) ;; y=1
-            )
-            (i64.load (memory $main) offset=112 (global.get $THETA_A_BLK_PTR))  ;; y=2
-          )
-          (i64.load (memory $main) offset=152 (global.get $THETA_A_BLK_PTR))    ;; y=3
-        )
-        (i64.load (memory $main) offset=192 (global.get $THETA_A_BLK_PTR))      ;; y=4
-      )
-    )
-
-    ;; D[x] = C[x-1] XOR rotl(C[x+1], 1) — FIPS 202 §3.2.1
-    (local.set $d0 (i64.xor (local.get $c4) (i64.rotl (local.get $c1) (i64.const 1))))
-    (local.set $d1 (i64.xor (local.get $c0) (i64.rotl (local.get $c2) (i64.const 1))))
-    (local.set $d2 (i64.xor (local.get $c1) (i64.rotl (local.get $c3) (i64.const 1))))
-    (local.set $d3 (i64.xor (local.get $c2) (i64.rotl (local.get $c4) (i64.const 1))))
-    (local.set $d4 (i64.xor (local.get $c3) (i64.rotl (local.get $c0) (i64.const 1))))
-
-    ;; For each of the 25 a_blk_idx values (0-24), the byte offset into THETA_D_OUT_PTR for D[x].
-    ;; x = (a_blk_idx % 5 + 2) % 5 maps to D-offsets [16,24,32,0,8] repeating across all 5 rows.
-    ;;
-    ;; A'[x,y] = A[x,y] XOR D[x] — written to THETA_RESULT_PTR in the above D-offset traversal order
-
-    ;; y=2 group: A[2,2]=96, A[3,2]=104, A[4,2]=112, A[0,2]=80, A[1,2]=88
-    (i64.store (memory $main) offset=96
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d2) (i64.load (memory $main) offset=96  (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=104
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d3) (i64.load (memory $main) offset=104 (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=112
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d4) (i64.load (memory $main) offset=112 (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=80
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d0) (i64.load (memory $main) offset=80  (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=88
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d1) (i64.load (memory $main) offset=88  (global.get $THETA_A_BLK_PTR)))
-    )
-
-    ;; y=3 group: A[2,3]=136, A[3,3]=144, A[4,3]=152, A[0,3]=120, A[1,3]=128
-    (i64.store (memory $main) offset=136
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d2) (i64.load (memory $main) offset=136 (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=144
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d3) (i64.load (memory $main) offset=144 (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=152
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d4) (i64.load (memory $main) offset=152 (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=120
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d0) (i64.load (memory $main) offset=120 (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=128
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d1) (i64.load (memory $main) offset=128 (global.get $THETA_A_BLK_PTR)))
-    )
-
-    ;; y=4 group: A[2,4]=176, A[3,4]=184, A[4,4]=192, A[0,4]=160, A[1,4]=168
-    (i64.store (memory $main) offset=176
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d2) (i64.load (memory $main) offset=176 (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=184
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d3) (i64.load (memory $main) offset=184 (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=192
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d4) (i64.load (memory $main) offset=192 (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=160
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d0) (i64.load (memory $main) offset=160 (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=168
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d1) (i64.load (memory $main) offset=168 (global.get $THETA_A_BLK_PTR)))
-    )
-
-    ;; y=0 group: A[2,0]=16, A[3,0]=24, A[4,0]=32, A[0,0]=0, A[1,0]=8
-    (i64.store (memory $main) offset=16
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d2) (i64.load (memory $main) offset=16  (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=24
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d3) (i64.load (memory $main) offset=24  (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=32
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d4) (i64.load (memory $main) offset=32  (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=0
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d0) (i64.load (memory $main) offset=0   (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=8
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d1) (i64.load (memory $main) offset=8   (global.get $THETA_A_BLK_PTR)))
-    )
-
-    ;; y=1 group: A[2,1]=56, A[3,1]=64, A[4,1]=72, A[0,1]=40, A[1,1]=48
-    (i64.store (memory $main) offset=56
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d2) (i64.load (memory $main) offset=56  (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=64
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d3) (i64.load (memory $main) offset=64  (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=72
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d4) (i64.load (memory $main) offset=72  (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=40
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d0) (i64.load (memory $main) offset=40  (global.get $THETA_A_BLK_PTR)))
-    )
-    (i64.store (memory $main) offset=48
-      (global.get $THETA_RESULT_PTR)
-      (i64.xor (local.get $d1) (i64.load (memory $main) offset=48  (global.get $THETA_A_BLK_PTR)))
-    )
-
-    ;;@debug-start
-    (if (local.get $debug_active)
-      (then
-        (memory.copy
-          (memory $debug)                 ;; Copy to memory
-          (memory $main)                  ;; Copy from memory
-          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-          (global.get $THETA_RESULT_PTR)  ;; Copy from address
-          (i32.const 200)                 ;; Length
-        )
-        (call $log.label (local.get $debug_active) (i32.const 6))
-        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-      )
-    )
-    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
-    ;;@debug-end
-  )
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; For each of the 25 i64 words at $THETA_RESULT_PTR, rotate each word by an amount derived from the word length w
-  ;; which in turn, is derived from the length l (where w = 2^l)
-  ;;
-  ;; Word zero always has a rotation value of 0, but for the 24 other words in the 5 * 5 state matrix, the rotation
-  ;; amount for the word at x,y is given by r[x,y] and defined as
-  ;;
-  ;; for w=64
-  ;;
-  ;; r[0,0] = 0
-  ;; Then for t = 0..23:
-  ;;   Walk x,y coordinates with (x, y) <- (y, (2x + 3y) mod 5)
-  ;;   r[x, y] = ((t+1) * (t+2) / 2) mod w
-  ;;
-  ;; The traversal order is stored in a table known as the RHOTATION_TABLE.  However, these values do not need to be
-  ;; stored in memory as they are constants that can be hard coded into the function.
-  ;;
-  ;; The rotation amounts for the 24 non-zero words are as follows:
-  ;;   A[2,2] A[3,2] A[4,2] A[0,2] A[1,2]  (y=2 group)
-  ;;   A[2,3] A[3,3] A[4,3] A[0,3] A[1,3]  (y=3 group)
-  ;;   A[2,4] A[3,4] A[4,4] A[0,4] A[1,4]  (y=4 group)
-  ;;   A[2,0] A[3,0] A[4,0] A[0,0] A[1,0]  (y=0 group)
-  ;;   A[2,1] A[3,1] A[4,1] A[0,1] A[1,1]  (y=1 group)
-  ;;
-  ;; Matrix access must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
-  ;;
-  ;; fn rho(theta_out: [i64; 25]) {
-  ;;   for theta_idx in 0..24 {
-  ;;     rho_result[theta_idx] = ROTR(theta_out[theta_idx], $RHOTATION_TABLE[$theta_idx % 5])
-  ;;   }
-  ;; }
-  ;;
-  ;; For the purposes of runtime efficiency, this loop has been unrolled and the rotation amounts have been hard coded
-  ;; according to the values found in the $RHOTATION_TABLE.  This saves the need to perform modulo operations inside a
-  ;; loop, as well as avoiding the need to perform 25 separate loads from the rotation table.
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $rho (export "rho")
-    ;;@debug-start
-    (local $debug_active i32)
-    (local $fn_id        i32)
-
-    (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 1))
-
-    (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
-    ;;@debug-end
-
-    ;; y=2 group: A[2,2]=43, A[3,2]=25, A[4,2]=39, A[0,2]=3, A[1,2]=10
-    (i64.store (memory $main) offset=96
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=96  (global.get $THETA_RESULT_PTR)) (i64.const 43))
-    )
-    (i64.store (memory $main) offset=104
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=104 (global.get $THETA_RESULT_PTR)) (i64.const 25))
-    )
-    (i64.store (memory $main) offset=112
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=112 (global.get $THETA_RESULT_PTR)) (i64.const 39))
-    )
-    (i64.store (memory $main) offset=80
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=80  (global.get $THETA_RESULT_PTR)) (i64.const  3))
-    )
-    (i64.store (memory $main) offset=88
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=88  (global.get $THETA_RESULT_PTR)) (i64.const 10))
-    )
-
-    ;; y=3 group: A[2,3]=15, A[3,3]=21, A[4,3]=8, A[0,3]=41, A[1,3]=45
-    (i64.store (memory $main) offset=136
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=136 (global.get $THETA_RESULT_PTR)) (i64.const 15))
-    )
-    (i64.store (memory $main) offset=144
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=144 (global.get $THETA_RESULT_PTR)) (i64.const 21))
-    )
-    (i64.store (memory $main) offset=152
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=152 (global.get $THETA_RESULT_PTR)) (i64.const  8))
-    )
-    (i64.store (memory $main) offset=120
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=120 (global.get $THETA_RESULT_PTR)) (i64.const 41))
-    )
-    (i64.store (memory $main) offset=128
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=128 (global.get $THETA_RESULT_PTR)) (i64.const 45))
-    )
-
-    ;; y=4 group: A[2,4]=61, A[3,4]=56, A[4,4]=14, A[0,4]=18, A[1,4]=2
-    (i64.store (memory $main) offset=176
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=176 (global.get $THETA_RESULT_PTR)) (i64.const 61))
-    )
-    (i64.store (memory $main) offset=184
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=184 (global.get $THETA_RESULT_PTR)) (i64.const 56))
-    )
-    (i64.store (memory $main) offset=192
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=192 (global.get $THETA_RESULT_PTR)) (i64.const 14))
-    )
-    (i64.store (memory $main) offset=160
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=160 (global.get $THETA_RESULT_PTR)) (i64.const 18))
-    )
-    (i64.store (memory $main) offset=168
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=168 (global.get $THETA_RESULT_PTR)) (i64.const  2))
-    )
-
-    ;; y=0 group: A[2,0]=62, A[3,0]=28, A[4,0]=27, A[0,0]=0, A[1,0]=1
-    (i64.store (memory $main) offset=16
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=16  (global.get $THETA_RESULT_PTR)) (i64.const 62))
-    )
-    (i64.store (memory $main) offset=24
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=24  (global.get $THETA_RESULT_PTR)) (i64.const 28))
-    )
-    (i64.store (memory $main) offset=32
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=32  (global.get $THETA_RESULT_PTR)) (i64.const 27))
-    )
-    (i64.store (memory $main) offset=0
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=0   (global.get $THETA_RESULT_PTR)) (i64.const  0))
-    )
-    (i64.store (memory $main) offset=8
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=8   (global.get $THETA_RESULT_PTR)) (i64.const  1))
-    )
-
-    ;; y=1 group: A[2,1]=6, A[3,1]=55, A[4,1]=20, A[0,1]=36, A[1,1]=44
-    (i64.store (memory $main) offset=56
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=56  (global.get $THETA_RESULT_PTR)) (i64.const  6))
-    )
-    (i64.store (memory $main) offset=64
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=64  (global.get $THETA_RESULT_PTR)) (i64.const 55))
-    )
-    (i64.store (memory $main) offset=72
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=72  (global.get $THETA_RESULT_PTR)) (i64.const 20))
-    )
-    (i64.store (memory $main) offset=40
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=40  (global.get $THETA_RESULT_PTR)) (i64.const 36))
-    )
-    (i64.store (memory $main) offset=48
-      (global.get $RHO_RESULT_PTR)
-      (i64.rotl (i64.load (memory $main) offset=48  (global.get $THETA_RESULT_PTR)) (i64.const 44))
-    )
-
-    ;;@debug-start
-    (if (local.get $debug_active)
-      (then
-        (memory.copy
-          (memory $debug)                 ;; Copy to memory
-          (memory $main)                  ;; Copy from memory
-          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-          (global.get $RHO_RESULT_PTR)    ;; Copy from address
-          (i32.const 200)                 ;; Length
-        )
-        (call $log.label (local.get $debug_active) (i32.const 7))
-        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-      )
-    )
-
-    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
-    ;;@debug-end
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; For each row in the state matrix, reorder the columns according to the following transformation.
-  ;; Matrix access must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
-  ;;
-  ;; fn pi(rho_out: [i64; 25]) {
-  ;;   let rho_idx = 0
-  ;;
-  ;;   for x in 0..4 {
-  ;;     for row in 0..4 {
-  ;;       let col = ((2 * x) + (3 * row)) % 5
-  ;;
-  ;;       pi_out[row][col] = rho_out[rho_idx]
-  ;;       rho_idx += 1
-  ;;     }
-  ;;   }
-  ;; }
-  ;;
-  ;; For the purposes of runtime efficiency, this loop has been unrolled. The final transformation can simply be
-  ;; hardcoded since the algorithm results in a static reordering of the i64s.
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $pi (export "pi")
-    ;;@debug-start
-    (local $debug_active i32)
-    (local $fn_id        i32)
-
-    (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 2))
-
-    (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
-    ;;@debug-end
-
-    ;; FIPS 202 §3.2.3: A'[x,y] = A[(x+3y) mod 5, x]  offset(x,y) = y*40 + x*8
-    ;; A'[0,0] <- A[0,0]
-    (i64.store (memory $main) offset=0
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=0   (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[1,0] <- A[1,1]
-    (i64.store (memory $main) offset=8
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=48  (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[2,0] <- A[2,2]
-    (i64.store (memory $main) offset=16
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=96  (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[3,0] <- A[3,3]
-    (i64.store (memory $main) offset=24
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=144 (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[4,0] <- A[4,4]
-    (i64.store (memory $main) offset=32
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=192 (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[0,1] <- A[3,0]
-    (i64.store (memory $main) offset=40
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=24  (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[1,1] <- A[4,1]
-    (i64.store (memory $main) offset=48
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=72  (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[2,1] <- A[0,2]
-    (i64.store (memory $main) offset=56
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=80  (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[3,1] <- A[1,3]
-    (i64.store (memory $main) offset=64
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=128 (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[4,1] <- A[2,4]
-    (i64.store (memory $main) offset=72
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=176 (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[0,2] <- A[1,0]
-    (i64.store (memory $main) offset=80
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=8   (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[1,2] <- A[2,1]
-    (i64.store (memory $main) offset=88
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=56  (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[2,2] <- A[3,2]
-    (i64.store (memory $main) offset=96
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=104 (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[3,2] <- A[4,3]
-    (i64.store (memory $main) offset=104
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=152 (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[4,2] <- A[0,4]
-    (i64.store (memory $main) offset=112
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=160 (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[0,3] <- A[4,0]
-    (i64.store (memory $main) offset=120
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=32  (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[1,3] <- A[0,1]
-    (i64.store (memory $main) offset=128
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=40  (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[2,3] <- A[1,2]
-    (i64.store (memory $main) offset=136
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=88  (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[3,3] <- A[2,3]
-    (i64.store (memory $main) offset=144
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=136 (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[4,3] <- A[3,4]
-    (i64.store (memory $main) offset=152
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=184 (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[0,4] <- A[2,0]
-    (i64.store (memory $main) offset=160
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=16  (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[1,4] <- A[3,1]
-    (i64.store (memory $main) offset=168
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=64  (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[2,4] <- A[4,2]
-    (i64.store (memory $main) offset=176
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=112 (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[3,4] <- A[0,3]
-    (i64.store (memory $main) offset=184
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=120 (global.get $RHO_RESULT_PTR))
-    )
-    ;; A'[4,4] <- A[1,4]
-    (i64.store (memory $main) offset=192
-      (global.get $PI_RESULT_PTR)
-      (i64.load (memory $main) offset=168 (global.get $RHO_RESULT_PTR))
-    )
-
-    ;;@debug-start
-    (if (local.get $debug_active)
-      (then
-        (memory.copy
-          (memory $debug)                 ;; Copy to memory
-          (memory $main)                  ;; Copy from memory
-          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-          (global.get $PI_RESULT_PTR)     ;; Copy from address
-          (i32.const 200)                 ;; Length
-        )
-        (call $log.label (local.get $debug_active) (i32.const 8))
-        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-      )
-    )
-    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
-    ;;@debug-end
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; For each column in the state matrix, reorder the row entries according to the following transformation.
-  ;; Matrix access must follow the indexing convention where (0,0) is the centre of the 5 * 5 matrix
-  ;;
-  ;; fn chi(pi_out: [i64; 25]) {
-  ;;   for y in 0..4 {
-  ;;     for x in 0..4 {
-  ;;       let w0 = pi_out[y][x]
-  ;;       let w1 = pi_out[y][(x + 1) % 5]
-  ;;       let w2 = pi_out[y][(x + 2) % 5]
-  ;;
-  ;;       chi_out[y][x] = w0 XOR (NOT(w1) AND w2)
-  ;;     }
-  ;;   }
-  ;; }
-  ;;
-  ;; FIPS 202 §3.2.4: A'[x,y] = A[x,y] XOR (NOT(A[x+1,y]) AND A[x+2,y])
-  ;;
-  ;; For the purposes of runtime efficiency, this loop has been unrolled as the algorithm simply performs a static
-  ;; mapping
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $chi (export "chi")
-    ;;@debug-start
-    (local $debug_active i32)
-    (local $fn_id        i32)
-
-    (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 3))
-
-    (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
-
-    (if (local.get $debug_active)
-      (then
-        (memory.copy
-          (memory $debug)                 ;; Copy to memory
-          (memory $main)                  ;; Copy from memory
-          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-          (global.get $PI_RESULT_PTR)     ;; Copy from address
-          (i32.const 200)                 ;; Length
-        )
-        (call $log.label (local.get $debug_active) (i32.const 8))
-        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-      )
-    )
-    ;;@debug-end
-
-    ;; y=2 group: A[2,2], A[3,2], A[4,2], A[0,2], A[1,2]  — offsets: 96, 104, 112, 80, 88
-    (i64.store (memory $main) offset=96
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=96  (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=104 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=112 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=104
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=104 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=112 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=80  (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=112
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=112 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=80  (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=88  (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=80
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=80  (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=88  (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=96  (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=88
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=88  (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=96  (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=104 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-
-    ;; y=3 group: A[2,3], A[3,3], A[4,3], A[0,3], A[1,3]  — offsets: 136, 144, 152, 120, 128
-    (i64.store (memory $main) offset=136
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=136 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=144 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=152 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=144
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=144 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=152 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=120 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=152
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=152 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=120 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=128 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=120
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=120 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=128 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=136 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=128
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=128 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=136 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=144 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-
-    ;; y=4 group: A[2,4], A[3,4], A[4,4], A[0,4], A[1,4]  — offsets: 176, 184, 192, 160, 168
-    (i64.store (memory $main) offset=176
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=176 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=184 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=192 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=184
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=184 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=192 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=160 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=192
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=192 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=160 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=168 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=160
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=160 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=168 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=176 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=168
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=168 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=176 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=184 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-
-    ;; y=0 group: A[2,0], A[3,0], A[4,0], A[0,0], A[1,0]  — offsets: 16, 24, 32, 0, 8
-    (i64.store (memory $main) offset=16
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=16(global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=24 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=32 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=24
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=24(global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=32 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=0  (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=32
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=32(global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=0  (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=8  (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=0
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=0 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=8  (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=16 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=8
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=8 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=16 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=24 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-
-    ;; y=1 group: A[2,1], A[3,1], A[4,1], A[0,1], A[1,1] — offsets: 56, 64, 72, 40, 48
-    (i64.store (memory $main) offset=56
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=56 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=64 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=72 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=64
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=64 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=72 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=40 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=72
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=72 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=40 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=48 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=40
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=40 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=48 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=56 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-    (i64.store (memory $main) offset=48
-      (global.get $CHI_RESULT_PTR)
-      (i64.xor
-        (i64.load (memory $main) offset=48 (global.get $PI_RESULT_PTR))
-        (i64.and
-          (i64.xor
-            (i64.load (memory $main) offset=56 (global.get $PI_RESULT_PTR))
-            (i64.const -1)
-          )
-          (i64.load (memory $main) offset=64 (global.get $PI_RESULT_PTR))
-        )
-      )
-    )
-
-    ;;@debug-start
-    (if (local.get $debug_active)
-      (then
-        (memory.copy
-          (memory $debug)                 ;; Copy to memory
-          (memory $main)                  ;; Copy from memory
-          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-          (global.get $CHI_RESULT_PTR)    ;; Copy from address
-          (i32.const 200)                 ;; Length
-        )
-        (call $log.label (local.get $debug_active) (i32.const 9))
-        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-      )
-    )
-    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
-    ;;@debug-end
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; XOR in place the i64 at $CHI_RESULT_PTR with the supplied round constant.
-  ;; FIPS 202 §3.2.5: A'[0,0] = A[0,0] XOR RC[round]
-  ;; A[0,0] lives at offset 0 of CHI_RESULT_PTR; round constants are stored little-endian.
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $iota (export "iota")
-        (param $round i32)
-
-    (local $w0           i64)
-    (local $rnd_const    i64)
-    (local $xor_result   i64)
-    ;;@debug-start
-    (local $debug_active i32)
-    (local $fn_id        i32)
-
-    (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 4))
-
-    (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
-    (call $log.singleDec (local.get $debug_active) (local.get $fn_id) (i32.const 0) (local.get $round))
-
-    (if (local.get $debug_active)
-      (then
-      (memory.copy
-        (memory $debug)                 ;; Copy to memory
-        (memory $main)                  ;; Copy from memory
-        (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-        (global.get $KECCAK_ROUND_CONSTANTS_PTR) ;; Copy from address
-        (i32.const 192)                 ;; Length
-      )
-      (call $log.label (local.get $debug_active) (i32.const 11))
-      (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 192))
-      )
-    )
-    ;;@debug-end
-
-    (local.set $rnd_const
-      (i64.load
-        (memory $main)
-        (i32.add
-          (global.get $KECCAK_ROUND_CONSTANTS_PTR)
-          (i32.shl (local.get $round) (i32.const 3)) ;; Convert the round number to an i64 offset
-        )
-      )
-    )
-    ;;@debug-start
-    (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 1) (local.get $rnd_const))
-    ;;@debug-end
-
-    (local.set $w0 (i64.load (memory $main) (global.get $CHI_RESULT_PTR)))
-    ;;@debug-start
-    (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 2) (local.get $w0))
-    ;;@debug-end
-
-    (local.set $xor_result (i64.xor (local.get $rnd_const) (local.get $w0)))
-    ;;@debug-start
-    (call $log.singleI64 (local.get $debug_active) (local.get $fn_id) (i32.const 3) (local.get $xor_result))
-    ;;@debug-end
-
-    (i64.store
-      (memory $main)
-      (global.get $CHI_RESULT_PTR)
-      (local.get $xor_result)
-    )
-
-    ;;@debug-start
-    (if (local.get $debug_active)
-      (then
-        (memory.copy
-          (memory $debug)                 ;; Copy to memory
-          (memory $main)                  ;; Copy from memory
-          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-          (global.get $CHI_RESULT_PTR)    ;; Copy from address
-          (i32.const 200)                 ;; Length
-        )
-        (call $log.label (local.get $debug_active) (i32.const 10))
-        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-      )
-    )
-    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
-    ;;@debug-end
-  )
-
-  ;;@debug-start
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Run the absorb and squeeze phases of the sponge function
-  ;; Used as a helper for testing a variable number of rounds of the Keccak
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func (export "sponge")
+  (func $sponge (export "sponge")
         (param $digest_len i32)
         (param $n          i32)
 
-    (local $round        i32)
+    (local $round i32)
+    ;;@debug-start
     (local $debug_active i32)
     (local $fn_id        i32)
-
-    (local.set $debug_active (i32.const 0))
-    (local.set $fn_id (i32.const 8))
-
+    (local.set $debug_active (i32.const 1))
+    (local.set $fn_id        (i32.const 7))
     (call $log.fnEnter (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
+
     (call $prepare_state (i32.const 1) (local.get $digest_len))
 
-    ;; CHI_RESULT_PTR = THETA_A_BLK_PTR (ping-pong BUF_0), so each round's output lands
-    ;; directly where the next round's theta reads it — no inter-round copy needed.
-    (loop $next_round
-      (call $keccak (local.get $round))
-      (local.set $round (i32.add (local.get $round) (i32.const 1)))
-      (br_if $next_round
-        (local.tee $n (i32.sub (local.get $n) (i32.const 1)))
-      )
-    )
-
-    ;; The output of the last Keccack round becomes the new Capacity and Rate
-    (memory.copy
-      (memory $main)               ;; Copy to memory
-      (memory $main)               ;; Copy from memory
-      (global.get $STATE_PTR)      ;; Copy to address
-      (global.get $CHI_RESULT_PTR) ;; Copy from address
-      (i32.const 200)              ;; Length
-    )
-
-    (if (local.get $debug_active)
+    (if (local.get $n)
       (then
-        (memory.copy
-          (memory $debug)                 ;; Copy to memory
-          (memory $main)                  ;; Copy from memory
-          (global.get $DEBUG_IO_BUFF_PTR) ;; Copy to address
-          (global.get $STATE_PTR)         ;; Copy from address
-          (i32.const 200)                 ;; Length
-        )
-        (call $log.label (local.get $debug_active) (i32.const 5))
-        (call $debug.hexdump (global.get $FD_STDOUT) (global.get $DEBUG_IO_BUFF_PTR) (i32.const 200))
-      )
-    )
-    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; This function does nothing unless either $DEBUG_ACTIVE is true or we're writing to stderr
-  ;; Write a debug/trace message to the specified fd
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $write_msg
-        (param $fd      i32)  ;; Write to this file descriptor
-        (param $msg_ptr i32)  ;; Pointer to error message text
-        (param $msg_len i32)  ;; Length of error message
-
-    (local $buf_ptr i32)
-
-    (if
-      (i32.or
-        (global.get $DEBUG_ACTIVE)
-        (i32.eq (local.get $fd) (i32.const 2))
-      )
-      (then
-        (local.set $buf_ptr (global.get $STR_WRITE_BUF_PTR))
-
-        ;; Write message text
-        (memory.copy (memory $main) (memory $main) (local.get $buf_ptr) (local.get $msg_ptr) (local.get $msg_len))
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (local.get $msg_len)))
-
-        ;; Write LF
-        (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x0A))
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
-
-        (call $write
-          (local.get $fd)
-          (global.get $STR_WRITE_BUF_PTR)
-          (i32.sub (local.get $buf_ptr) (global.get $STR_WRITE_BUF_PTR)) ;; length = end address - start address
-        )
-      )
-    )
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; This function does nothing unless either $DEBUG_ACTIVE is true or we're writing to stderr
-  ;; Write a debug/trace message plus a value to the specified fd
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $write_msg_with_value
-        (param $fd      i32)  ;; Write to this file descriptor
-        (param $msg_ptr i32)  ;; Pointer to error message text
-        (param $msg_len i32)  ;; Length of error message
-        (param $msg_val i32)  ;; Some i32 value to be prefixed with "0x" then printed after the message text
-
-    (local $buf_ptr i32)
-
-    (if
-      (i32.or
-        (global.get $DEBUG_ACTIVE)
-        (i32.eq (local.get $fd) (i32.const 2))
-      )
-      (then
-        (local.set $buf_ptr (global.get $STR_WRITE_BUF_PTR))
-
-        ;; Write message text
-        (memory.copy (memory $main) (memory $main) (local.get $buf_ptr) (local.get $msg_ptr) (local.get $msg_len))
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (local.get $msg_len)))
-
-        ;; Write "0x"
-        (i32.store16 (memory $main) (local.get $buf_ptr) (i32.const 0x7830)) ;; (little endian)
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 2)))
-
-        ;; Write i32 value as hex string
-        (call $i32_to_hex_str (local.get $msg_val) (local.get $buf_ptr))
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 8)))
-
-        ;; Write LF
-        (i32.store8 (memory $main) (local.get $buf_ptr) (i32.const 0x0A))
-        (local.set $buf_ptr (i32.add (local.get $buf_ptr) (i32.const 1)))
-
-        (call $write
-          (local.get $fd)
-          (global.get $STR_WRITE_BUF_PTR)
-          (i32.sub (local.get $buf_ptr) (global.get $STR_WRITE_BUF_PTR)) ;; length = end address - start address
-        )
-      )
-    )
-  )
-
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  ;; Write argc and argv list to stdout
-  ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  (func $write_args
-    (local $argc         i32)  ;; Argument count
-    (local $argc_count   i32)  ;; Loop counter
-    (local $argv_buf_len i32)  ;; Total length of argument string
-    (local $arg_ptr      i32)  ;; Pointer to current cmd line argument
-    (local $arg_len      i32)  ;; Length of current cmd line argument
-
-    (local.set $argc         (i32.load (memory $main) (global.get $ARGS_COUNT_PTR)))
-    (local.set $argv_buf_len (i32.load (memory $main) (global.get $ARGV_BUF_LEN_PTR)))
-
-    (if (global.get $DEBUG_ACTIVE)
-      (then
-        ;; Write "argc: 0x" to output buffer followed by value of $argc
-        (call $write_msg_with_value (i32.const 1) (global.get $DBG_MSG_ARGC) (i32.const 6) (local.get $argc))
-
-        ;; Print "argv_buf_len: 0x" line followed by the value of argv_buf_len
-        (call $write_msg_with_value (i32.const 1) (global.get $DBG_MSG_ARGV_LEN) (i32.const 14) (local.get $argv_buf_len))
-
-        (local.set $argc_count (i32.const 1))
-
-        ;; Write command lines args to output buffer
-        (loop $arg_loop
-          (local.set $arg_ptr (call $fetch_arg_n (local.get $argc_count)))
-          (local.set $arg_len)
-
-          (call $writeln (i32.const 1) (local.get $arg_ptr) (local.get $arg_len))
-
-          ;; Repeat while argc_count <= argc
-          (br_if $arg_loop
-            (i32.le_u
-              (local.tee $argc_count (i32.add (local.get $argc_count) (i32.const 1)))
-              (local.get $argc)
-            )
+        (loop $rounds
+          (call $keccak (local.get $round))
+          (local.set $round (i32.add (local.get $round) (i32.const 1)))
+          (br_if $rounds
+            (local.tee $n (i32.sub (local.get $n) (i32.const 1)))
           )
         )
       )
     )
+
+    ;;@debug-start
+    (call $log.fnExit (local.get $debug_active) (local.get $fn_id))
+    ;;@debug-end
   )
-  ;;@debug-end
 )

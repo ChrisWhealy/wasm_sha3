@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import { u8AsHexStr } from "./binary_utils.mjs"
 import { startTestWasm, startSha3Wasm } from "./wasi.mjs"
 
-const PAD_MARKER = 0x61
-const PAD_MARKER_START = 0x06
-const PAD_MARKER_END = 0x80
+export const PAD_MARKER = 0x61
+export const PAD_MARKER_START = 0x06
+export const PAD_MARKER_END = 0x80
 
 // Use non-optimized binary for testing dev
 const sha3WasmBinPathDev = "./bin/sha3.dev.wasm"
@@ -13,9 +13,7 @@ const sha3WasmBinPathProd = "./bin/sha3.prod.opt.wasm"
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // For a given digest length, define the dimensions of the SHA3 internal state
-// Since this is a drop-in replacement for SHA2, not are the digest lengths restricted to 224, 256, 384 or 512 bits, but
-// the exponent of the word length is fixed at 6 (i.e. 64-bit words)
-const defineInternalState = digestLen => {
+export const defineInternalState = digestLen => {
   if (digestLen !== 224 && digestLen !== 256 && digestLen !== 384 && digestLen !== 512) {
     console.error(`Invalid digest length ${digestLen} supplied.  Defaulting to 256 bits`)
     digestLen = 256
@@ -45,18 +43,16 @@ const defineInternalState = digestLen => {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-// Take a single block of input data (that must be at least 8 bits smaller than the rate size) and return it as a
-// UInt8Array followed by the correct sequence of padding bits 011[*0]1
-const sha3PaddingForDigest = (digestLen, testData) => {
+// Build a rate-sized Uint8Array containing testData followed by SHA3 pad10*1 padding (domain 0x06)
+export const sha3PaddingForDigest = (digestLen, testData) => {
   const state = defineInternalState(digestLen)
   let arr = new Uint8Array(state.getRateBytes())
   const encoded = new TextEncoder().encode(testData)
 
   arr.set(encoded)
 
-  // Insert padding
   if (state.getRateBytes() - encoded.length === 1) {
-    arr.set(PAD_MARKER, encoded.length - 1)
+    arr[encoded.length - 1] = PAD_MARKER
   } else {
     arr[encoded.length] = PAD_MARKER_START
     arr[arr.length - 1] = PAD_MARKER_END
@@ -92,23 +88,20 @@ const formatUInt8ArrayDiff = d =>
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Each test must run against its own isolated WASM instance
-const testWasmFn = (thisTest, isProd) => {
+export const testWasmFn = (thisTest, isProd) => {
   let testName = `${thisTest.wasmTestFnName}(${thisTest.wasmTestFnArgs ? thisTest.wasmTestFnArgs.join(',') : ''})`
   let wasmBinPath = isProd ? sha3WasmBinPathProd : sha3WasmBinPathDev
 
-  // Test WASM function
   test(testName,
     async () => {
       let wasmMod = await startSha3Wasm(wasmBinPath, isProd)
       let testMod = await startTestWasm(wasmMod)
       let wasmMem8 = new Uint8Array(wasmMod.instance.exports.memory.buffer)
 
-      // Write test data to the locations in WASM memory given in the input data list
       for (let idx = 0; idx < thisTest.wasmInputData.length; idx++) {
         const wasmIn = thisTest.wasmInputData[idx]
         const writeToPtr = wasmMod.instance.exports[wasmIn.writeToPtr].value
 
-        // Sanity check that we actually have some test data
         if (!wasmIn.inputData || wasmIn.inputData.length === 0) {
           throw new Error(`No test input data for ${testName} index ${idx}`)
         }
@@ -116,76 +109,17 @@ const testWasmFn = (thisTest, isProd) => {
         wasmMem8.set(wasmIn.inputData, writeToPtr)
       }
 
-      // let wasmFn = wasmMod.instance.exports[thisTest.wasmTestFnName]
       let testFn = testMod.instance.exports[thisTest.wasmTestFnName]
 
       if (thisTest.wasmTestFnArgs && thisTest.wasmTestFnArgs.length > 0) {
-        // wasmFn(...thisTest.wasmTestFnArgs)
         testFn(...thisTest.wasmTestFnArgs)
       } else {
-        // wasmFn()
         testFn()
       }
 
-      // The WASM functions being tested never return any values; instead, they mutate shared memory
       let diffs = uInt8ArrayDiff(thisTest, wasmMod)
 
       assert.equal(diffs.length, 0, `❌ UInt8Arrays differ\n${diffs.map(formatUInt8ArrayDiff).join('\n')}`)
     }
   )
-}
-
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-// Each test must run against its own isolated WASM instance
-const testWasiFn = (thisTest, isProd) => {
-  let testName = `${thisTest.wasmTestFnName}(${thisTest.wasmTestFnArgs ? thisTest.wasmTestFnArgs.join(',') : ''})`
-  let wasmBinPath = isProd ? sha3WasmBinPathProd : sha3WasmBinPathDev
-
-  // Test WASI function
-  test(testName,
-    async () => {
-      let wasmMod = await startSha3Wasm(wasmBinPath, isProd)
-      let testMod = await startTestWasm(wasmMod)
-      let wasmMem8 = new Uint8Array(wasmMod.instance.exports.memory.buffer)
-
-      // Write test data to the locations in WASM memory given in the input data list
-      for (let idx = 0; idx < thisTest.wasmInputData.length; idx++) {
-        const wasmIn = thisTest.wasmInputData[idx]
-        const writeToPtr = wasmMod.instance.exports[wasmIn.writeToPtr].value
-
-        // Sanity check that we actually have some test data
-        if (!wasmIn.inputData || wasmIn.inputData.length === 0) {
-          throw new Error(`No test input data for ${testName} index ${idx}`)
-        }
-
-        wasmMem8.set(wasmIn.inputData, writeToPtr)
-      }
-
-      // let wasmFn = wasmMod.instance.exports[thisTest.wasmTestFnName]
-      let testFn = testMod.instance.exports[thisTest.wasmTestFnName]
-
-      if (thisTest.wasmTestFnArgs && thisTest.wasmTestFnArgs.length > 0) {
-        // wasmFn(...thisTest.wasmTestFnArgs)
-        testFn(...thisTest.wasmTestFnArgs)
-      } else {
-        // wasmFn()
-        testFn()
-      }
-
-      // The WASM functions being tested never return any values; instead, they mutate shared memory
-      let diffs = uInt8ArrayDiff(thisTest, wasmMod)
-
-      assert.equal(diffs.length, 0, `❌ UInt8Arrays differ\n${diffs.map(formatUInt8ArrayDiff).join('\n')}`)
-    }
-  )
-}
-
-// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-export {
-  PAD_MARKER,
-  PAD_MARKER_START,
-  PAD_MARKER_END,
-  sha3PaddingForDigest,
-  testWasmFn,
 }

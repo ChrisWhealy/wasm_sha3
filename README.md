@@ -3,10 +3,11 @@
 An algorithmically compliant implementation of SHA3 based on the specification published as [NIST FIPS 202](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf).
 Implemented in WebAssembly Text.
 
-The resulting binary is 5.3 Kb 😎
+The resulting binary is 4.8 Kb 😎
 
 # Table of Contents
 
+- [V2 Changes](#v2-changes)
 - [Overview](#overview)
   - [Drop-In Replacement Mode for SHA2](#drop-in-replacement-mode-for-sha2)
   - [Extendible Output Function (XOF) Mode](#extendible-output-function-xof-mode)
@@ -17,6 +18,18 @@ The resulting binary is 5.3 Kb 😎
 - [SHA3 Internals](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/sponge.md)
   - [Keccak Function](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/keccak.md)
   - [Inside the Keccak Function](https://github.com/ChrisWhealy/wasm_sha3/blob/main/docs/keccak_internals.md)
+
+# V2 Changes
+
+- Although NIST FIPS 202 describes Rho and Pi as separate step functions, for the sake of runtime efficiency, they have been fused into a single rho_pi function.
+  This eliminates one full 200-byte buffer copy per Keccak round compared to executing the rho function followed by the pi function.
+- Chi now operates in-place on STATE.
+  Loading each row of 5 lanes into local variables before writing back avoids needing a second buffer.
+- Vestigial memory tables (rotation table, theta C/D scratch buffers, state index table, XOR-D offset table) have been removed, shrinking the static data footprint by just over 300 bytes.
+- Memory layout reorganised so all WASI i64 output targets are naturally 8-byte aligned.
+- All loops use test-to-continue rather than test-to-exit.
+  That is, the `br_if` at the end of the loop must succeed in order for the loop to repeat.
+  Failure causes the loop exit naturally.
 
 # Overview
 

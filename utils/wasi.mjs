@@ -10,26 +10,25 @@ const readWasmBinary = pathToWasmBin => new Uint8Array(readFileSync(pathToWasmBi
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Instantiate the debug WASM module
 const startDebugWasm = async pathToWasmBin => {
-    const debugWasi = new WASI({
-      version: "unstable",
-    })
-    const debugWasiImportObj = { wasi_snapshot_preview1: debugWasi.wasiImport }
+  const debugWasi = new WASI({
+    version: "unstable",
+  })
+  const debugWasiImportObj = { wasi_snapshot_preview1: debugWasi.wasiImport }
 
-    let debugModule = await WebAssembly.instantiate(
-      new Uint8Array(readFileSync(pathToWasmBin)),
-      debugWasiImportObj,
-    )
+  let debugModule = await WebAssembly.instantiate(
+    new Uint8Array(readFileSync(pathToWasmBin)),
+    debugWasiImportObj,
+  )
 
-    debugWasi.start(debugModule.instance)
+  debugWasi.start(debugModule.instance)
 
-    return debugModule
+  return debugModule
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Instantiate the SHA3 WASM module
 const startSha3Wasm =
   async (pathToWasmBin, isProd) => {
-    // Start SHA3 module using WASI passing in debugWasi instance
     const sha3Wasi = new WASI({
       args: process.argv,
       version: "unstable",
@@ -60,22 +59,19 @@ const startSha3Wasm =
     return sha3Module
   }
 
-  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // Instantiate the test WASM module as a wrapper around the SHA3 module
 const startTestWasm =
   async sha3WasmMod => {
     let testEnv = {
       sha3: {
-        prepareState: sha3WasmMod.instance.exports.prepare_state,
-        thetaC: sha3WasmMod.instance.exports.theta_c,
-        thetaD: sha3WasmMod.instance.exports.theta_d,
-        thetaXorLoop: sha3WasmMod.instance.exports.theta_xor_loop,
+        prepare_state: sha3WasmMod.instance.exports.prepare_state,
         theta: sha3WasmMod.instance.exports.theta,
-        rho: sha3WasmMod.instance.exports.rho,
-        pi: sha3WasmMod.instance.exports.pi,
+        rho_pi: sha3WasmMod.instance.exports.rho_pi,
         chi: sha3WasmMod.instance.exports.chi,
         iota: sha3WasmMod.instance.exports.iota,
         keccak: sha3WasmMod.instance.exports.keccak,
+        keccak24: sha3WasmMod.instance.exports.keccak24,
         sponge: sha3WasmMod.instance.exports.sponge,
       },
     }

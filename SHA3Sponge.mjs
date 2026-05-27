@@ -9,15 +9,31 @@ process.on('warning', w => w.name === 'ExperimentalWarning' ? {} : console.warn(
 //
 // Key difference from sha3sum.mjs: this uses wasi.initialize() instead of wasi.start().
 //
-// wasi.start() calls _start after which the WASM module terminates , the process exits and the internal state is lost.
-// However wasi.initialize() sets up the WASI import object and leaves control with the caller, thus preserving the
-// internal sponge state between calls to absorb(), finalize(), and squeeze().
+// wasi.start() calls WASM $_start() after which the WASM module terminates, the process exits and the internal state is lost.
+// wasi.initialize() sets up the WASI import object and leaves control with the caller, preserving the internal sponge
+// state between calls to absorb(), finalize(), and squeeze().
 //
-// squeeze() can now be called multiple times to extract as many output bytes as needed
+// squeeze() can be called multiple times to extract as many output bytes as needed.
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 import { WASI } from 'wasi'
 import { readFileSync } from 'fs'
 import * as log from './utils/logging.mjs'
+
+// Stub WASI import object used when instantiating the module for JS-class use.
+// SHA3Sponge never calls _start, so these fd_* / args_* / path_* functions are unreachable.
+// Stubs satisfy the import requirements without Node.js's WASI class, which would reject a module
+// that exports _start when wasi.initialize() is called (Node.js v22 restriction).
+const WASI_STUBS = {
+  wasi_snapshot_preview1: {
+    args_sizes_get: () => 0,
+    args_get:       () => 0,
+    path_open:      () => 8,   // WASI errno EBADF
+    fd_read:        () => 8,
+    fd_write:       () => 8,
+    fd_close:       () => 0,
+    proc_exit:      code => { throw new Error(`WASM proc_exit(${code})`) },
+  }
+}
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 export class SHA3Sponge {
@@ -55,8 +71,7 @@ export class SHA3Sponge {
 
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   // Return a fresh Uint8Array view of WASM linear memory.
-  // Must be re-read on every access since if memory.grow is ever called, the old ArrayBuffer is detached and any cached
-  // view silently reads zeros.
+  // Must be re-read on every access: if memory.grow is ever called the old ArrayBuffer is detached.
   get #mem() {
     return new Uint8Array(this.#exports.memory.buffer)
   }
@@ -64,11 +79,11 @@ export class SHA3Sponge {
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   // Initialise the sponge for a new computation.
   //
-  //   digestLen   SHA3: 224 | 256 | 384 | 512
-  //               SHAKE128: 128
-  //               SHAKE256: 256
-  //   domainByte  0x06 = SHA3 (drop-in for SHA2)
-  //               0x1f = SHAKE (XOF)
+  //   digestLen      SHA3: 224 | 256 | 384 | 512
+  //              SHAKE128: 128
+  //              SHAKE256: 256
+  //   domainByte 0x06 = SHA3 (drop-in for SHA2)
+  //              0x1f = SHAKE (XOF)
   //
   // Returns `this` for chaining.
   init(digestLen, domainByte) {
@@ -92,8 +107,8 @@ export class SHA3Sponge {
   // Returns `this` for chaining.
   absorb(data) {
     const src = ArrayBuffer.isView(data)
-    ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-    : new Uint8Array(data)
+      ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+      : new Uint8Array(data)
 
     const mem = this.#mem
     let offset = 0
@@ -109,8 +124,10 @@ export class SHA3Sponge {
   }
 
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  // Finish the absorb phase by applying the relevant domain suffix and then running the final Keccak permutation.
-  // Must be called exactly once, after all input has been absorbed and before the first squeeze().
+  // Brings the absorb phase to an end by terminating the data with the relevant domain suffix, padding the remaining
+  // empty space in the buffer, setting the senior bit in the last byte to 1, then running the final Keccak round.
+  //
+  // This function must be called exactly once after all input has been absorbed and before the first squeeze().
   //
   // Returns `this` for chaining.
   finalize() {
@@ -119,7 +136,7 @@ export class SHA3Sponge {
   }
 
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  // Extract `numBytes` bytes from the sponge state.
+  // Extract `outLen` bytes from the sponge state.
   //
   // May be called any number of times after finalize(); each call continues from where the previous one left off (the
   // position is tracked by $SQUEEZE_OFFSET in the WASM module).
@@ -147,11 +164,10 @@ export class SHA3Sponge {
   //
   // Dev mode requires `npm run build:dev` to have been run first.
   static async create(isProd = true, isOpt = true) {
-    const wasi      = new WASI({ version: 'unstable' })
-    const importObj = { wasi_snapshot_preview1: wasi.wasiImport }
+    // Use stubs for the main module — we never call _start so the WASI syscalls are unreachable.
+    // This avoids wasi.initialize()'s Node.js v22 restriction that _start must not be exported.
+    const importObj = { ...WASI_STUBS }
 
-    // If we're running in dev mode, create a debug WASM instance and wire in its exports to the main module's imports
-    // so that the hexdump() function is available for logging internal state.
     if (!isProd) {
       console.log(`Loading SHA3 WASM module: ${isOpt ? '' : 'un'}optimised ${isProd ? 'production' : 'development'} build`)
 
@@ -174,6 +190,7 @@ export class SHA3Sponge {
       importObj,
     )
 
+    // _start is intentionally NOT called — the instance is used as a stateful library.
     return new SHA3Sponge(wasmModule.instance, !isProd)
   }
 }

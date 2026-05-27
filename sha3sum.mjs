@@ -10,8 +10,8 @@ import { SHA3Sponge } from './SHA3Sponge.mjs'
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 let digestLen, domainByte, outputBytes, filePath
 
-const USAGE = 'Usage: sha3sum.mjs <224|256|384|512> <file>\n'
-            + '   or: sha3sum.mjs <shake128|shake256> <bytes> <file>\n'
+const USAGE = 'Usage: SHA2 drop-in mode - sha3sum.mjs <224|256|384|512> <file>\n'
+            + '   or:          XOF mode - sha3sum.mjs <shake128|shake256> <bytes> <file>\n'
 
 const argv = process.argv.slice(2)
 const dev = argv.includes('--dev')
